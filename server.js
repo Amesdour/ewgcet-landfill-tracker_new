@@ -16,7 +16,10 @@ app.use(cors());
 app.use(express.json());
 
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 const q  = (sql, p) => pool.query(sql, p);
 const ok = (res, data) => res.json(data);
 const er = (res, err, code=500) => { console.error(err); res.status(code).json({error:String(err)}); };
