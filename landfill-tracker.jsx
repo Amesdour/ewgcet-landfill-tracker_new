@@ -683,7 +683,7 @@ export default function App() {
     );
     return (
       <><style>{STYLES}</style>
-        <LoginScreen onLogin={u=>{setAuthUser(u);setPage(u.role==="admin"?"dashboard":"gate");}}
+        <LoginScreen onLogin={u=>{setAuthUser(u);localStorage.setItem('authUser',JSON.stringify(u));setPage(u.role==="admin"?"dashboard":"gate");}}
           onRegister={()=>setAuthScreen("register")} company={company}/>
       </>
     );
@@ -796,7 +796,7 @@ export default function App() {
               <div className="role-name">{authUser.name}</div>
               <div className="role-detail">{isAdmin?"👔 Administrateur":"🦺 Opérateur"}{opSite?` · ${opSite.name}`:""}</div>
             </div>
-            <button className="logout-btn" onClick={()=>{setAuthUser(null);setAuthScreen("login");}}>
+            <button className="logout-btn" onClick={()=>{setAuthUser(null);localStorage.removeItem('authUser');setAuthScreen("login");}}
               🚪 Déconnexion
             </button>
           </div>
