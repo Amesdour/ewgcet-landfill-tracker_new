@@ -614,7 +614,9 @@ function RegisterScreen({onBack, onRegistered, sites, company}) {
    ROOT
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function App() {
-  const [authUser,    setAuthUser]    = useState(null);
+  const [authUser, setAuthUser] = useState(() => {
+  try { return JSON.parse(localStorage.getItem('authUser')); } catch { return null; }
+});
   const [authScreen,  setAuthScreen]  = useState("login"); // "login" | "register"
   const [page,        setPage]        = useState("dashboard");
   const [discharges,  setDischarges]  = useState([]);
