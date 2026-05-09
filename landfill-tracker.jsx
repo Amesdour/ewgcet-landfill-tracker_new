@@ -530,17 +530,6 @@ function LoginScreen({onLogin, onRegister, company}) {
         <div className="login-switch">
           Pas encore de compte ? <a onClick={onRegister}>Demander un accès opérateur</a>
         </div>
-        <div style={{marginTop:22,padding:"12px 14px",background:"var(--s2)",borderRadius:8,border:"1px solid var(--bdr)"}}>
-          <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:7,letterSpacing:".1em",textTransform:"uppercase"}}>Comptes de démonstration</div>
-          <div style={{display:"flex",flexDirection:"column",gap:5}}>
-            {[{role:"Admin",email:"admin@ewgcet-jijel.dz",pwd:"admin123"},{role:"Opérateur",email:"k.boudali@ewgcet-jijel.dz",pwd:"op1234"}].map(d=>(
-              <button key={d.email} className="btn bg bsm" style={{justifyContent:"flex-start",gap:10}} onClick={()=>{setEmail(d.email);setPwd(d.pwd);}}>
-                <span className="badge b-info" style={{fontSize:9}}>{d.role}</span>
-                <span style={{fontFamily:"var(--mono)",fontSize:10,color:"var(--muted)"}}>{d.email}</span>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
