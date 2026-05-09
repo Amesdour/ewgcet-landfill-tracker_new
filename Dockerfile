@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-RUN NODE_OPTIONS="--max-old-space-size=512" npm run build
+RUN NODE_OPTIONS="--max-old-space-size=512" npm run build 2>&1 || (cat /root/.npm/_logs/*.log 2>/dev/null; exit 1)
 
 FROM node:20-alpine
 WORKDIR /app
