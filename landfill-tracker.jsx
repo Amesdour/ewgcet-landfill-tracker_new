@@ -796,8 +796,8 @@ export default function App() {
               <div className="role-name">{authUser.name}</div>
               <div className="role-detail">{isAdmin?"👔 Administrateur":"🦺 Opérateur"}{opSite?` · ${opSite.name}`:""}</div>
             </div>
-            <button className="logout-btn" onClick={()=>{setAuthUser(null);localStorage.removeItem('authUser');localStorage.removeItem('currentPage');setAuthScreen("login");}}
-              🚪 Déconnexion
+            <button className="logout-btn" onClick={()=>{setAuthUser(null);localStorage.removeItem('authUser');localStorage.removeItem('currentPage');setAuthScreen("login");}}>
+                🚪 Déconnexion
             </button>
           </div>
         </aside>
