@@ -618,7 +618,7 @@ export default function App() {
   try { return JSON.parse(localStorage.getItem('authUser')); } catch { return null; }
 });
   const [authScreen,  setAuthScreen]  = useState("login"); // "login" | "register"
-  const [page,        setPage]        = useState("dashboard");
+  const [page, setPage] = useState(() => { try { return localStorage.getItem('currentPage') || "dashboard"; } catch { return "dashboard"; } });
   const [discharges,  setDischarges]  = useState([]);
   const [clients,     setClients]     = useState([]);
   const [users,       setUsers]       = useState([]);
@@ -683,7 +683,7 @@ export default function App() {
     );
     return (
       <><style>{STYLES}</style>
-        <LoginScreen onLogin={u=>{setAuthUser(u);localStorage.setItem('authUser',JSON.stringify(u));setPage(u.role==="admin"?"dashboard":"gate");}}
+        <LoginScreen onLogin={u=>{setAuthUser(u);localStorage.setItem('authUser',JSON.stringify(u));const p=u.role==="admin"?"dashboard":"gate";localStorage.setItem('currentPage',p);setPage(p);}}
           onRegister={()=>setAuthScreen("register")} company={company}/>
       </>
     );
@@ -796,7 +796,7 @@ export default function App() {
               <div className="role-name">{authUser.name}</div>
               <div className="role-detail">{isAdmin?"👔 Administrateur":"🦺 Opérateur"}{opSite?` · ${opSite.name}`:""}</div>
             </div>
-            <button className="logout-btn" onClick={()=>{setAuthUser(null);localStorage.removeItem('authUser');setAuthScreen("login");}}
+            <button className="logout-btn" onClick={()=>{setAuthUser(null);localStorage.removeItem('authUser');localStorage.removeItem('currentPage');setAuthScreen("login");}}
               🚪 Déconnexion
             </button>
           </div>
