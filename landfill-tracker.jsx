@@ -965,7 +965,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
       </div>
 
       <div className="panel">
-        <div className="ph"><span className="pt">Clients Convention — Quotas & Crédit</span></div>
+        <div className="ph"><span className="pt">Clients Convention Tonnes — Quotas & Crédit</span></div>
         <div className="tw">
           <table>
             <thead><tr><th>Client</th><th>Type</th><th>Mode</th><th>Limite</th><th>Utilisé</th><th>Progression</th><th>Statut</th></tr></thead>
@@ -1201,11 +1201,11 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
         <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>Type de client</div>
         <div className="seg">
           <button className={`seg-btn${mode==="convention"?" active":""}`} onClick={()=>{setMode("convention");set("clientId","");setHint(null);}}>
-            📋 Convention
+            📋 Convention Tonnes
           </button>
           {approvedRotation.length>0&&(
             <button className={`seg-btn${mode==="rotation"?" active":""}`} onClick={()=>{setMode("rotation");set("clientId","");setHint(null);}}>
-              🔄 Rotations
+              🔄 Convention Rotation
             </button>
           )}
           {approvedPrepaid.length>0&&(
@@ -1244,7 +1244,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             </div>
             <div className="field">
               <label>
-                {mode==="convention"?"Client Convention":mode==="rotation"?"Client Convention par Rotations":mode==="credit"?"Client Crédit":"Client Cash"}
+                {mode==="convention"?"Client Convention Tonnes":mode==="rotation"?"Client Convention Rotation":mode==="credit"?"Client Crédit":"Client Cash"}
                 {mode==="cash"&&(
                   <span style={{marginLeft:8,cursor:"pointer",color:"var(--g)",fontSize:9}} onClick={()=>setNewCashModal(true)}>
                     + Nouveau client cash
@@ -1280,7 +1280,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                     {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Solde prépayé insuffisant !</div>}
                   </>
                   :mode==="rotation"
-                  ?<><strong>Client Convention par Rotations ({client.payFrequency==="monthly"?"mensuelle":"annuelle"}) :</strong> Chaque décharge = 1 rotation.
+                  ?<><strong>Client Convention Rotation ({client.payFrequency==="monthly"?"mensuelle":"annuelle"}) :</strong> Chaque décharge = 1 rotation.
                     {client.weightLimitYear>0&&(
                       <div style={{marginTop:4}}>
                         <div className="cbt" style={{height:4,marginBottom:3}}>
@@ -1300,7 +1300,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                     </span>
                     {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Limite de crédit dépassée ({creditPct(client)}% utilisé) !</div>}
                   </>
-                  :<><strong>Client Convention (tonnage{client.payFrequency==="monthly"?"/mois":"/an"}) :</strong> Décharge créditée au quota.
+                  :<><strong>Client Convention Tonnes (tonnage{client.payFrequency==="monthly"?"/mois":"/an"}) :</strong> Décharge créditée au quota.
                     {client.weightLimitYear>0&&(
                       <div style={{marginTop:4}}>
                         <div className="cbt" style={{height:4,marginBottom:3}}>
@@ -2002,7 +2002,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
     <>
       <div className="fx aic jsb mb4">
         <div className="tabs" style={{margin:0}}>
-          {[["convention","Convention"],["rotation","🔄 Par Rotations"],["prepaid","Bonus Prépayé"],["cash","Cash"]].map(([t,l])=>(
+          {[["convention","Convention Tonnes"],["rotation","🔄 Conv. Rotation"],["prepaid","Bonus Prépayé"],["cash","Cash"]].map(([t,l])=>(
             <button key={t} className={`tab${tab===t?" active":""}`} onClick={()=>{setTab(t);setSel(null);}}>{l}</button>
           ))}
         </div>
@@ -2022,7 +2022,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       <div style={{display:"grid",gridTemplateColumns:"300px 1fr",gap:16}}>
         <div className="panel" style={{height:"fit-content"}}>
           <div className="ph">
-            <span className="pt">{tab==="convention"?"Institutions Convention":tab==="rotation"?"Convention par Rotations":tab==="prepaid"?"Bonus Prépayé":"Clients Cash"}</span>
+            <span className="pt">{tab==="convention"?"Institutions Convention Tonnes":tab==="rotation"?"Conventions par Rotation":tab==="prepaid"?"Bonus Prépayé":"Clients Cash"}</span>
             <span className="mn tsm tmu">{(tab==="convention"?convClients:tab==="rotation"?rotationClients:tab==="prepaid"?prepaidClients:cashClients).length}</span>
           </div>
           <div style={{padding:"10px 10px",display:"flex",flexDirection:"column",gap:5}}>
@@ -2096,7 +2096,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     )}
                     {c.type==="prepaid"&&<span className="badge" style={{background:"rgba(59,130,246,.12)",color:"#1d4ed8",border:"1px solid rgba(59,130,246,.3)"}}>🎫 Bonus Prépayé</span>}
                     {c.type==="daily"&&<span className="badge b-cash">💵 Client Cash</span>}
-                    {c.type==="rotation"&&<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Convention par Rotations</span>}
+                    {c.type==="rotation"&&<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Convention Rotation</span>}
                     {c.type==="rotation"&&<ClientStatusBadge s={c.status}/>}
                     {c.type==="convention"&&<ClientStatusBadge s={c.status}/>}
                     {isAdmin&&(
@@ -2347,7 +2347,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   {c.type==="rotation"?(
                     <button className={`seg-btn${approveMode==="rotation"?" active":""}`}
                       style={{background:"var(--orange)",color:"#fff",borderColor:"var(--orange)"}}>
-                      🔄 Quota Rotations
+                      🔄 Quota Conv. Rotation
                     </button>
                   ):(
                     <>
@@ -2434,7 +2434,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       {modal==="add_client"&&(
         <div className="ov">
           <div className="modal modal-lg">
-            <div className="mh"><span className="mh-title">➕ Nouveau client convention</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
+            <div className="mh"><span className="mh-title">➕ Nouveau client Convention Tonnes</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
             <div className="mb2">
               <div className="alrt ai mb3" style={{marginBottom:16}}>
                 <span>ℹ️</span><span style={{fontSize:11}}>Le dossier sera créé avec le statut "Documents manquants". L'institution devra fournir les pièces justificatives requises avant approbation.</span>
@@ -2503,7 +2503,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       {modal==="add_rotation"&&(
         <div className="ov">
           <div className="modal modal-lg">
-            <div className="mh"><span className="mh-title">🔄 Nouveau client convention par rotations</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
+            <div className="mh"><span className="mh-title">🔄 Nouveau client Convention Rotation</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
             <div className="mb2">
               <div className="alrt ai mb3" style={{marginBottom:16}}>
                 <span>ℹ️</span><span style={{fontSize:11}}>Le dossier sera créé avec le statut "Documents manquants". Le quota en rotations sera défini lors de l'approbation.</span>
