@@ -393,7 +393,7 @@ if (IS_PROD) {
 }
 
 // Health check endpoint (responds immediately, before DB is ready)
-aapp.get('/reset-admin', async (req, res) => { try { const hashed = await bcrypt.hash('admin123', 10); const result = await pool.query("UPDATE users SET password=$1 WHERE role='admin' RETURNING email", [hashed]); res.json({ done: true, updated: result.rows }); } catch(e) { res.json({ error: e.message }); } });
+app.get('/reset-admin', async (req, res) => { try { const hashed = await bcrypt.hash('admin123', 10); const result = await pool.query("UPDATE users SET password=$1 WHERE role='admin' RETURNING email", [hashed]); res.json({ done: true, updated: result.rows }); } catch(e) { res.json({ error: e.message }); } });
 // Start listening immediately so health checks pass, then init DB in background
 app.listen(PORT, () => {
   console.log(`API server running on port ${PORT}`);
