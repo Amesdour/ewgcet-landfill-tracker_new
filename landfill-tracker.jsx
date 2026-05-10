@@ -2722,7 +2722,180 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
     </>
   );
 }
+function amountToWords(amount) {
+  const rounded = Math.round(amount * 100);
+  const din = Math.floor(rounded / 100);
+  const cts = rounded % 100;
+  const ONES = ['','UN','DEUX','TROIS','QUATRE','CINQ','SIX','SEPT','HUIT','NEUF',
+    'DIX','ONZE','DOUZE','TREIZE','QUATORZE','QUINZE','SEIZE','DIX-SEPT','DIX-HUIT','DIX-NEUF'];
+  function w(n) {
+    if (!n) return '';
+    if (n <= 19) return ONES[n];
+    if (n <= 69) {
+      const t=Math.floor(n/10), o=n%10;
+      const ts=['','','VINGT','TRENTE','QUARANTE','CINQUANTE','SOIXANTE'][t];
+      if (!o) return ts;
+      if (o===1 && t!==8) return ts+'-ET-UN';
+      return ts+'-'+ONES[o];
+    }
+    if (n <= 79) { const o=n-60; return o===11?'SOIXANTE-ET-ONZE':'SOIXANTE-'+ONES[o]; }
+    if (n <= 99) { const o=n-80; return o?'QUATRE-VINGT-'+ONES[o]:'QUATRE-VINGTS'; }
+    if (n <= 199) { const r=n-100; return 'CENT'+(r?' '+w(r):''); }
+    if (n <= 999) { const h=Math.floor(n/100),r=n%100; return ONES[h]+' CENT'+(r?' '+w(r):'S'); }
+    if (n <= 1999) { const r=n-1000; return 'MILLE'+(r?' '+w(r):''); }
+    if (n <= 999999) { const th=Math.floor(n/1000),r=n%1000; return w(th)+' MILLE'+(r?' '+w(r):''); }
+    const m=Math.floor(n/1e6),r=n%1e6; return w(m)+(m>1?' MILLIONS':' MILLION')+(r?' '+w(r):'');
+  }
+  let s=(din?w(din):'ZÉRO')+' DINAR'+(din>1?'S':'');
+  if (cts) s+=' ET '+w(cts)+' CENTIME'+(cts>1?'S':'');
+  return s;
+}
 
+function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes) {
+  const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+  const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
+  const TVA = 19;
+  const groups = {};
+  entries.forEach(d => {
+    if (!groups[d.wasteType]) groups[d.wasteType]={net:0,total:0,unitPrice:d.unitPrice};
+    groups[d.wasteType].net   += d.net;
+    groups[d.wasteType].total += d.total;
+  });
+  const rows = Object.entries(groups).map(([wt,g],i)=>({
+    num: i+1,
+    label: wasteTypes.find(w=>w.id===wt)?.label || wt,
+    qty: g.net,
+    unitPrice: g.unitPrice,
+    tva: TVA,
+    ht: g.total,
+  }));
+  const totalHT  = rows.reduce((s,r)=>s+r.ht, 0);
+  const totalTVA = totalHT * TVA / 100;
+  const totalTTC = totalHT + totalTVA;
+  const totalQty = rows.reduce((s,r)=>s+r.qty, 0);
+  const date = new Date().toLocaleDateString('fr-DZ');
+  const co = f => (Array.isArray(company)?company:COMPANY_FIELDS_DEFAULT).find(x=>x.id===f)?.value||'';
+  const rowsHTML = rows.map(r=>`
+    <tr>
+      <td style="text-align:center;">${r.num}</td>
+      <td>${r.label} (Tonne)</td>
+      <td style="text-align:right;">${fQ(r.qty)}</td>
+      <td style="text-align:right;">${fB(r.unitPrice)}</td>
+      <td style="text-align:center;">${r.tva}%</td>
+      <td style="text-align:right;">${fB(r.ht)}</td>
+    </tr>`).join('');
+  const signataires = ['Le Directeur','Le Comptable','Cachet &amp; Signature'];
+  return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Facture ${invNum}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;padding:20px 25px;color:#000}
+  table{border-collapse:collapse;width:100%}
+  th,td{border:1px solid #000;padding:4px 8px}
+  th{background:#f0f0f0;font-weight:bold;text-align:center}
+  .nb td,.nb th{border:none}
+  .sep{border-top:2px solid #000;margin:6px 0}
+  .r{text-align:right}.c{text-align:center}.b{font-weight:bold}
+  @page{size:A4 portrait;margin:15mm}
+  @media print{body{padding:0}}
+</style>
+</head>
+<body>
+<table class="nb" style="margin-bottom:6px">
+  <tr>
+    <td style="border:none;width:65px;vertical-align:middle;font-size:44px;line-height:1">&#9851;</td>
+    <td style="border:none;text-align:right;vertical-align:top">
+      <div style="font-size:17px;font-weight:bold;direction:rtl">الجمهورية الجزائرية الديمقراطية الشعبية</div>
+      <div style="font-size:15px;font-weight:bold;direction:rtl;margin-bottom:6px">ولاية جيجل</div>
+      <div style="font-size:10px;line-height:1.8">
+        Cité Administrative 01ème Étage Ayouf Ouest Jijel<br>
+        Etablissement public de Wilaya de Gestion des Centres d'Enfouissement Technique<br>
+        IF: 000918044299126 &nbsp;&nbsp; RC: 18/000442991H09<br>
+        TEL: 034473762 &nbsp;&nbsp; FAX: 034473762<br>
+        BNQ: BADR Jijel 00300676300261300093
+      </div>
+    </td>
+  </tr>
+</table>
+<div class="sep"></div>
+<div style="display:flex;justify-content:space-between;padding:5px 2px;font-weight:bold;font-size:12px">
+  <span>FACTURE CLIENT : ${invNum}</span>
+  <span>JIJEL LE : ${date}</span>
+</div>
+<div class="sep"></div>
+<div style="text-align:right;margin:8px 2px 14px;font-size:11px;line-height:1.9">
+  <div>${c.id} - ${c.name}</div>
+  ${c.nif?`<div>M.F. : ${c.nif}</div>`:''}
+  ${c.rc ?`<div>R.C. : ${c.rc}</div>` :''}
+  ${c.address?`<div>${c.address}</div>`:''}
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:30px">N°</th>
+      <th>DÉSIGNATION</th>
+      <th style="width:80px">QUANTITÉ</th>
+      <th style="width:90px">PRIX U.</th>
+      <th style="width:55px">% TVA</th>
+      <th style="width:90px">HT</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rowsHTML}
+    <tr class="b" style="background:#fafafa">
+      <td colspan="2" class="b">TOTAL GÉNÉRAL (${rows.length})</td>
+      <td class="r b">${fQ(totalQty)}</td>
+      <td></td><td></td>
+      <td class="r b">${fB(totalHT)}</td>
+    </tr>
+  </tbody>
+</table>
+<div style="margin-top:10px;border:1px solid #000;padding:6px 10px;font-size:10px">
+  <strong>Arrêtée la présente facture à la somme de:</strong><br>
+  <span style="font-weight:bold;text-transform:uppercase">${amountToWords(totalTTC)}</span>
+</div>
+<div style="display:flex;gap:16px;margin-top:12px;align-items:flex-start">
+  <table style="width:45%">
+    <thead><tr><th>TVA %</th><th>TVA (BASE)</th><th>TVA</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="c">${TVA},00 %</td>
+        <td class="r">${fB(totalHT)}</td>
+        <td class="r">${fB(totalTVA)}</td>
+      </tr>
+      <tr class="b">
+        <td class="c b">TOTAL</td>
+        <td class="r b">${fB(totalHT)}</td>
+        <td class="r b">${fB(totalTVA)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <table style="width:52%;margin-left:auto">
+    <tbody>
+      <tr><td>HT</td><td class="r">${fB(totalHT)}</td></tr>
+      <tr><td>TVA</td><td class="r">${fB(totalTVA)}</td></tr>
+      <tr><td>TTC</td><td class="r">${fB(totalTTC)}</td></tr>
+      <tr style="background:#eee">
+        <td class="b" style="font-size:13px">NET À PAYER</td>
+        <td class="r b" style="font-size:13px">${fB(totalTTC)}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+<div style="margin-top:50px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:40px;text-align:center">
+  ${signataires.map(lbl=>`<div>
+    <div class="b" style="margin-bottom:50px">${lbl}</div>
+    <div style="border-top:1px solid #000;padding-top:4px;font-size:9px;color:#555">Signature</div>
+  </div>`).join('')}
+</div>
+<div style="margin-top:30px;padding-top:8px;border-top:1px solid #ccc;font-size:9px;color:#666;text-align:center">
+  ${co('name')} — ${co('address')} — Tél: ${co('phone')}
+</div>
+</body></html>`;
+}
 /* ═══════════════════════════════════════════════════════════════════════════
    INVOICE / RELEVÉ MENSUEL
 ═══════════════════════════════════════════════════════════════════════════ */
@@ -2796,7 +2969,29 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const markOverdue = async (inv) => {
     await updateInvoice({...inv, status:"overdue"});
   };
+  const downloadOfficialPDF = () => {
+    if (!c || entries.length === 0) return;
+    const html = generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes);
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 600);
+  };
 
+  const downloadOfficialWord = () => {
+    if (!c || entries.length === 0) return;
+    const html = generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes);
+    const blob = new Blob(['\ufeff', html], {type: 'application/msword'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${invNum}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
   // All overdue/pending invoices
   const debtInvoices = invoices.filter(i=>i.status==="overdue"||i.status==="pending");
   const debtTotal = debtInvoices.reduce((s,i)=>s+i.totalAmount,0);
@@ -3179,7 +3374,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
             {(()=>{const inv=invoices.find(i=>i.id===invNum);return inv&&inv.status==="pending"
               ?<button className="btn be bsm" onClick={()=>markOverdue(inv)}>🔴 Marquer Impayée</button>
               :null;})()}
-            <button className="btn bg bsm" style={{marginLeft:"auto"}} onClick={()=>window.print()}>🖨️ Imprimer / PDF</button>
+                        <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"center"}}>
+              <button className="btn bg bsm" onClick={downloadOfficialPDF} disabled={entries.length===0}
+                title="Télécharger la facture officielle en PDF">📥 PDF Officiel</button>
+              <button className="btn bi bsm" onClick={downloadOfficialWord} disabled={entries.length===0}
+                title="Télécharger la facture officielle en format Word (.doc)">📄 Word (.doc)</button>
+            </div>
             <div style={{fontSize:11,color:"var(--muted)"}}>Réf: {invNum}</div>
           </div>
         </div>
