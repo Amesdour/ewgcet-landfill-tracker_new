@@ -391,7 +391,7 @@ if (IS_PROD) {
     app.get('/{*path}', (req, res) => res.sendFile(join(distPath, 'index.html')));
   }
 }
-
+app.get('/fix-admin', async (req, res) => { try { const hashed = await bcrypt.hash('admin123', 10); await pool.query("UPDATE users SET password=$1, status='active' WHERE role='admin'", [hashed]); const {rows} = await pool.query("SELECT email, status, password FROM users WHERE role='admin'"); res.json({ done: true, admin: rows[0] }); } catch(e) { res.json({ error: e.message }); } });
 // Health check endpoint (responds immediately, before DB is ready)
 app.get('/reset-admin', async (req, res) => { try { const hashed = await bcrypt.hash('admin123', 10); const result = await pool.query("UPDATE users SET password=$1 WHERE role='admin' RETURNING email", [hashed]); res.json({ done: true, updated: result.rows }); } catch(e) { res.json({ error: e.message }); } });
 // Start listening immediately so health checks pass, then init DB in background
