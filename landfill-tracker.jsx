@@ -1113,7 +1113,8 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
       id:uid(), ts:nowIso(), siteId:form.siteId,
       clientId:form.clientId, clientName:client?.name ?? form.clientId,
       truck:form.truck.toUpperCase(), wasteType:form.wasteType, gross, tare, net,
-      unitPrice:wt?.price??0, total,
+      unitPrice:method==="rotation"?0:(wt?.price??0),
+      total:method==="rotation"?0:total,
       status:wouldExceed?"flagged":method==="cash"?"paid":"settled",
       payMethod:method, opId:authUser.id,
     };
@@ -1164,11 +1165,14 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
               ["Camion",lastEntry.truck],
               ["Type déchets",wasteTypes.find(w=>w.id===lastEntry.wasteType)?.label],
               ["Poids brut",fmtN(lastEntry.gross)+" t"],["Tare",fmtN(lastEntry.tare)+" t"],
-              ["Poids net",fmtN(lastEntry.net)+" t"],["Tarif",fmt(lastEntry.unitPrice)+"/t"],
+              ["Poids net",fmtN(lastEntry.net)+" t"],
+              ...(lastEntry.payMethod!=="rotation"?[["Tarif",fmt(lastEntry.unitPrice)+"/t"]]:[]),
             ].map(([l,v])=><div key={l} className="rr"><span>{l}</span><span>{v}</span></div>)}
-            <div className="rrttl"><span>TOTAL</span><span>{fmt(lastEntry.total)}</span></div>
+            {lastEntry.payMethod==="rotation"
+              ?<div className="rrttl" style={{color:"var(--orange)"}}><span>ROTATIONS</span><span>+1 rotation</span></div>
+              :<div className="rrttl"><span>TOTAL</span><span>{fmt(lastEntry.total)}</span></div>}
             <div style={{textAlign:"center",marginTop:12,color:"var(--muted)",fontSize:10}}>
-              {lastEntry.payMethod==="cash"?"💵 Payé en espèces":"📋 Crédit compte mensuel"}<br/>
+              {lastEntry.payMethod==="cash"?"💵 Payé en espèces":lastEntry.payMethod==="rotation"?"🔄 Convention Rotation":"📋 Crédit compte mensuel"}<br/>
               {cof(company,'wilaya')}
             </div>
           </div>
@@ -1337,23 +1341,43 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             </select>
           </div>
 
-          {net>0&&wt&&(
-            <div className="cost-box">
-              <div className="cl"><span className="clb">Poids net facturé</span><span className="clv">{fmtN(net)} t</span></div>
-              <div className="cl"><span className="clb">Tarif ({wt.label})</span><span className="clv">{fmt(wt.price)} / t</span></div>
-              <div className="cl ct">
-                <span style={{fontSize:13,fontWeight:700}}>Coût Total</span>
-                <span className="ctv">{fmt(total)}</span>
-              </div>
-              {isOnAccount&&client&&(
-                <div className="cl" style={{marginTop:6}}>
-                  <span className="clb">Solde après décharge</span>
-                  <span className="clv" style={{color:wouldExceed?"var(--err)":"var(--g)"}}>
-                    {fmt(client.consumed+total)} / {fmt(client.creditLimit)}
-                  </span>
+          {mode==="rotation"?(
+            net>0&&(
+              <div className="cost-box" style={{borderColor:"var(--orange)"}}>
+                <div className="cl"><span className="clb">Poids enregistré</span><span className="clv">{fmtN(net)} t</span></div>
+                <div className="cl ct" style={{borderColor:"var(--orange)"}}>
+                  <span style={{fontSize:13,fontWeight:700,color:"var(--orange)"}}>Rotations comptabilisées</span>
+                  <span className="ctv" style={{color:"var(--orange)",fontFamily:"var(--mono)"}}>+1 rotation</span>
                 </div>
-              )}
-            </div>
+                {client&&client.weightLimitYear>0&&(
+                  <div className="cl" style={{marginTop:6}}>
+                    <span className="clb">Après cette rotation</span>
+                    <span className="clv" style={{color:wouldExceedRotations?"var(--err)":"var(--g)",fontFamily:"var(--mono)"}}>
+                      {usedRotations+1} / {client.weightLimitYear} rotations
+                    </span>
+                  </div>
+                )}
+              </div>
+            )
+          ):(
+            net>0&&wt&&(
+              <div className="cost-box">
+                <div className="cl"><span className="clb">Poids net facturé</span><span className="clv">{fmtN(net)} t</span></div>
+                <div className="cl"><span className="clb">Tarif ({wt.label})</span><span className="clv">{fmt(wt.price)} / t</span></div>
+                <div className="cl ct">
+                  <span style={{fontSize:13,fontWeight:700}}>Coût Total</span>
+                  <span className="ctv">{fmt(total)}</span>
+                </div>
+                {isOnAccount&&client&&(
+                  <div className="cl" style={{marginTop:6}}>
+                    <span className="clb">Solde après décharge</span>
+                    <span className="clv" style={{color:wouldExceed?"var(--err)":"var(--g)"}}>
+                      {fmt(client.consumed+total)} / {fmt(client.creditLimit)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )
           )}
 
           {limitBlocked&&(
@@ -1643,9 +1667,11 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
                     </td>
                     <td><span className="badge b-purple">{wt?.label.split(" ")[0]}</span></td>
                     <td><span className="mn">{fmtN(d.net)}</span></td>
-                    <td><span className="mn tmu">{fmt(d.unitPrice)}</span></td>
-                    <td><span className="mn tg fw7">{fmt(d.total)}</span></td>
-                    <td>{d.payMethod==="cash"?<span className="badge b-cash">💵 Cash</span>:<span className="badge b-info">📋 Conv.</span>}</td>
+                    <td><span className="mn tmu">{d.payMethod==="rotation"?"—":fmt(d.unitPrice)}</span></td>
+                    <td>{d.payMethod==="rotation"
+                      ?<span className="mn fw7" style={{color:"var(--orange)"}}>1 rot.</span>
+                      :<span className="mn tg fw7">{fmt(d.total)}</span>}</td>
+                    <td>{d.payMethod==="cash"?<span className="badge b-cash">💵 Cash</span>:d.payMethod==="rotation"?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>:<span className="badge b-info">📋 Conv.</span>}</td>
                     <td><StatusBadge s={d.status}/></td>
                     <td><span className="mn tmu" style={{fontSize:10}}>{op?.name.split(" ")[0]||"—"}</span></td>
                     <td>
