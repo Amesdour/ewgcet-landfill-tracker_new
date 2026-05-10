@@ -10,7 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const { Pool } = pg;
 const app = express();
 const IS_PROD = process.env.NODE_ENV === 'production';
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
