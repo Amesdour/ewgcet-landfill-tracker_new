@@ -749,7 +749,7 @@ export default function App() {
 
   const flagged = discharges.filter(d=>d.status==="flagged").length;
   const pendingOps = users.filter(u=>u.role==="operator"&&u.status==="pending").length;
-  const pendingClients = clients.filter(c=>(c.type==="convention"||c.type==="credit")&&c.status!=="approved"&&c.status!=="rejected").length;
+  const pendingClients = clients.filter(c=>(c.type==="convention"||c.type==="rotation"||c.type==="credit")&&c.status!=="approved"&&c.status!=="rejected").length;
   const alerts = flagged + pendingOps + pendingClients;
 
   const navAdmin = [
@@ -844,7 +844,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
   const totalTons = discharges.reduce((s,d)=>s+d.net,0);
   const cashRev   = discharges.filter(d=>d.payMethod==="cash").reduce((s,d)=>s+d.total,0);
   const flagged   = discharges.filter(d=>d.status==="flagged");
-  const pendingC  = clients.filter(c=>c.type==="convention"&&(c.status==="pending_docs"||c.status==="under_review"));
+  const pendingC  = clients.filter(c=>(c.type==="convention"||c.type==="rotation")&&(c.status==="pending_docs"||c.status==="under_review"));
   const byWaste   = wasteTypes.map(w=>({...w,
     count:discharges.filter(d=>d.wasteType===w.id).length,
     tons:discharges.filter(d=>d.wasteType===w.id).reduce((s,d)=>s+d.net,0),
@@ -970,24 +970,36 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
           <table>
             <thead><tr><th>Client</th><th>Type</th><th>Mode</th><th>Limite</th><th>Utilisé</th><th>Progression</th><th>Statut</th></tr></thead>
             <tbody>
-              {clients.filter(c=>c.type==="convention"||c.type==="credit").map(c=>{
+              {clients.filter(c=>c.type==="convention"||c.type==="rotation"||c.type==="credit").map(c=>{
                 const yr = new Date().getFullYear().toString();
-                const usedW = discharges.filter(d=>d.clientId===c.id&&d.ts.startsWith(yr)&&d.status!=="cancelled").reduce((s,d)=>s+d.net,0);
+                const monthPfx = `${yr}-${String(new Date().getMonth()+1).padStart(2,"0")}`;
+                const isMonthly = c.payFrequency==="monthly";
+                const pfx = isMonthly ? monthPfx : yr;
+                const periodDs = discharges.filter(d=>d.clientId===c.id&&d.ts.startsWith(pfx)&&d.status!=="cancelled");
+                const usedW   = periodDs.reduce((s,d)=>s+d.net,0);
+                const usedRot = periodDs.length;
+                const isRotation = c.type==="rotation";
                 const pct = c.creditEnabled
                   ? creditPct(c)
-                  : c.weightLimitYear>0 ? Math.round((usedW/c.weightLimitYear)*100) : 0;
+                  : c.weightLimitYear>0 ? Math.round(((isRotation?usedRot:usedW)/c.weightLimitYear)*100) : 0;
                 const col = creditColor(pct);
                 return (
                   <tr key={c.id}>
                     <td style={{fontWeight:600}}>{c.name}</td>
-                    <td><span className={`badge ${c.clientType==="state"?"b-purple":"b-info"}`}>{c.clientType==="state"?"🏛 État":"🏢 Privé"}</span></td>
+                    <td>
+                      {isRotation
+                        ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>
+                        :<span className={`badge ${c.clientType==="state"?"b-purple":"b-info"}`}>{c.clientType==="state"?"🏛 État":"🏢 Privé"}</span>}
+                    </td>
                     <td>
                       {c.creditEnabled
                         ?<span className="badge" style={{background:"rgba(139,92,246,.15)",color:"#7c3aed",border:"1px solid rgba(139,92,246,.3)"}}>💳 Crédit DA</span>
-                        :<span className="badge b-info">{c.payFrequency==="monthly"?"⚖️ Tonnage/mois":"⚖️ Tonnage/an"}</span>}
+                        :isRotation
+                          ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>{c.payFrequency==="monthly"?"🔄 Rotations/mois":"🔄 Rotations/an"}</span>
+                          :<span className="badge b-info">{c.payFrequency==="monthly"?"⚖️ Tonnage/mois":"⚖️ Tonnage/an"}</span>}
                     </td>
-                    <td><span className="mn">{c.status==="approved"?(c.creditEnabled?fmt(c.creditLimit):fmtN(c.weightLimitYear)+(c.weightLimitYear?"":" —")):"—"}</span></td>
-                    <td><span className="mn">{c.status==="approved"?(c.creditEnabled?fmt(c.consumed):fmtN(usedW)+" t"):"—"}</span></td>
+                    <td><span className="mn">{c.status==="approved"?(c.creditEnabled?fmt(c.creditLimit):c.weightLimitYear?(isRotation?c.weightLimitYear+" rot.":(fmtN(c.weightLimitYear)+" t")):"—"):"—"}</span></td>
+                    <td><span className="mn">{c.status==="approved"?(c.creditEnabled?fmt(c.consumed):isRotation?(usedRot+" rot."):(fmtN(usedW)+" t")):"—"}</span></td>
                     <td style={{minWidth:120}}>
                       {c.status==="approved"&&(c.creditEnabled?c.creditLimit:c.weightLimitYear)>0?(
                         <div className="fx aic g2">
@@ -1046,6 +1058,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   }
 
   const approvedConvention = clients.filter(c=>c.type==="convention"&&c.status==="approved"&&!c.creditEnabled);
+  const approvedRotation   = clients.filter(c=>c.type==="rotation"&&c.status==="approved");
   const approvedCredit     = clients.filter(c=>c.status==="approved"&&c.creditEnabled);
   const approvedPrepaid    = clients.filter(c=>c.type==="prepaid"&&c.status==="approved");
   const approvedCash       = clients.filter(c=>c.type==="daily"&&c.status==="approved");
@@ -1072,19 +1085,26 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const total = net * (wt?.price || 0);
   const client = clients.find(c=>c.id===form.clientId);
   const isPrepaid   = client && client.type==="prepaid";
-  const isOnAccount = client && (client.type==="convention"||client.creditEnabled||isPrepaid);
+  const isRotationClient = client && client.type==="rotation";
+  const isOnAccount = client && (client.type==="convention"||client.type==="rotation"||client.creditEnabled||isPrepaid);
   // Credit clients: check money limit; convention (non-credit): check weight/year limit
   const currentYear = new Date().getFullYear().toString();
   const currentMonthPrefix = `${currentYear}-${String(new Date().getMonth()+1).padStart(2,"0")}`;
-  const isMonthlyQuota = client && !client.creditEnabled && client.payFrequency==="monthly";
-  const periodPrefix = isMonthlyQuota ? currentMonthPrefix : currentYear;
-  const usedThisYear = client && !client.creditEnabled
+  const isMonthlyQuota = client && !client.creditEnabled && !isRotationClient && client.payFrequency==="monthly";
+  const isMonthlyRotation = client && isRotationClient && client.payFrequency==="monthly";
+  const periodPrefix = (isMonthlyQuota||isMonthlyRotation) ? currentMonthPrefix : currentYear;
+  const usedThisYear = client && !client.creditEnabled && !isRotationClient
     ? discharges.filter(d=>d.clientId===client.id&&d.ts.startsWith(periodPrefix)&&d.status!=="cancelled").reduce((s,d)=>s+d.net,0)
     : 0;
-  const wouldExceedCredit  = client?.creditEnabled && client.creditLimit>0 && (client.consumed+total)>client.creditLimit;
-  const wouldExceedWeight  = client && !client.creditEnabled && client.weightLimitYear>0 && (usedThisYear+net)>client.weightLimitYear;
-  const wouldExceed = wouldExceedCredit || wouldExceedWeight;
-  const weightPct   = client && !client.creditEnabled && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
+  const usedRotations = isRotationClient
+    ? discharges.filter(d=>d.clientId===client.id&&d.ts.startsWith(periodPrefix)&&d.status!=="cancelled").length
+    : 0;
+  const wouldExceedCredit    = client?.creditEnabled && client.creditLimit>0 && (client.consumed+total)>client.creditLimit;
+  const wouldExceedWeight    = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 && (usedThisYear+net)>client.weightLimitYear;
+  const wouldExceedRotations = isRotationClient && client.weightLimitYear>0 && (usedRotations+1)>client.weightLimitYear;
+  const wouldExceed = wouldExceedCredit || wouldExceedWeight || wouldExceedRotations;
+  const weightPct   = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
+  const rotationPct = isRotationClient && client.weightLimitYear>0 ? Math.round((usedRotations/client.weightLimitYear)*100) : 0;
   const limitBlocked = !isAdmin && wouldExceed;
   const canSubmit = form.truck && form.clientId && gross>tare && form.wasteType;
 
@@ -1183,6 +1203,11 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           <button className={`seg-btn${mode==="convention"?" active":""}`} onClick={()=>{setMode("convention");set("clientId","");setHint(null);}}>
             📋 Convention
           </button>
+          {approvedRotation.length>0&&(
+            <button className={`seg-btn${mode==="rotation"?" active":""}`} onClick={()=>{setMode("rotation");set("clientId","");setHint(null);}}>
+              🔄 Rotations
+            </button>
+          )}
           {approvedPrepaid.length>0&&(
             <button className={`seg-btn${mode==="prepaid"?" active":""}`} onClick={()=>{setMode("prepaid");set("clientId","");setHint(null);}}>
               🎫 Bonus Prépayé
@@ -1219,7 +1244,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             </div>
             <div className="field">
               <label>
-                {mode==="convention"?"Client Convention":mode==="credit"?"Client Crédit":"Client Cash"}
+                {mode==="convention"?"Client Convention":mode==="rotation"?"Client Convention par Rotations":mode==="credit"?"Client Crédit":"Client Cash"}
                 {mode==="cash"&&(
                   <span style={{marginLeft:8,cursor:"pointer",color:"var(--g)",fontSize:9}} onClick={()=>setNewCashModal(true)}>
                     + Nouveau client cash
@@ -1228,8 +1253,8 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
               </label>
               <select className="fi" value={form.clientId} onChange={e=>set("clientId",e.target.value)}>
                 <option value="">-- Sélectionner --</option>
-                {(mode==="convention"?approvedConvention:mode==="credit"?approvedCredit:approvedCash).map(c=>(
-                  <option key={c.id} value={c.id}>{c.name}{(mode==="convention"||mode==="credit")?` [${c.clientType==="state"?"État":"Privé"}]`:""}</option>
+                {(mode==="convention"?approvedConvention:mode==="rotation"?approvedRotation:mode==="credit"?approvedCredit:mode==="prepaid"?approvedPrepaid:approvedCash).map(c=>(
+                  <option key={c.id} value={c.id}>{c.name}{(mode==="convention"||mode==="rotation"||mode==="credit")?` [${c.clientType==="state"?"État":"Privé"}]`:""}</option>
                 ))}
               </select>
             </div>
@@ -1243,7 +1268,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           )}
           {client&&(
             <div className={`alrt ${mode==="cash"?"aw":wouldExceed?"ae":"ao"}`} style={{marginBottom:0}}>
-              <span>{mode==="cash"?"💵":mode==="prepaid"?"🎫":client.creditEnabled?"💳":"📋"}</span>
+              <span>{mode==="cash"?"💵":mode==="prepaid"?"🎫":mode==="rotation"?"🔄":client.creditEnabled?"💳":"📋"}</span>
               <div style={{flex:1}}>
                 {mode==="cash"
                   ?<><strong>Client Cash :</strong> Paiement en espèces requis. La barrière restera fermée jusqu'à confirmation.</>
@@ -1254,6 +1279,20 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                     </span>
                     {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Solde prépayé insuffisant !</div>}
                   </>
+                  :mode==="rotation"
+                  ?<><strong>Client Convention par Rotations ({client.payFrequency==="monthly"?"mensuelle":"annuelle"}) :</strong> Chaque décharge = 1 rotation.
+                    {client.weightLimitYear>0&&(
+                      <div style={{marginTop:4}}>
+                        <div className="cbt" style={{height:4,marginBottom:3}}>
+                          <div className="cbf" style={{width:`${Math.min(rotationPct,100)}%`,background:wouldExceedRotations?"var(--err)":rotationPct>80?"var(--warn)":"var(--g)"}}/>
+                        </div>
+                        <span style={{fontFamily:"var(--mono)",fontSize:11}}>
+                          {usedRotations} / {client.weightLimitYear} rotations — {rotationPct}% utilisé
+                        </span>
+                        {wouldExceedRotations&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota de rotations dépassé !</span>}
+                      </div>
+                    )}
+                  </>
                   :client.creditEnabled
                   ?<><strong>Client Crédit (DA) :</strong> Décharge imputée au compte crédit.
                     <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11}}>
@@ -1261,7 +1300,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                     </span>
                     {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Limite de crédit dépassée ({creditPct(client)}% utilisé) !</div>}
                   </>
-                  :<><strong>Client Convention (tonnage/an) :</strong> Décharge créditée au quota annuel.
+                  :<><strong>Client Convention (tonnage{client.payFrequency==="monthly"?"/mois":"/an"}) :</strong> Décharge créditée au quota.
                     {client.weightLimitYear>0&&(
                       <div style={{marginTop:4}}>
                         <div className="cbt" style={{height:4,marginBottom:3}}>
@@ -1270,7 +1309,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                         <span style={{fontFamily:"var(--mono)",fontSize:11}}>
                           {fmtN(usedThisYear)} / {fmtN(client.weightLimitYear)} t — {weightPct}% utilisé
                         </span>
-                        {wouldExceedWeight&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota annuel dépassé !</span>}
+                        {wouldExceedWeight&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota dépassé !</span>}
                       </div>
                     )}
                   </>}
@@ -1324,6 +1363,8 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                 <strong>ENTRÉE BLOQUÉE —</strong>{" "}
                 {wouldExceedCredit
                   ?"Le plafond de crédit DA de ce client est atteint. Contactez l'administrateur."
+                  :wouldExceedRotations
+                  ?"Le quota de rotations de ce client est atteint. Contactez l'administrateur."
                   :"Le quota de tonnage de ce client est atteint. Contactez l'administrateur."}
               </div>
             </div>
@@ -1335,6 +1376,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
               :mode==="cash"?"💵 Procéder au Paiement Cash →"
               :mode==="credit"?"💳 Enregistrer Crédit & Ouvrir Barrière →"
               :mode==="prepaid"?"🎫 Consommer Bonus & Ouvrir Barrière →"
+              :mode==="rotation"?"🔄 Enregistrer Rotation & Ouvrir Barrière →"
               :"📋 Enregistrer Convention & Ouvrir Barrière →"}
           </button>
         </div>
@@ -1861,26 +1903,30 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
   const [editClientForm, setEditClientForm] = useState(null);
   const [prepaidForm, setPrepaidForm] = useState({name:"",phone:"",address:"",balance:"",note:""});
 
-  const convClients    = clients.filter(c=>c.type==="convention");
-  const prepaidClients = clients.filter(c=>c.type==="prepaid");
-  const cashClients    = clients.filter(c=>c.type==="daily");
+  const convClients     = clients.filter(c=>c.type==="convention");
+  const rotationClients = clients.filter(c=>c.type==="rotation");
+  const prepaidClients  = clients.filter(c=>c.type==="prepaid");
+  const cashClients     = clients.filter(c=>c.type==="daily");
   const c = clients.find(c=>c.id===sel);
   const cd = sel ? discharges.filter(d=>d.clientId===sel) : [];
 
-  const [approveMode, setApproveMode] = useState("weight"); // "weight" | "credit"
+  const [approveMode, setApproveMode] = useState("weight"); // "weight" | "credit" | "rotation"
   const [weightInput, setWeightInput] = useState("");
+  const [rotationInput, setRotationInput] = useState("");
   const [quotaPeriod, setQuotaPeriod] = useState("year"); // "year" | "month"
+  const [addRotForm, setAddRotForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:""});
 
   const doApprove = () => {
-    const isCreditMode = approveMode==="credit";
+    const isCreditMode   = approveMode==="credit";
+    const isRotationMode = approveMode==="rotation";
     updateClient({
       ...c, status:"approved", note,
       creditEnabled: isCreditMode,
       creditLimit: isCreditMode ? (parseFloat(creditInput)||0) : 0,
-      weightLimitYear: isCreditMode ? 0 : (parseFloat(weightInput)||0),
+      weightLimitYear: isCreditMode ? 0 : isRotationMode ? (parseInt(rotationInput)||0) : (parseFloat(weightInput)||0),
       payFrequency: isCreditMode ? (c.payFrequency||"monthly") : (quotaPeriod==="month" ? "monthly" : "annual"),
     });
-    setModal(false); setNote(""); setCreditInput(""); setWeightInput("");
+    setModal(false); setNote(""); setCreditInput(""); setWeightInput(""); setRotationInput("");
   };
   const doReject = () => {
     updateClient({...c, status:"rejected", note});
@@ -1898,6 +1944,20 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
     addClient(nc);
     setModal(false);
     setAddForm({name:"",clientType:"private",payFrequency:"monthly",payInstrument:"cheque",phone:"",address:"",nif:"",rc:"",note:""});
+  };
+
+  const doAddRotationClient = () => {
+    if (!addRotForm.name) return;
+    const nc = {
+      id:uidC(), name:addRotForm.name, clientType:addRotForm.clientType, type:"rotation",
+      status:"pending_docs", creditLimit:0, consumed:0, weightLimitYear:0,
+      payFrequency:addRotForm.payFrequency||"monthly", payInstrument:"cheque",
+      phone:addRotForm.phone, address:addRotForm.address, nif:addRotForm.nif, rc:addRotForm.rc,
+      docs:[], note:addRotForm.note,
+    };
+    addClient(nc);
+    setModal(false);
+    setAddRotForm({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:""});
   };
 
   const doPrepaidAdd = () => {
@@ -1942,13 +2002,16 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
     <>
       <div className="fx aic jsb mb4">
         <div className="tabs" style={{margin:0}}>
-          {[["convention","Convention"],["prepaid","Bonus Prépayé"],["cash","Cash"]].map(([t,l])=>(
+          {[["convention","Convention"],["rotation","🔄 Par Rotations"],["prepaid","Bonus Prépayé"],["cash","Cash"]].map(([t,l])=>(
             <button key={t} className={`tab${tab===t?" active":""}`} onClick={()=>{setTab(t);setSel(null);}}>{l}</button>
           ))}
         </div>
         <div className="fx aic g2">
           {tab==="convention"&&(
             <button className="btn bp bsm" onClick={()=>setModal("add_client")}>➕ Nouveau client convention</button>
+          )}
+          {tab==="rotation"&&(
+            <button className="btn bp bsm" style={{background:"var(--orange)",borderColor:"var(--orange)"}} onClick={()=>setModal("add_rotation")}>➕ Nouveau client rotations</button>
           )}
           {tab==="prepaid"&&(
             <button className="btn bp bsm" onClick={()=>setModal("add_prepaid")}>➕ Nouveau client prépayé</button>
@@ -1959,18 +2022,27 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       <div style={{display:"grid",gridTemplateColumns:"300px 1fr",gap:16}}>
         <div className="panel" style={{height:"fit-content"}}>
           <div className="ph">
-            <span className="pt">{tab==="convention"?"Institutions Convention":tab==="prepaid"?"Bonus Prépayé":"Clients Cash"}</span>
-            <span className="mn tsm tmu">{(tab==="convention"?convClients:tab==="prepaid"?prepaidClients:cashClients).length}</span>
+            <span className="pt">{tab==="convention"?"Institutions Convention":tab==="rotation"?"Convention par Rotations":tab==="prepaid"?"Bonus Prépayé":"Clients Cash"}</span>
+            <span className="mn tsm tmu">{(tab==="convention"?convClients:tab==="rotation"?rotationClients:tab==="prepaid"?prepaidClients:cashClients).length}</span>
           </div>
           <div style={{padding:"10px 10px",display:"flex",flexDirection:"column",gap:5}}>
-            {(tab==="convention"?convClients:tab==="prepaid"?prepaidClients:cashClients).map(cl=>{
-              const pct=creditPct(cl); const col=creditColor(pct);
-              const isAccountType = tab==="convention"||tab==="prepaid";
+            {(tab==="convention"?convClients:tab==="rotation"?rotationClients:tab==="prepaid"?prepaidClients:cashClients).map(cl=>{
+              const isRotTab = tab==="rotation";
+              const isAccountType = tab==="convention"||tab==="rotation"||tab==="prepaid";
+              const now2 = new Date();
+              const rotPfx = cl.payFrequency==="monthly"
+                ? `${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,"0")}`
+                : now2.getFullYear().toString();
+              const rotUsed = isRotTab&&cl.status==="approved"
+                ? discharges.filter(d=>d.clientId===cl.id&&d.ts.startsWith(rotPfx)&&d.status!=="cancelled").length
+                : 0;
+              const rotPct = isRotTab&&cl.weightLimitYear>0 ? Math.round((rotUsed/cl.weightLimitYear)*100) : 0;
+              const pct=isRotTab?rotPct:creditPct(cl); const col=creditColor(pct);
               return (
                 <button key={cl.id} onClick={()=>setSel(cl.id)} style={{
                   width:"100%",textAlign:"left",padding:"10px 12px",borderRadius:8,cursor:"pointer",
-                  border:`1px solid ${sel===cl.id?"var(--g)":"var(--bdr)"}`,
-                  background:sel===cl.id?"rgba(46,201,92,.07)":"var(--s2)",
+                  border:`1px solid ${sel===cl.id?isRotTab?"var(--orange)":"var(--g)":"var(--bdr)"}`,
+                  background:sel===cl.id?isRotTab?"rgba(251,146,60,.07)":"rgba(46,201,92,.07)":"var(--s2)",
                 }}>
                   <div className="fx aic jsb">
                     <span style={{fontWeight:700,fontSize:12,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cl.name}</span>
@@ -1978,7 +2050,15 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       ?<ClientStatusBadge s={cl.status}/>
                       :<span className="badge b-cash">Cash</span>}
                   </div>
-                  {isAccountType&&cl.status==="approved"&&(
+                  {isRotTab&&cl.status==="approved"&&(
+                    <>
+                      <div className="cbt mt2"><div className="cbf" style={{width:`${Math.min(pct,100)}%`,background:col}}/></div>
+                      <div className="tsm tmu mt1" style={{fontSize:10}}>
+                        {rotUsed}/{cl.weightLimitYear||"?"} rotations · {pct}%
+                      </div>
+                    </>
+                  )}
+                  {!isRotTab&&isAccountType&&cl.status==="approved"&&(
                     <>
                       <div className="cbt mt2"><div className="cbf" style={{width:`${Math.min(pct,100)}%`,background:col}}/></div>
                       <div className="tsm tmu mt1" style={{fontSize:10}}>
@@ -2016,6 +2096,8 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     )}
                     {c.type==="prepaid"&&<span className="badge" style={{background:"rgba(59,130,246,.12)",color:"#1d4ed8",border:"1px solid rgba(59,130,246,.3)"}}>🎫 Bonus Prépayé</span>}
                     {c.type==="daily"&&<span className="badge b-cash">💵 Client Cash</span>}
+                    {c.type==="rotation"&&<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Convention par Rotations</span>}
+                    {c.type==="rotation"&&<ClientStatusBadge s={c.status}/>}
                     {c.type==="convention"&&<ClientStatusBadge s={c.status}/>}
                     {isAdmin&&(
                       <div className="fx aic g2">
@@ -2053,22 +2135,28 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   </div>
                 )}
 
-                {c.type==="convention"&&c.status==="approved"&&(
+                {(c.type==="convention"||c.type==="rotation")&&c.status==="approved"&&(
                   <div className="fg fg3 mb3">
                     {(()=>{
                       const now = new Date();
-                      const isMonthly = !c.creditEnabled && c.payFrequency==="monthly";
+                      const isRotation = c.type==="rotation";
+                      const isMonthly = c.payFrequency==="monthly";
                       const periodPrefix = isMonthly
                         ? `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`
                         : now.getFullYear().toString();
                       const periodDischarges = discharges.filter(d=>d.clientId===c.id&&d.ts.startsWith(periodPrefix)&&d.status!=="cancelled");
-                      const usedPeriod = periodDischarges.reduce((s,d)=>s+d.net,0);
+                      const usedPeriod = isRotation ? periodDischarges.length : periodDischarges.reduce((s,d)=>s+d.net,0);
                       const pct = c.weightLimitYear>0 ? Math.round((usedPeriod/c.weightLimitYear)*100) : 0;
                       const col = pct>80?"var(--err)":pct>60?"var(--warn)":"var(--g)";
+                      const periodLbl = isMonthly ? now.toLocaleString("fr-DZ",{month:"long",year:"numeric"}) : String(now.getFullYear());
                       const rows = c.creditEnabled ? [
                         ["Limite Crédit (DA)", fmt(c.creditLimit),            "var(--muted)"],
                         ["Consommé",           fmt(c.consumed),               creditColor(creditPct(c))],
                         ["Disponible",         fmt(c.creditLimit-c.consumed), c.consumed>c.creditLimit?"var(--err)":"var(--g)"],
+                      ] : isRotation ? [
+                        [isMonthly?"Quota Mensuel (rot.)":"Quota Annuel (rot.)", c.weightLimitYear+" rot.", "var(--muted)"],
+                        [isMonthly?"Rotations ce mois":"Rotations cette année",  usedPeriod+" rot.",        creditColor(pct)],
+                        ["Restant",                                               Math.max(0,c.weightLimitYear-usedPeriod)+" rot.", "var(--g)"],
                       ] : [
                         [isMonthly?"Quota Mensuel (t)":"Quota Annuel (t)", fmtN(c.weightLimitYear)+" t", "var(--muted)"],
                         [isMonthly?"Mois en cours":"Année en cours",       fmtN(usedPeriod)+" t",        creditColor(pct)],
@@ -2085,7 +2173,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                           <div style={{gridColumn:"1/-1",marginTop:-4}}>
                             <div className="cbt" style={{height:6}}><div className="cbf" style={{width:`${Math.min(pct,100)}%`,background:col}}/></div>
                             <div className="fx jsb mt1">
-                              <span className="tsm tmu">Progression {isMonthly?`${now.toLocaleString("fr-DZ",{month:"long"})} ${now.getFullYear()}`:now.getFullYear()}</span>
+                              <span className="tsm tmu">Progression {periodLbl}</span>
                               <span className="mn tsm" style={{color:col}}>{pct}%</span>
                             </div>
                           </div>
@@ -2095,15 +2183,15 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   </div>
                 )}
 
-                {c.type==="convention"&&c.payFrequency&&(
+                {(c.type==="convention"||c.type==="rotation")&&c.payFrequency&&(
                   <div className="fx aic g3 mb3" style={{fontSize:11,color:"var(--muted)"}}>
                     <span>📅 Facturation: <strong style={{color:"var(--txt)"}}>{c.payFrequency==="monthly"?"Mensuelle":"Annuelle"}</strong></span>
-                    <span>💳 Instrument: <strong style={{color:"var(--txt)"}}>{c.payInstrument==="bank"?"Virement bancaire":"Chèque"}</strong></span>
+                    {c.type==="convention"&&<span>💳 Instrument: <strong style={{color:"var(--txt)"}}>{c.payInstrument==="bank"?"Virement bancaire":"Chèque"}</strong></span>}
                   </div>
                 )}
 
-                {/* Documents section for convention clients */}
-                {c.type==="convention"&&(
+                {/* Documents section for convention / rotation clients */}
+                {(c.type==="convention"||c.type==="rotation")&&(
                   <div>
                     <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>📄 Documents requis
                       {isAdmin&&<span style={{fontWeight:400,fontSize:10,color:"var(--muted)",marginLeft:8}}>Cliquez pour marquer reçu/manquant</span>}
@@ -2133,7 +2221,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
 
                     {(c.status==="under_review"||c.status==="pending_docs")&&(
                       <div className="fx g3">
-                        <button className="btn bp bsm" onClick={()=>{ setCreditInput("500000"); setModal("approve"); }}>
+                        <button className="btn bp bsm" onClick={()=>{
+                          if(c.type==="rotation"){setApproveMode("rotation");setRotationInput(String(c.weightLimitYear||0));setQuotaPeriod(c.payFrequency==="monthly"?"month":"year");}
+                          else{setCreditInput("500000");}
+                          setModal("approve");
+                        }}>
                           ✓ Approuver le dossier
                         </button>
                         <button className="btn be bsm" onClick={()=>setModal("reject")}>
@@ -2145,7 +2237,8 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       <div className="fx aic g2" style={{flexWrap:"wrap"}}>
                         <span className="badge b-ok">✓ Dossier validé</span>
                         <button className="btn bsm bg" style={{fontSize:10}} onClick={()=>{
-                          if(c.creditEnabled){setApproveMode("credit");setCreditInput(String(c.creditLimit));}
+                          if(c.type==="rotation"){setApproveMode("rotation");setRotationInput(String(c.weightLimitYear||0));setQuotaPeriod(c.payFrequency==="monthly"?"month":"year");}
+                          else if(c.creditEnabled){setApproveMode("credit");setCreditInput(String(c.creditLimit));}
                           else{setApproveMode("weight");setWeightInput(String(c.weightLimitYear));setQuotaPeriod(c.payFrequency==="monthly"?"month":"year");}
                           setModal("approve");
                         }}>
@@ -2171,7 +2264,8 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                           <div className="fx aic g2">
                             <button className="btn bp bsm" style={{fontSize:10}} onClick={()=>{
                               setNote("");
-                              if(c.creditEnabled){setApproveMode("credit");setCreditInput(String(c.creditLimit||500000));}
+                              if(c.type==="rotation"){setApproveMode("rotation");setRotationInput(String(c.weightLimitYear||0));setQuotaPeriod(c.payFrequency==="monthly"?"month":"year");}
+                              else if(c.creditEnabled){setApproveMode("credit");setCreditInput(String(c.creditLimit||500000));}
                               else{setApproveMode("weight");setWeightInput(String(c.weightLimitYear||0));setQuotaPeriod(c.payFrequency==="monthly"?"month":"year");}
                               setModal("approve");
                             }}>
@@ -2250,12 +2344,21 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
               <div className="field mb2" style={{marginBottom:14}}>
                 <label>Mode de facturation</label>
                 <div className="seg" style={{marginTop:6}}>
-                  <button className={`seg-btn${approveMode==="weight"?" active":""}`} onClick={()=>setApproveMode("weight")}>
-                    ⚖️ Quota Tonnage
-                  </button>
-                  <button className={`seg-btn${approveMode==="credit"?" active":""}`} onClick={()=>setApproveMode("credit")}>
-                    💳 Crédit DA (désigné admin)
-                  </button>
+                  {c.type==="rotation"?(
+                    <button className={`seg-btn${approveMode==="rotation"?" active":""}`}
+                      style={{background:"var(--orange)",color:"#fff",borderColor:"var(--orange)"}}>
+                      🔄 Quota Rotations
+                    </button>
+                  ):(
+                    <>
+                      <button className={`seg-btn${approveMode==="weight"?" active":""}`} onClick={()=>setApproveMode("weight")}>
+                        ⚖️ Quota Tonnage
+                      </button>
+                      <button className={`seg-btn${approveMode==="credit"?" active":""}`} onClick={()=>setApproveMode("credit")}>
+                        💳 Crédit DA (désigné admin)
+                      </button>
+                    </>
+                  )}
                 </div>
                 <div className="alrt ai" style={{marginTop:8,padding:"8px 12px",fontSize:11}}>
                   <span>ℹ️</span>
@@ -2263,11 +2366,15 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     ?(quotaPeriod==="month"
                       ?"Quota mensuel : le client peut décharger jusqu'à ce seuil par mois calendaire."
                       :"Quota annuel : le client peut décharger jusqu'à ce seuil par année civile.")
+                    :approveMode==="rotation"
+                    ?(quotaPeriod==="month"
+                      ?"Quota mensuel par rotations : chaque passage de camion = 1 rotation. Limite mensuelle."
+                      :"Quota annuel par rotations : chaque passage de camion = 1 rotation. Limite annuelle.")
                     :"Crédit DA : uniquement pour les clients désignés par l'admin. La limite est exprimée en Dinars Algériens."}</span>
                 </div>
               </div>
               <div className="fg" style={{gap:12}}>
-                {approveMode==="weight"?(
+                {(approveMode==="weight"||approveMode==="rotation")?(
                   <>
                     <div className="field">
                       <label>Périodicité du quota</label>
@@ -2280,10 +2387,17 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                         </button>
                       </div>
                     </div>
-                    <div className="field">
-                      <label>Quota {quotaPeriod==="month"?"mensuel (tonnes/mois)":"annuel (tonnes/an)"}</label>
-                      <input className="fi" type="number" value={weightInput} onChange={e=>setWeightInput(e.target.value)} placeholder={quotaPeriod==="month"?"ex: 500":"ex: 5000"}/>
-                    </div>
+                    {approveMode==="weight"?(
+                      <div className="field">
+                        <label>Quota {quotaPeriod==="month"?"mensuel (tonnes/mois)":"annuel (tonnes/an)"}</label>
+                        <input className="fi" type="number" value={weightInput} onChange={e=>setWeightInput(e.target.value)} placeholder={quotaPeriod==="month"?"ex: 500":"ex: 5000"}/>
+                      </div>
+                    ):(
+                      <div className="field">
+                        <label>Quota {quotaPeriod==="month"?"mensuel (rotations/mois)":"annuel (rotations/an)"}</label>
+                        <input className="fi" type="number" step="1" min="0" value={rotationInput} onChange={e=>setRotationInput(e.target.value)} placeholder={quotaPeriod==="month"?"ex: 30":"ex: 360"}/>
+                      </div>
+                    )}
                   </>
                 ):(
                   <div className="field"><label>Limite de crédit (DA)</label>
@@ -2381,6 +2495,67 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
               </div>
             </div>
             <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>Annuler</button><button className="btn bp" disabled={!addForm.name} onClick={doAddClient}>✓ Créer le dossier</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* Add rotation client modal */}
+      {modal==="add_rotation"&&(
+        <div className="ov">
+          <div className="modal modal-lg">
+            <div className="mh"><span className="mh-title">🔄 Nouveau client convention par rotations</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
+            <div className="mb2">
+              <div className="alrt ai mb3" style={{marginBottom:16}}>
+                <span>ℹ️</span><span style={{fontSize:11}}>Le dossier sera créé avec le statut "Documents manquants". Le quota en rotations sera défini lors de l'approbation.</span>
+              </div>
+              <div className="fg" style={{gap:12}}>
+                <div className="fg fg2">
+                  <div className="field"><label>Nom / Raison sociale *</label>
+                    <input className="fi" value={addRotForm.name} onChange={e=>setAddRotForm(f=>({...f,name:e.target.value}))} placeholder="Commune de ..., SPA ..., etc."/>
+                  </div>
+                  <div className="field"><label>Type d'institution</label>
+                    <select className="fi" value={addRotForm.clientType} onChange={e=>setAddRotForm(f=>({...f,clientType:e.target.value}))}>
+                      <option value="state">🏛 Institution d'État</option>
+                      <option value="private">🏢 Entreprise Privée</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="fg fg2">
+                  <div className="field"><label>Téléphone</label>
+                    <input className="fi" value={addRotForm.phone} onChange={e=>setAddRotForm(f=>({...f,phone:e.target.value}))} placeholder="034 00 00 00"/>
+                  </div>
+                  <div className="field"><label>Adresse</label>
+                    <input className="fi" value={addRotForm.address} onChange={e=>setAddRotForm(f=>({...f,address:e.target.value}))} placeholder="Commune, wilaya"/>
+                  </div>
+                </div>
+                <div className="fg fg2">
+                  <div className="field"><label>NIF</label>
+                    <input className="fi" value={addRotForm.nif} onChange={e=>setAddRotForm(f=>({...f,nif:e.target.value}))} placeholder="099..."/>
+                  </div>
+                  <div className="field"><label>Registre de Commerce (Privé)</label>
+                    <input className="fi" value={addRotForm.rc} onChange={e=>setAddRotForm(f=>({...f,rc:e.target.value}))} placeholder="18/00-0000000B18"/>
+                  </div>
+                </div>
+                <div className="field"><label>Périodicité du quota</label>
+                  <select className="fi" value={addRotForm.payFrequency} onChange={e=>setAddRotForm(f=>({...f,payFrequency:e.target.value}))}>
+                    <option value="monthly">🗓 Mensuelle (rotations/mois)</option>
+                    <option value="annual">📅 Annuelle (rotations/an)</option>
+                  </select>
+                </div>
+                <div className="field"><label>Note initiale</label>
+                  <textarea className="fi" value={addRotForm.note} onChange={e=>setAddRotForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
+                </div>
+                <div style={{background:"var(--s2)",border:"1px solid var(--bdr)",borderRadius:8,padding:"12px 14px"}}>
+                  <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>📋 Documents requis :</div>
+                  {(addRotForm.clientType==="state"?(docTypes?.state||REQUIRED_DOCS_STATE):(docTypes?.private||REQUIRED_DOCS_PRIVATE)).map(d=>(
+                    <div key={d} className="fx aic g2" style={{marginBottom:5,fontSize:11,color:"var(--muted)"}}>
+                      <span style={{color:"var(--warn)"}}>⬜</span> {d}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>Annuler</button><button className="btn bp" style={{background:"var(--orange)",borderColor:"var(--orange)"}} disabled={!addRotForm.name} onClick={doAddRotationClient}>✓ Créer le dossier rotations</button></div>
           </div>
         </div>
       )}
@@ -2906,7 +3081,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [selC,  setSelC]  = useState("");
   const [month, setMonth] = useState(defaultMonth);
 
-  const billed = clients.filter(c=>(c.type==="convention"||c.type==="prepaid")&&c.status==="approved");
+  const billed = clients.filter(c=>(c.type==="convention"||c.type==="rotation"||c.type==="prepaid")&&c.status==="approved");
   const c       = billed.find(c=>c.id===selC) || billed[0];
   const selCId  = c?.id || "";
   const entries = discharges.filter(d=>d.clientId===selCId&&d.ts.startsWith(month)&&d.status!=="cancelled");
@@ -3056,10 +3231,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                       <tr key={cl.id}>
                         <td style={{fontWeight:700}}>{cl.name}</td>
                         <td>
-                          <span className={`badge ${cl.type==="credit"?"":cl.clientType==="state"?"b-purple":"b-info"}`}
-                            style={cl.type==="credit"?{background:"rgba(139,92,246,.15)",color:"#7c3aed",border:"1px solid rgba(139,92,246,.3)"}:{}}>
-                            {cl.type==="credit"?"💳 Crédit":cl.clientType==="state"?"🏛 État":"🏢 Privé"}
-                          </span>
+                          {cl.type==="rotation"
+                            ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>
+                            :<span className={`badge ${cl.type==="credit"?"":cl.clientType==="state"?"b-purple":"b-info"}`}
+                              style={cl.type==="credit"?{background:"rgba(139,92,246,.15)",color:"#7c3aed",border:"1px solid rgba(139,92,246,.3)"}:{}}>
+                              {cl.type==="credit"?"💳 Crédit":cl.clientType==="state"?"🏛 État":"🏢 Privé"}
+                            </span>}
                         </td>
                         <td>
                           {clE.length===0
@@ -3258,19 +3435,24 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
           {/* ── Limit / quota progress ── */}
           {(c.creditEnabled || c.weightLimitYear>0) && (()=>{
-            const isMonthlyQ = !c.creditEnabled && c.payFrequency==="monthly";
-            const pfx = isMonthlyQ
+            const isRotation = c.type==="rotation";
+            const isMonthlyQ = !c.creditEnabled && !isRotation && c.payFrequency==="monthly";
+            const isMonthlyR = isRotation && c.payFrequency==="monthly";
+            const pfx = (isMonthlyQ||isMonthlyR)
               ? `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`
               : now.getFullYear().toString();
+            const periodDs = discharges.filter(d=>d.clientId===c.id&&d.ts.startsWith(pfx)&&d.status!=="cancelled");
             const usedPeriod = c.creditEnabled
               ? c.consumed
-              : discharges.filter(d=>d.clientId===c.id&&d.ts.startsWith(pfx)&&d.status!=="cancelled").reduce((s,d)=>s+d.net,0);
+              : isRotation
+                ? periodDs.length
+                : periodDs.reduce((s,d)=>s+d.net,0);
             const limit = c.creditEnabled ? c.creditLimit : c.weightLimitYear;
             const pct   = limit>0 ? Math.min(Math.round((usedPeriod/limit)*100),100) : 0;
             const col   = pct>=100?"var(--err)":pct>80?"var(--warn)":pct>60?"#ca8a04":"var(--g)";
             const periodLabel = c.creditEnabled
               ? null
-              : isMonthlyQ
+              : (isMonthlyQ||isMonthlyR)
                 ? now.toLocaleString("fr-DZ",{month:"long",year:"numeric"})
                 : String(now.getFullYear());
             return (
@@ -3278,7 +3460,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 <div className="card-sm" style={{borderTop:`3px solid ${col}`}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                     <span style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>
-                      {c.creditEnabled?"Limite Crédit DA":isMonthlyQ?"Quota Mensuel (t)":"Quota Annuel (t)"}
+                      {c.creditEnabled?"Limite Crédit DA":isRotation?(isMonthlyR?"Quota Mensuel (rot.)":"Quota Annuel (rot.)"):(isMonthlyQ?"Quota Mensuel (t)":"Quota Annuel (t)")}
                       {periodLabel&&<span style={{marginLeft:6,fontWeight:400}}>— {periodLabel}</span>}
                     </span>
                     <span style={{fontFamily:"var(--mono)",fontSize:12,fontWeight:800,color:col}}>{pct}%</span>
@@ -3290,16 +3472,18 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                     <span style={{color:"var(--muted)"}}>
                       {c.creditEnabled
                         ?<><span style={{color:col,fontFamily:"var(--mono)",fontWeight:700}}>{fmt(usedPeriod)}</span> utilisé</>
-                        :<><span style={{color:col,fontFamily:"var(--mono)",fontWeight:700}}>{fmtN(usedPeriod)} t</span> utilisé</>}
+                        :isRotation
+                          ?<><span style={{color:col,fontFamily:"var(--mono)",fontWeight:700}}>{usedPeriod}</span> rotation(s)</>
+                          :<><span style={{color:col,fontFamily:"var(--mono)",fontWeight:700}}>{fmtN(usedPeriod)} t</span> utilisé</>}
                     </span>
                     <span style={{color:"var(--muted)"}}>
                       Limite : <span style={{fontFamily:"var(--mono)",fontWeight:700,color:"var(--txt)"}}>
-                        {c.creditEnabled?fmt(limit):fmtN(limit)+" t"}
+                        {c.creditEnabled?fmt(limit):isRotation?(limit+" rot."):fmtN(limit)+" t"}
                       </span>
                     </span>
                     <span style={{color:pct>=100?"var(--err)":"var(--g)"}}>
                       Restant : <span style={{fontFamily:"var(--mono)",fontWeight:700}}>
-                        {c.creditEnabled?fmt(Math.max(0,limit-usedPeriod)):fmtN(Math.max(0,limit-usedPeriod))+" t"}
+                        {c.creditEnabled?fmt(Math.max(0,limit-usedPeriod)):isRotation?(Math.max(0,limit-usedPeriod)+" rot."):fmtN(Math.max(0,limit-usedPeriod))+" t"}
                       </span>
                     </span>
                   </div>
