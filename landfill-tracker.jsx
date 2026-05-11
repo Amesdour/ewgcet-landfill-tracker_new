@@ -2788,20 +2788,29 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   </div>
                 </div>
                 {editClientForm.type==="convention"&&(
-                  <div className="fg fg2">
-                    <div className="field"><label>Fréquence de facturation</label>
-                      <select className="fi" value={editClientForm.payFrequency||"monthly"} onChange={e=>setEditClientForm(f=>({...f,payFrequency:e.target.value}))}>
-                        <option value="monthly">📅 Mensuelle</option>
-                        <option value="annual">📆 Annuelle</option>
-                      </select>
+                  <>
+                    <div className="fg fg2">
+                      <div className="field"><label>Fréquence de facturation</label>
+                        <select className="fi" value={editClientForm.payFrequency||"monthly"} onChange={e=>setEditClientForm(f=>({...f,payFrequency:e.target.value}))}>
+                          <option value="monthly">📅 Mensuelle</option>
+                          <option value="annual">📆 Annuelle</option>
+                        </select>
+                      </div>
+                      <div className="field"><label>Mode de paiement</label>
+                        <select className="fi" value={editClientForm.payInstrument||"cheque"} onChange={e=>setEditClientForm(f=>({...f,payInstrument:e.target.value}))}>
+                          <option value="cheque">💳 Chèque</option>
+                          <option value="bank">🏦 Virement bancaire</option>
+                        </select>
+                      </div>
                     </div>
-                    <div className="field"><label>Mode de paiement</label>
-                      <select className="fi" value={editClientForm.payInstrument||"cheque"} onChange={e=>setEditClientForm(f=>({...f,payInstrument:e.target.value}))}>
-                        <option value="cheque">💳 Chèque</option>
-                        <option value="bank">🏦 Virement bancaire</option>
-                      </select>
+                    <div className="field">
+                      <label>🔄 Quota de rotations <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(optionnel — 0 = pas de limite)</span></label>
+                      <input className="fi" type="number" step="1" min="0"
+                        value={editClientForm.rotationLimit||0}
+                        onChange={e=>setEditClientForm(f=>({...f,rotationLimit:parseInt(e.target.value)||0}))}
+                        placeholder="ex: 30"/>
                     </div>
-                  </div>
+                  </>
                 )}
                 {editClientForm.type==="prepaid"&&(
                   <div className="field"><label>Solde total (DA)</label>

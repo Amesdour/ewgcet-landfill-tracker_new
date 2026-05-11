@@ -72,6 +72,7 @@ const mapClient = r => ({
   consumed:parseFloat(r.consumed)||0,
   creditEnabled:r.credit_enabled||false,
   weightLimitYear:parseFloat(r.weight_limit_year)||0,
+  rotationLimit:parseInt(r.rotation_limit)||0,
   payFrequency:r.pay_frequency||'monthly',
   payInstrument:r.pay_instrument||'cheque',
   phone:r.phone||'', address:r.address||'', nif:r.nif||'', rc:r.rc||'',
@@ -214,12 +215,12 @@ app.put('/api/clients/:id', async (req, res) => {
       `UPDATE clients SET name=$1,client_type=$2,type=$3,status=$4,credit_limit=$5,
        credit_enabled=$6,weight_limit_year=$7,pay_frequency=$8,pay_instrument=$9,
        phone=$10,address=$11,nif=$12,rc=$13,docs=$14,note=$15,vat_subject=$16,
-       assigned_sites=$17 WHERE id=$18`,
+       assigned_sites=$17,rotation_limit=$18 WHERE id=$19`,
       [c.name,c.clientType,c.type,c.status,c.creditLimit||0,
        c.creditEnabled||false,c.weightLimitYear||0,
        c.payFrequency||'monthly',c.payInstrument||'cheque',
        c.phone||'',c.address||'',c.nif||'',c.rc||'',JSON.stringify(c.docs||[]),c.note||'',
-       c.vatSubject||false,JSON.stringify(c.assignedSites||[]),req.params.id]
+       c.vatSubject||false,JSON.stringify(c.assignedSites||[]),c.rotationLimit||0,req.params.id]
     );
     ok(res, { ok:true });
   } catch(e) { er(res,e); }
