@@ -3243,16 +3243,16 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 </xml><![endif]-->
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;width:18cm;margin:0 auto}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#000}
   table{border-collapse:collapse;width:100%}
-  th,td{border:1px solid #000;padding:4px 8px}
-  th{background:#f0f0f0;font-weight:bold;text-align:center}
-  .nb td,.nb th{border:none;padding:2px 4px}
-  .sep{border-top:2px solid #000;margin:5px 0}
-  .sep2{border-top:1px solid #000;margin:4px 0}
+  th,td{border:1px solid #000;padding:6px 10px}
+  th{background:#f0f0f0;font-weight:bold;text-align:center;font-size:13px}
+  .nb td,.nb th{border:none;padding:3px 5px}
+  .sep{border-top:2.5px solid #000;margin:6px 0}
+  .sep2{border-top:1px solid #000;margin:5px 0}
   .r{text-align:right}.c{text-align:center}.b{font-weight:bold}
-  @page WordSection1{size:21.0cm 29.7cm;margin:1.2cm 1.5cm;mso-page-orientation:portrait}
-  @page{size:21.0cm 29.7cm;margin:1.2cm 1.5cm}
+  @page WordSection1{size:21.0cm 29.7cm;margin:1.5cm 1.8cm;mso-page-orientation:portrait}
+  @page{size:21.0cm 29.7cm;margin:1.5cm 1.8cm}
   div.WordSection1{page:WordSection1}
   @media print{body{padding:0}}
 </style>
@@ -3260,13 +3260,13 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 <body>
 <div class="WordSection1">
 
-<!-- ── HEADER: French LEFT | Arabic CENTER | blank RIGHT ── -->
-<table class="nb" style="width:100%;margin-bottom:4px">
+<!-- ── HEADER: French LEFT | Arabic CENTER | Logo RIGHT ── -->
+<table class="nb" style="width:100%;margin-bottom:6px">
   <tr>
     <!-- LEFT: French company details -->
-    <td style="border:none;vertical-align:top;width:42%">
-      <div style="font-size:9.5px;line-height:1.85;color:#000">
-        <div style="font-size:11px;font-weight:bold;margin-bottom:3px">
+    <td style="border:none;vertical-align:top;width:45%">
+      <div style="font-size:12px;line-height:2;color:#000">
+        <div style="font-size:13.5px;font-weight:bold;margin-bottom:4px">
           Etablissement de Wilaya de Gestion des Centres d'Enfouissement Technique
         </div>
         <div>Cité Administrative, 01ème Étage, Ayouf Ouest — Jijel</div>
@@ -3276,24 +3276,24 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
       </div>
     </td>
     <!-- CENTER: Logo + Arabic government header -->
-    <td style="border:none;text-align:center;vertical-align:middle;width:28%;padding:0 8px">
-      <div style="font-size:38px;line-height:1;margin-bottom:4px">&#9851;</div>
-      <div style="font-size:13px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;line-height:1.6">
+    <td style="border:none;text-align:center;vertical-align:middle;width:30%;padding:0 10px">
+      <div style="font-size:44px;line-height:1;margin-bottom:5px">&#9851;</div>
+      <div style="font-size:14.5px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;line-height:1.7">
         الجمهورية الجزائرية الديمقراطية الشعبية
       </div>
-      <div style="font-size:9px;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-top:2px;color:#333">
+      <div style="font-size:11px;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-top:3px;color:#333">
         مؤسسة ولائية لتسيير مراكز الردم التقني
       </div>
     </td>
     <!-- RIGHT: blank (balance) -->
-    <td style="border:none;width:30%"></td>
+    <td style="border:none;width:25%"></td>
   </tr>
 </table>
 
 <div class="sep"></div>
 
 <!-- ── INVOICE REFERENCE LINE ── -->
-<div style="display:flex;justify-content:space-between;padding:4px 2px;font-weight:bold;font-size:11.5px">
+<div style="display:flex;justify-content:space-between;padding:6px 2px;font-weight:bold;font-size:13.5px">
   <span>FACTURE CLIENT : ${invNum}</span>
   <span>JIJEL, LE : ${date}</span>
 </div>
@@ -3301,13 +3301,13 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 <div class="sep"></div>
 
 <!-- ── CLIENT BLOCK (left-aligned) ── -->
-<div style="margin:8px 2px 12px;font-size:10.5px;line-height:1.85">
-  <div style="font-weight:bold;font-size:11px;margin-bottom:2px">FACTURÉ À :</div>
+<div style="margin:10px 2px 14px;font-size:12.5px;line-height:1.9">
+  <div style="font-weight:bold;font-size:13px;margin-bottom:3px">FACTURÉ À :</div>
   <div>${c.id} — ${c.name}</div>
   ${c.nif    ? `<div>M.F.&nbsp;: ${c.nif}</div>` : ''}
   ${c.rc     ? `<div>R.C.&nbsp;: ${c.rc}</div>`  : ''}
   ${c.address? `<div>${c.address}</div>`           : ''}
-  <div style="margin-top:3px;font-size:9.5px;color:#555">
+  <div style="margin-top:4px;font-size:11.5px;color:#555">
     Régime TVA&nbsp;: ${TVA > 0 ? `Assujetti — ${TVA}%` : 'Non assujetti (exonéré)'}
   </div>
 </div>
@@ -3316,18 +3316,18 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 <table>
   <thead>
     <tr>
-      <th style="width:28px">N°</th>
-      <th style="text-align:left;padding-left:8px">DÉSIGNATION</th>
-      <th style="width:75px">QUANTITÉ</th>
-      <th style="width:88px">PRIX U. (DA)</th>
-      <th style="width:50px">% TVA</th>
-      <th style="width:90px">MONTANT HT</th>
+      <th style="width:36px">N°</th>
+      <th style="text-align:left;padding-left:10px">DÉSIGNATION</th>
+      <th style="width:100px">QUANTITÉ</th>
+      <th style="width:110px">PRIX U. (DA)</th>
+      <th style="width:64px">% TVA</th>
+      <th style="width:110px">MONTANT HT</th>
     </tr>
   </thead>
   <tbody>
     ${rowsHTML}
     <tr style="background:#f5f5f5">
-      <td colspan="2" class="b">TOTAL GÉNÉRAL (${rows.length} ligne${rows.length>1?'s':''})</td>
+      <td colspan="2" class="b" style="font-size:13px">TOTAL GÉNÉRAL (${rows.length} ligne${rows.length>1?'s':''})</td>
       <td class="r b">${fQ(totalQty)} t</td>
       <td></td><td></td>
       <td class="r b">${fB(totalHT)}</td>
@@ -3336,14 +3336,14 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 </table>
 
 <!-- ── AMOUNT IN WORDS ── -->
-<div style="margin-top:8px;border:1px solid #000;padding:5px 10px;font-size:10px">
+<div style="margin-top:10px;border:1px solid #000;padding:7px 12px;font-size:12px">
   <strong>Arrêtée la présente facture à la somme de :</strong><br>
   <span style="font-weight:bold;text-transform:uppercase;letter-spacing:.02em">${amountToWords(totalTTC)}</span>
 </div>
 
 <!-- ── TVA SUMMARY + TOTALS ── -->
-<div style="display:flex;gap:14px;margin-top:10px;align-items:flex-start">
-  <table style="width:44%">
+<div style="display:flex;gap:16px;margin-top:12px;align-items:flex-start">
+  <table style="width:46%">
     <thead>
       <tr><th>TVA %</th><th>BASE HT</th><th>MONTANT TVA</th></tr>
     </thead>
@@ -3360,29 +3360,29 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
       </tr>
     </tbody>
   </table>
-  <table style="width:50%;margin-left:auto">
+  <table style="width:52%;margin-left:auto">
     <tbody>
-      <tr><td style="width:60%">Montant H.T.</td><td class="r">${fB(totalHT)}</td></tr>
+      <tr><td style="width:58%">Montant H.T.</td><td class="r">${fB(totalHT)}</td></tr>
       <tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(totalTVA)}</td></tr>
       <tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>
       <tr style="background:#e8e8e8">
-        <td class="b" style="font-size:12px">NET À PAYER</td>
-        <td class="r b" style="font-size:13px">${fB(totalTTC)}</td>
+        <td class="b" style="font-size:14px">NET À PAYER</td>
+        <td class="r b" style="font-size:15px">${fB(totalTTC)}</td>
       </tr>
     </tbody>
   </table>
 </div>
 
 <!-- ── SIGNATURE ── -->
-<div style="margin-top:44px;display:flex;justify-content:flex-end">
-  <div style="text-align:center;min-width:160px">
-    <div style="font-weight:bold;font-size:10.5px;margin-bottom:56px;text-transform:uppercase">Le Directeur</div>
-    <div style="border-top:1px solid #000;padding-top:4px;font-size:9px;color:#555">Signature &amp; Cachet</div>
+<div style="margin-top:48px;display:flex;justify-content:flex-start;padding-left:8%">
+  <div style="text-align:center;min-width:200px">
+    <div style="font-weight:bold;font-size:13px;margin-bottom:60px;text-transform:uppercase">Le Directeur</div>
+    <div style="border-top:1px solid #000;padding-top:5px;font-size:11px;color:#555">Signature &amp; Cachet</div>
   </div>
 </div>
 
 <!-- ── FOOTER ── -->
-<div style="margin-top:24px;padding-top:6px;border-top:1px solid #bbb;font-size:8.5px;color:#666;text-align:center">
+<div style="margin-top:28px;padding-top:7px;border-top:1px solid #bbb;font-size:10px;color:#666;text-align:center">
   ${co('name')} — ${co('address')} — Tél&nbsp;: ${co('phone')} — ${co('email')}
 </div>
 
@@ -3895,10 +3895,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
           {/* Print-only signature footer */}
           <div className="print-only inv-print-footer" style={{padding:"0 20px 20px"}}>
-            <div style={{display:"flex",justifyContent:"flex-end",marginTop:20}}>
-              <div style={{textAlign:"center",minWidth:160}}>
-                <div style={{fontSize:10,fontWeight:700,marginBottom:56,color:"#333",textTransform:"uppercase"}}>Le Directeur</div>
-                <div style={{borderTop:"1px solid #333",paddingTop:4,fontSize:9,color:"#555"}}>Signature &amp; Cachet</div>
+            <div style={{display:"flex",justifyContent:"flex-start",paddingLeft:"8%",marginTop:24}}>
+              <div style={{textAlign:"center",minWidth:200}}>
+                <div style={{fontSize:13,fontWeight:700,marginBottom:60,color:"#333",textTransform:"uppercase"}}>Le Directeur</div>
+                <div style={{borderTop:"1px solid #333",paddingTop:5,fontSize:11,color:"#555"}}>Signature &amp; Cachet</div>
               </div>
             </div>
             <div style={{marginTop:30,fontSize:9,color:"#777",textAlign:"center",borderTop:"1px solid #ddd",paddingTop:10}}>
