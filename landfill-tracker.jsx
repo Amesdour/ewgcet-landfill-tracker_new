@@ -1243,22 +1243,32 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           {client?.assignedSites?.length>0&&!client.assignedSites.includes(form.siteId)&&(()=>{setTimeout(()=>set("siteId",client.assignedSites[0]),0);return null;})()}
           <div className="fg fg2">
             <div className="field"><label>Site CET</label>
-              {(!isAdmin&&client?.assignedSites?.length>0)?(
-                <div className="fi" style={{display:"flex",alignItems:"center",gap:8,background:"var(--s2)",cursor:"not-allowed",userSelect:"none"}}>
-                  <span>📍</span>
-                  <span style={{fontWeight:600,flex:1}}>{sites.find(s=>s.id===form.siteId)?.name||form.siteId}</span>
-                  <span className="badge b-info" style={{fontSize:9}}>{sites.find(s=>s.id===form.siteId)?.type}</span>
-                  <span className="mn tmu" style={{fontSize:9,marginLeft:4}}>Fixé par admin</span>
-                </div>
-              ):(
-                <select className="fi" value={form.siteId} onChange={e=>set("siteId",e.target.value)}
-                  disabled={!isAdmin&&authUser.siteId!=="all"}>
-                  {(client?.assignedSites?.length>0
-                    ? sites.filter(s=>client.assignedSites.includes(s.id))
-                    : sites
-                  ).map(s=><option key={s.id} value={s.id}>{s.name} ({s.type}) — {s.region}</option>)}
-                </select>
-              )}
+              {(()=>{
+                const assigned = client?.assignedSites?.length>0
+                  ? sites.filter(s=>client.assignedSites.includes(s.id)&&s.status==="active")
+                  : null;
+                // Single assigned site — locked display
+                if (!isAdmin && assigned && assigned.length===1) {
+                  return (
+                    <div className="fi" style={{display:"flex",alignItems:"center",gap:8,background:"var(--s2)",cursor:"not-allowed",userSelect:"none"}}>
+                      <span>📍</span>
+                      <span style={{fontWeight:600,flex:1}}>{assigned[0].name}</span>
+                      <span className="badge b-info" style={{fontSize:9}}>{assigned[0].type}</span>
+                      <span className="mn tmu" style={{fontSize:9,marginLeft:4}}>Fixé par admin</span>
+                    </div>
+                  );
+                }
+                // Multiple assigned sites — dropdown restricted to those sites
+                const options = assigned || sites;
+                return (
+                  <select className="fi" value={form.siteId} onChange={e=>set("siteId",e.target.value)}
+                    disabled={!isAdmin&&!assigned&&authUser.siteId!=="all"}>
+                    {options.map(s=>(
+                      <option key={s.id} value={s.id}>{s.name} ({s.type}) — {s.region}</option>
+                    ))}
+                  </select>
+                );
+              })()}
             </div>
             <div className="field"><label>Horodatage (auto)</label>
               <input className="fi" readOnly value={new Date().toLocaleString("fr-DZ")}/>
