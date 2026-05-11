@@ -3197,16 +3197,21 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
   const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
   const TVA = c.vatSubject ? 19 : 0;
+  // Group by wasteType + billing mode (tonnage vs rotation) so each appears as its own line
   const groups = {};
   entries.forEach(d => {
-    if (!groups[d.wasteType]) groups[d.wasteType]={net:0,total:0,unitPrice:d.unitPrice};
-    groups[d.wasteType].net   += d.net;
-    groups[d.wasteType].total += d.total;
+    const isRot = d.payMethod === 'rotation';
+    const key = `${d.wasteType}__${isRot ? 'rotation' : 'tonnage'}`;
+    if (!groups[key]) groups[key] = {wasteType:d.wasteType, isRotation:isRot, count:0, net:0, total:0, unitPrice:d.unitPrice};
+    groups[key].count += 1;
+    groups[key].net   += d.net;
+    groups[key].total += d.total;
   });
-  const rows = Object.entries(groups).map(([wt,g],i)=>({
+  const rows = Object.values(groups).map((g,i)=>({
     num: i+1,
-    label: wasteTypes.find(w=>w.id===wt)?.label || wt,
-    qty: g.net,
+    label: wasteTypes.find(w=>w.id===g.wasteType)?.label || g.wasteType,
+    isRotation: g.isRotation,
+    qty: g.isRotation ? g.count : g.net,
     unitPrice: g.unitPrice,
     tva: TVA,
     ht: g.total,
@@ -3214,15 +3219,21 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   const totalHT  = rows.reduce((s,r)=>s+r.ht, 0);
   const totalTVA = totalHT * TVA / 100;
   const totalTTC = totalHT + totalTVA;
-  const totalQty = rows.reduce((s,r)=>s+r.qty, 0);
+  const hasTonnage  = rows.some(r=>!r.isRotation);
+  const hasRotation = rows.some(r=>r.isRotation);
+  const totalTonnes = rows.filter(r=>!r.isRotation).reduce((s,r)=>s+r.qty, 0);
+  const totalRots   = rows.filter(r=>r.isRotation).reduce((s,r)=>s+r.qty, 0);
+  const totalQtyDisplay = (hasTonnage && hasRotation)
+    ? `${fQ(totalTonnes)} t + ${totalRots} rot.`
+    : hasRotation ? `${totalRots} rotation${totalRots>1?'s':''}` : `${fQ(totalTonnes)} t`;
   const date = new Date().toLocaleDateString('fr-DZ');
   const co = f => (Array.isArray(company)?company:COMPANY_FIELDS_DEFAULT).find(x=>x.id===f)?.value||'';
   const rowsHTML = rows.map(r=>`
     <tr>
       <td style="text-align:center;">${r.num}</td>
-      <td>${r.label} (Tonne)</td>
-      <td style="text-align:right;">${fQ(r.qty)}</td>
-      <td style="text-align:right;">${fB(r.unitPrice)}</td>
+      <td>${r.label} &mdash; <em>${r.isRotation ? 'Rotation' : 'Tonnage'}</em></td>
+      <td style="text-align:right;">${r.isRotation ? r.qty+' rot.' : fQ(r.qty)+' t'}</td>
+      <td style="text-align:right;">${fB(r.unitPrice)}&nbsp;/&nbsp;${r.isRotation ? 'rot.' : 't'}</td>
       <td style="text-align:center;">${r.tva}%</td>
       <td style="text-align:right;">${fB(r.ht)}</td>
     </tr>`).join('');
@@ -3328,7 +3339,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
     ${rowsHTML}
     <tr style="background:#f5f5f5">
       <td colspan="2" class="b" style="font-size:13px">TOTAL GÉNÉRAL (${rows.length} ligne${rows.length>1?'s':''})</td>
-      <td class="r b">${fQ(totalQty)} t</td>
+      <td class="r b">${totalQtyDisplay}</td>
       <td></td><td></td>
       <td class="r b">${fB(totalHT)}</td>
     </tr>
