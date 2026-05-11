@@ -49,14 +49,14 @@ const TRUCKS_DB = [
 ];
 
 const CLIENTS_INIT = [
-  { id:"C001", name:"Commune de Jijel",       clientType:"state",   type:"convention", status:"approved",     creditEnabled:false, weightLimitYear:5000, creditLimit:0,      consumed:0, payFrequency:"monthly",  payInstrument:"cheque", phone:"034 70 12 34", address:"Jijel Centre",          nif:"099012345678901", rc:"",                 docs:["Arrêté communal","Convention signée"], note:"" },
-  { id:"C002", name:"Commune de Taher",        clientType:"state",   type:"convention", status:"approved",     creditEnabled:false, weightLimitYear:3000, creditLimit:0,      consumed:0, payFrequency:"annual",   payInstrument:"bank",   phone:"034 70 23 45", address:"Taher",                  nif:"099023456789012", rc:"",                 docs:["Arrêté communal","Convention signée"], note:"" },
-  { id:"C003", name:"Clinique Médicale AFAK",  clientType:"private", type:"convention", status:"approved",     creditEnabled:true,  weightLimitYear:0,    creditLimit:400000, consumed:0, payFrequency:"monthly",  payInstrument:"bank",   phone:"034 70 34 56", address:"Cité Cnep, Jijel",       nif:"099034567890123", rc:"18/00-1234567B18", docs:["RC","NIF","Assurance RC","Bail commercial"], note:"" },
-  { id:"C004", name:"EURL COSIDER BTP Jijel",  clientType:"private", type:"convention", status:"under_review", creditEnabled:false, weightLimitYear:0,    creditLimit:0,      consumed:0, payFrequency:"monthly",  payInstrument:"cheque", phone:"034 70 45 67", address:"Zone Activité, Jijel",   nif:"099045678901234", rc:"18/00-7654321B18", docs:["RC","NIF"], note:"Documents reçus, vérification en cours." },
-  { id:"C005", name:"SPA Entraval Algérie",    clientType:"private", type:"convention", status:"pending_docs", creditEnabled:false, weightLimitYear:0,    creditLimit:0,      consumed:0, payFrequency:"monthly",  payInstrument:"cheque", phone:"034 70 56 78", address:"El Milia",                nif:"",               rc:"",                 docs:[], note:"En attente de dépôt des documents requis." },
-  { id:"C008", name:"Rachid Benbrahim",        clientType:"private", type:"prepaid",    status:"approved",     creditEnabled:false, weightLimitYear:0,    creditLimit:200000, consumed:0, payFrequency:"",         payInstrument:"",       phone:"0550 33 44 55", address:"Jijel",                 nif:"",               rc:"",                 docs:[], note:"Bonus prépayé 200 000 DA" },
-  { id:"C006", name:"Hadj Mourad Rabah",       clientType:"cash",    type:"daily",      status:"approved",     creditEnabled:false, weightLimitYear:0,    creditLimit:0,      consumed:0, payFrequency:"",         payInstrument:"",       phone:"0770 11 22 33", address:"Jijel",                 nif:"",               rc:"",                 docs:[], note:"" },
-  { id:"C007", name:"Entreprise Benali SARL",  clientType:"cash",    type:"daily",      status:"approved",     creditEnabled:false, weightLimitYear:0,    creditLimit:0,      consumed:0, payFrequency:"",         payInstrument:"",       phone:"0770 44 55 66", address:"Taher",                 nif:"",               rc:"",                 docs:[], note:"" },
+  { id:"C001", name:"Commune de Jijel",       clientType:"state",   type:"convention", status:"approved",     creditEnabled:false, weightLimitYear:5000, creditLimit:0,      consumed:0, payFrequency:"monthly",  payInstrument:"cheque", phone:"034 70 12 34", address:"Jijel Centre",          nif:"099012345678901", rc:"",                 docs:["Arrêté communal","Convention signée"], note:"", vatSubject:false },
+  { id:"C002", name:"Commune de Taher",        clientType:"state",   type:"convention", status:"approved",     creditEnabled:false, weightLimitYear:3000, creditLimit:0,      consumed:0, payFrequency:"annual",   payInstrument:"bank",   phone:"034 70 23 45", address:"Taher",                  nif:"099023456789012", rc:"",                 docs:["Arrêté communal","Convention signée"], note:"", vatSubject:false },
+  { id:"C003", name:"Clinique Médicale AFAK",  clientType:"private", type:"convention", status:"approved",     creditEnabled:true,  weightLimitYear:0,    creditLimit:400000, consumed:0, payFrequency:"monthly",  payInstrument:"bank",   phone:"034 70 34 56", address:"Cité Cnep, Jijel",       nif:"099034567890123", rc:"18/00-1234567B18", docs:["RC","NIF","Assurance RC","Bail commercial"], note:"", vatSubject:true },
+  { id:"C004", name:"EURL COSIDER BTP Jijel",  clientType:"private", type:"convention", status:"under_review", creditEnabled:false, weightLimitYear:0,    creditLimit:0,      consumed:0, payFrequency:"monthly",  payInstrument:"cheque", phone:"034 70 45 67", address:"Zone Activité, Jijel",   nif:"099045678901234", rc:"18/00-7654321B18", docs:["RC","NIF"], note:"Documents reçus, vérification en cours.", vatSubject:true },
+  { id:"C005", name:"SPA Entraval Algérie",    clientType:"private", type:"convention", status:"pending_docs", creditEnabled:false, weightLimitYear:0,    creditLimit:0,      consumed:0, payFrequency:"monthly",  payInstrument:"cheque", phone:"034 70 56 78", address:"El Milia",                nif:"",               rc:"",                 docs:[], note:"En attente de dépôt des documents requis.", vatSubject:true },
+  { id:"C008", name:"Rachid Benbrahim",        clientType:"private", type:"prepaid",    status:"approved",     creditEnabled:false, weightLimitYear:0,    creditLimit:200000, consumed:0, payFrequency:"",         payInstrument:"",       phone:"0550 33 44 55", address:"Jijel",                 nif:"",               rc:"",                 docs:[], note:"Bonus prépayé 200 000 DA", vatSubject:false },
+  { id:"C006", name:"Hadj Mourad Rabah",       clientType:"cash",    type:"daily",      status:"approved",     creditEnabled:false, weightLimitYear:0,    creditLimit:0,      consumed:0, payFrequency:"",         payInstrument:"",       phone:"0770 11 22 33", address:"Jijel",                 nif:"",               rc:"",                 docs:[], note:"", vatSubject:false },
+  { id:"C007", name:"Entreprise Benali SARL",  clientType:"cash",    type:"daily",      status:"approved",     creditEnabled:false, weightLimitYear:0,    creditLimit:0,      consumed:0, payFrequency:"",         payInstrument:"",       phone:"0770 44 55 66", address:"Taher",                 nif:"",               rc:"",                 docs:[], note:"", vatSubject:true },
 ];
 
 const USERS_INIT = [
@@ -1925,9 +1925,9 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
   const [modal, setModal] = useState(false);
   const [note,  setNote]  = useState("");
   const [creditInput, setCreditInput] = useState("");
-  const [addForm, setAddForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",note:""});
+  const [addForm, setAddForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false});
   const [editClientForm, setEditClientForm] = useState(null);
-  const [prepaidForm, setPrepaidForm] = useState({name:"",phone:"",address:"",balance:"",note:""});
+  const [prepaidForm, setPrepaidForm] = useState({name:"",phone:"",address:"",balance:"",note:"",vatSubject:false});
 
   const convClients     = clients.filter(c=>c.type==="convention");
   const rotationClients = clients.filter(c=>c.type==="rotation");
@@ -1940,7 +1940,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
   const [weightInput, setWeightInput] = useState("");
   const [rotationInput, setRotationInput] = useState("");
   const [quotaPeriod, setQuotaPeriod] = useState("year"); // "year" | "month"
-  const [addRotForm, setAddRotForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:""});
+  const [addRotForm, setAddRotForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false});
 
   const doApprove = () => {
     const isCreditMode   = approveMode==="credit";
@@ -1965,11 +1965,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       status:"pending_docs", creditLimit:0, consumed:0,
       payFrequency:addForm.payFrequency||"monthly", payInstrument:addForm.payInstrument||"cheque",
       phone:addForm.phone, address:addForm.address, nif:addForm.nif, rc:addForm.rc,
-      docs:[], note:addForm.note,
+      docs:[], note:addForm.note, vatSubject:addForm.vatSubject||false,
     };
     addClient(nc);
     setModal(false);
-    setAddForm({name:"",clientType:"private",payFrequency:"monthly",payInstrument:"cheque",phone:"",address:"",nif:"",rc:"",note:""});
+    setAddForm({name:"",clientType:"private",payFrequency:"monthly",payInstrument:"cheque",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false});
   };
 
   const doAddRotationClient = () => {
@@ -1979,11 +1979,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       status:"pending_docs", creditLimit:0, consumed:0, weightLimitYear:0,
       payFrequency:addRotForm.payFrequency||"monthly", payInstrument:"cheque",
       phone:addRotForm.phone, address:addRotForm.address, nif:addRotForm.nif, rc:addRotForm.rc,
-      docs:[], note:addRotForm.note,
+      docs:[], note:addRotForm.note, vatSubject:addRotForm.vatSubject||false,
     };
     addClient(nc);
     setModal(false);
-    setAddRotForm({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:""});
+    setAddRotForm({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false});
   };
 
   const doPrepaidAdd = () => {
@@ -1992,10 +1992,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       id:uidC(), name:prepaidForm.name, clientType:"private", type:"prepaid", status:"approved",
       creditLimit:parseFloat(prepaidForm.balance)||0, consumed:0,
       phone:prepaidForm.phone, address:prepaidForm.address, nif:"", rc:"", docs:[], note:prepaidForm.note,
+      vatSubject:prepaidForm.vatSubject||false,
     };
     addClient(nc);
     setModal(false);
-    setPrepaidForm({name:"",phone:"",address:"",balance:"",note:""});
+    setPrepaidForm({name:"",phone:"",address:"",balance:"",note:"",vatSubject:false});
   };
 
   const doEditClient = () => {
@@ -2144,6 +2145,15 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   {[["Téléphone",c.phone||"—"],["Adresse",c.address||"—"],["NIF",c.nif||"—"]].map(([l,v])=>(
                     <div key={l} className="card-sm"><div style={{fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>{l}</div><div style={{marginTop:4,fontSize:12,fontWeight:600}}>{v}</div></div>
                   ))}
+                  <div className="card-sm">
+                    <div style={{fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>Régime TVA</div>
+                    <div style={{marginTop:4}}>
+                      {c.vatSubject
+                        ? <span className="badge" style={{background:"rgba(234,179,8,.12)",color:"#92400e",border:"1px solid rgba(234,179,8,.3)",fontSize:10}}>✅ Assujetti TVA</span>
+                        : <span className="badge" style={{background:"rgba(100,116,139,.1)",color:"var(--muted)",border:"1px solid var(--bdr)",fontSize:10}}>🚫 Non assujetti</span>
+                      }
+                    </div>
+                  </div>
                 </div>
 
                 {c.type==="prepaid"&&(
@@ -2510,6 +2520,17 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 <div className="field"><label>Note initiale</label>
                   <textarea className="fi" value={addForm.note} onChange={e=>setAddForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
                 </div>
+                <div className="field">
+                  <label>Régime TVA</label>
+                  <div className="seg" style={{marginTop:6}}>
+                    <button className={`seg-btn${addForm.vatSubject===false?" active":""}`} onClick={()=>setAddForm(f=>({...f,vatSubject:false}))}>
+                      🚫 Non assujetti à la TVA
+                    </button>
+                    <button className={`seg-btn${addForm.vatSubject===true?" active":""}`} onClick={()=>setAddForm(f=>({...f,vatSubject:true}))}>
+                      ✅ Assujetti à la TVA
+                    </button>
+                  </div>
+                </div>
                 <div style={{background:"var(--s2)",border:"1px solid var(--bdr)",borderRadius:8,padding:"12px 14px"}}>
                   <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>📋 Documents requis :</div>
                   {(addForm.clientType==="state"?(docTypes?.state||REQUIRED_DOCS_STATE):(docTypes?.private||REQUIRED_DOCS_PRIVATE)).map(d=>(
@@ -2571,6 +2592,17 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 <div className="field"><label>Note initiale</label>
                   <textarea className="fi" value={addRotForm.note} onChange={e=>setAddRotForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
                 </div>
+                <div className="field">
+                  <label>Régime TVA</label>
+                  <div className="seg" style={{marginTop:6}}>
+                    <button className={`seg-btn${addRotForm.vatSubject===false?" active":""}`} onClick={()=>setAddRotForm(f=>({...f,vatSubject:false}))}>
+                      🚫 Non assujetti à la TVA
+                    </button>
+                    <button className={`seg-btn${addRotForm.vatSubject===true?" active":""}`} onClick={()=>setAddRotForm(f=>({...f,vatSubject:true}))}>
+                      ✅ Assujetti à la TVA
+                    </button>
+                  </div>
+                </div>
                 <div style={{background:"var(--s2)",border:"1px solid var(--bdr)",borderRadius:8,padding:"12px 14px"}}>
                   <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>📋 Documents requis :</div>
                   {(addRotForm.clientType==="state"?(docTypes?.state||REQUIRED_DOCS_STATE):(docTypes?.private||REQUIRED_DOCS_PRIVATE)).map(d=>(
@@ -2615,6 +2647,17 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 <div className="field"><label>Note</label>
                   <textarea className="fi" value={prepaidForm.note} onChange={e=>setPrepaidForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
                 </div>
+                <div className="field">
+                  <label>Régime TVA</label>
+                  <div className="seg" style={{marginTop:6}}>
+                    <button className={`seg-btn${prepaidForm.vatSubject===false?" active":""}`} onClick={()=>setPrepaidForm(f=>({...f,vatSubject:false}))}>
+                      🚫 Non assujetti à la TVA
+                    </button>
+                    <button className={`seg-btn${prepaidForm.vatSubject===true?" active":""}`} onClick={()=>setPrepaidForm(f=>({...f,vatSubject:true}))}>
+                      ✅ Assujetti à la TVA
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>Annuler</button><button className="btn bp" disabled={!prepaidForm.name||!prepaidForm.balance} onClick={doPrepaidAdd}>✓ Créer le compte prépayé</button></div>
@@ -2646,6 +2689,17 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   </div>
                   <div className="field"><label>Registre de Commerce</label>
                     <input className="fi" value={editClientForm.rc||""} onChange={e=>setEditClientForm(f=>({...f,rc:e.target.value}))} placeholder="18/00-0000000B18"/>
+                  </div>
+                </div>
+                <div className="field">
+                  <label>Régime TVA</label>
+                  <div className="seg" style={{marginTop:6}}>
+                    <button className={`seg-btn${editClientForm.vatSubject===false?" active":""}`} onClick={()=>setEditClientForm(f=>({...f,vatSubject:false}))}>
+                      🚫 Non assujetti à la TVA
+                    </button>
+                    <button className={`seg-btn${editClientForm.vatSubject===true?" active":""}`} onClick={()=>setEditClientForm(f=>({...f,vatSubject:true}))}>
+                      ✅ Assujetti à la TVA
+                    </button>
                   </div>
                 </div>
                 {editClientForm.type==="convention"&&(

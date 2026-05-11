@@ -61,18 +61,20 @@ CREATE TABLE IF NOT EXISTS clients (
   nif               VARCHAR(50)    DEFAULT '',
   rc                VARCHAR(50)    DEFAULT '',
   docs              JSONB          DEFAULT '[]',
-  note              TEXT           DEFAULT ''
+  note              TEXT           DEFAULT '',
+  vat_subject       BOOLEAN        DEFAULT FALSE
 );
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS vat_subject BOOLEAN DEFAULT FALSE;
 
-INSERT INTO clients (id, name, client_type, type, status, credit_enabled, weight_limit_year, credit_limit, consumed, pay_frequency, pay_instrument, phone, address, nif, rc, docs, note) VALUES
-  ('C001', 'Commune de Jijel',       'state',   'convention', 'approved',     FALSE, 5000, 0,      0, 'monthly', 'cheque', '034 70 12 34',  'Jijel Centre',          '099012345678901', '',                 '["Arrêté communal","Convention signée"]',          ''),
-  ('C002', 'Commune de Taher',        'state',   'convention', 'approved',     FALSE, 3000, 0,      0, 'annual',  'bank',   '034 70 23 45',  'Taher',                  '099023456789012', '',                 '["Arrêté communal","Convention signée"]',          ''),
-  ('C003', 'Clinique Médicale AFAK',  'private', 'convention', 'approved',     TRUE,  0,    400000, 0, 'monthly', 'bank',   '034 70 34 56',  'Cité Cnep, Jijel',       '099034567890123', '18/00-1234567B18', '["RC","NIF","Assurance RC","Bail commercial"]',    ''),
-  ('C004', 'EURL COSIDER BTP Jijel',  'private', 'convention', 'under_review', FALSE, 0,    0,      0, 'monthly', 'cheque', '034 70 45 67',  'Zone Activité, Jijel',   '099045678901234', '18/00-7654321B18', '["RC","NIF"]',                                     'Documents reçus, vérification en cours.'),
-  ('C005', 'SPA Entraval Algérie',    'private', 'convention', 'pending_docs', FALSE, 0,    0,      0, 'monthly', 'cheque', '034 70 56 78',  'El Milia',                '',               '',                 '[]',                                               'En attente de dépôt des documents requis.'),
-  ('C006', 'Hadj Mourad Rabah',       'cash',    'daily',      'approved',     FALSE, 0,    0,      0, '',        '',       '0770 11 22 33', 'Jijel',                   '',               '',                 '[]',                                               ''),
-  ('C007', 'Entreprise Benali SARL',  'cash',    'daily',      'approved',     FALSE, 0,    0,      0, '',        '',       '0770 44 55 66', 'Taher',                   '',               '',                 '[]',                                               ''),
-  ('C008', 'Rachid Benbrahim',        'private', 'prepaid',    'approved',     FALSE, 0,    200000, 0, '',        '',       '0550 33 44 55', 'Jijel',                   '',               '',                 '[]',                                               'Bonus prépayé 200 000 DA')
+INSERT INTO clients (id, name, client_type, type, status, credit_enabled, weight_limit_year, credit_limit, consumed, pay_frequency, pay_instrument, phone, address, nif, rc, docs, note, vat_subject) VALUES
+  ('C001', 'Commune de Jijel',       'state',   'convention', 'approved',     FALSE, 5000, 0,      0, 'monthly', 'cheque', '034 70 12 34',  'Jijel Centre',          '099012345678901', '',                 '["Arrêté communal","Convention signée"]',          '', FALSE),
+  ('C002', 'Commune de Taher',        'state',   'convention', 'approved',     FALSE, 3000, 0,      0, 'annual',  'bank',   '034 70 23 45',  'Taher',                  '099023456789012', '',                 '["Arrêté communal","Convention signée"]',          '', FALSE),
+  ('C003', 'Clinique Médicale AFAK',  'private', 'convention', 'approved',     TRUE,  0,    400000, 0, 'monthly', 'bank',   '034 70 34 56',  'Cité Cnep, Jijel',       '099034567890123', '18/00-1234567B18', '["RC","NIF","Assurance RC","Bail commercial"]',    '', TRUE),
+  ('C004', 'EURL COSIDER BTP Jijel',  'private', 'convention', 'under_review', FALSE, 0,    0,      0, 'monthly', 'cheque', '034 70 45 67',  'Zone Activité, Jijel',   '099045678901234', '18/00-7654321B18', '["RC","NIF"]',                                     'Documents reçus, vérification en cours.', TRUE),
+  ('C005', 'SPA Entraval Algérie',    'private', 'convention', 'pending_docs', FALSE, 0,    0,      0, 'monthly', 'cheque', '034 70 56 78',  'El Milia',                '',               '',                 '[]',                                               'En attente de dépôt des documents requis.', TRUE),
+  ('C006', 'Hadj Mourad Rabah',       'cash',    'daily',      'approved',     FALSE, 0,    0,      0, '',        '',       '0770 11 22 33', 'Jijel',                   '',               '',                 '[]',                                               '', FALSE),
+  ('C007', 'Entreprise Benali SARL',  'cash',    'daily',      'approved',     FALSE, 0,    0,      0, '',        '',       '0770 44 55 66', 'Taher',                   '',               '',                 '[]',                                               '', TRUE),
+  ('C008', 'Rachid Benbrahim',        'private', 'prepaid',    'approved',     FALSE, 0,    200000, 0, '',        '',       '0550 33 44 55', 'Jijel',                   '',               '',                 '[]',                                               'Bonus prépayé 200 000 DA', FALSE)
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── USERS ───────────────────────────────────────────────────
