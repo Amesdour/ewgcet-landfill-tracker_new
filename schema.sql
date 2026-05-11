@@ -29,12 +29,14 @@ ON CONFLICT (id) DO NOTHING;
 
 -- ─── WASTE TYPES ─────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS waste_types (
-  id         VARCHAR(20)   PRIMARY KEY,
-  label      VARCHAR(100)  NOT NULL,
-  price      DECIMAL(14,2) DEFAULT 0,
-  unit       VARCHAR(10)   DEFAULT 't',
-  site_types JSONB         DEFAULT '[]'
+  id             VARCHAR(20)   PRIMARY KEY,
+  label          VARCHAR(100)  NOT NULL,
+  price          DECIMAL(14,2) DEFAULT 0,
+  rotation_price DECIMAL(14,2) DEFAULT 0,
+  unit           VARCHAR(10)   DEFAULT 't',
+  site_types     JSONB         DEFAULT '[]'
 );
+ALTER TABLE waste_types ADD COLUMN IF NOT EXISTS rotation_price DECIMAL(14,2) DEFAULT 0;
 
 INSERT INTO waste_types (id, label, price, unit, site_types) VALUES
   ('MEN', 'Ménager (DMA)',     850,  't', '["CDM"]'),

@@ -96,8 +96,9 @@ const mapSite = r => ({
 });
 
 const mapWT = r => ({
-  id:r.id, label:r.label, price:parseFloat(r.price), unit:r.unit||'t',
-  siteTypes:r.site_types||[],
+  id:r.id, label:r.label, price:parseFloat(r.price)||0,
+  rotationPrice:parseFloat(r.rotation_price)||0,
+  unit:r.unit||'t', siteTypes:r.site_types||[],
 });
 
 const mapInvoice = r => ({
@@ -318,8 +319,8 @@ app.put('/api/waste-types/:id', async (req, res) => {
   const w = req.body;
   try {
     await q(
-      'UPDATE waste_types SET label=$1,price=$2,unit=$3,site_types=$4 WHERE id=$5',
-      [w.label,w.price,w.unit||'t',JSON.stringify(w.siteTypes||[]),w.id]
+      'UPDATE waste_types SET label=$1,price=$2,rotation_price=$3,unit=$4,site_types=$5 WHERE id=$6',
+      [w.label,w.price||0,w.rotationPrice||0,w.unit||'t',JSON.stringify(w.siteTypes||[]),w.id]
     );
     ok(res, { ok:true });
   } catch(e) { er(res,e); }

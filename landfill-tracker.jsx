@@ -840,8 +840,9 @@ export default function App() {
    DASHBOARD
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
+  const rotIds    = new Set(clients.filter(c=>c.type==="rotation").map(c=>c.id));
   const totalRev  = discharges.reduce((s,d)=>s+d.total,0);
-  const totalTons = discharges.reduce((s,d)=>s+d.net,0);
+  const totalTons = discharges.filter(d=>!rotIds.has(d.clientId)).reduce((s,d)=>s+d.net,0);
   const cashRev   = discharges.filter(d=>d.payMethod==="cash").reduce((s,d)=>s+d.total,0);
   const flagged   = discharges.filter(d=>d.status==="flagged");
   const pendingC  = clients.filter(c=>(c.type==="convention"||c.type==="rotation")&&(c.status==="pending_docs"||c.status==="under_review"));
@@ -1113,8 +1114,8 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
       id:uid(), ts:nowIso(), siteId:form.siteId,
       clientId:form.clientId, clientName:client?.name ?? form.clientId,
       truck:form.truck.toUpperCase(), wasteType:form.wasteType, gross, tare, net,
-      unitPrice:method==="rotation"?0:(wt?.price??0),
-      total:method==="rotation"?0:total,
+      unitPrice:method==="rotation"?(wt?.rotationPrice??0):(wt?.price??0),
+      total:method==="rotation"?(wt?.rotationPrice??0):total,
       status:wouldExceed?"flagged":method==="cash"?"paid":"settled",
       payMethod:method, opId:authUser.id,
     };
@@ -3218,7 +3219,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     const existInv = invoices.find(i=>i.clientId===cl.id&&i.month===month);
     return {cl, entries:clEntries, net:clNet, cost:clCost, inv:existInv};
   });
-  const grandNet  = globalRows.reduce((s,r)=>s+r.net,0);
+  const grandNet  = globalRows.filter(r=>r.cl.type!=="rotation").reduce((s,r)=>s+r.net,0);
   const grandCost = globalRows.reduce((s,r)=>s+r.cost,0);
   const grandDeps = globalRows.reduce((s,r)=>s+r.entries.length,0);
 
@@ -3320,7 +3321,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
           <div className="kpi-grid" style={{gridTemplateColumns:"repeat(4,1fr)",marginBottom:16}}>
             {[
               {lbl:"Clients facturables", val:billed.length,         ic:"🏢", kc:"var(--info)"},
-              {lbl:"Tonnage Total",       val:fmtN(grandNet)+" t",   ic:"⚖️",  kc:"var(--purple)"},
+              {lbl:"Tonnage Total (hors rot.)", val:fmtN(grandNet)+" t", ic:"⚖️", kc:"var(--purple)"},
               {lbl:"Montant Total Dû",    val:fmt(grandCost),        ic:"💰", kc:"var(--g)"},
               {lbl:"Factures générées",   val:globalRows.filter(r=>r.inv).length+"/"+billed.length, ic:"🧾", kc:"var(--warn)"},
             ].map(k=>(
@@ -3539,7 +3540,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
             </div>
             <div className="card-sm">
               <div className="tsm tmu mb2">SYNTHÈSE DE FACTURATION</div>
-              {[["Nombre de dépôts",entries.length],["Tonnage total",fmtN(totalNet)+" t"]].map(([l,v])=>(
+              {(c.type==="rotation"
+                ? [["Nombre de rotations", entries.length], ["Tonnage total (info)", fmtN(totalNet)+" t"]]
+                : [["Nombre de dépôts", entries.length],    ["Tonnage total",         fmtN(totalNet)+" t"]]
+              ).map(([l,v])=>(
                 <div key={l} className="fx jsb mb1"><span className="tsm">{l}</span><span className="mn tsm fw7">{v}</span></div>
               ))}
               <div style={{borderTop:"1px solid var(--bdr)",paddingTop:8,marginTop:6}}>
@@ -3643,7 +3647,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
           <div className="tw" style={{padding:"16px 0 0"}}>
             <table>
-              <thead><tr><th>#</th><th>Date</th><th>Site</th><th>Camion</th><th>Type</th><th>Net(t)</th><th>Tarif/t</th><th>Montant</th></tr></thead>
+              <thead><tr><th>#</th><th>Date</th><th>Site</th><th>Camion</th><th>Type</th><th>Net(t)</th><th>{c.type==="rotation"?"Tarif/rot.":"Tarif/t"}</th><th>Montant</th></tr></thead>
               <tbody>
                 {entries.length===0
                   ?<tr><td colSpan={8} style={{textAlign:"center",color:"var(--muted)",padding:30}}>Aucun dépôt pour cette période</td></tr>
@@ -4037,28 +4041,47 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
         {tab==="tarifs"&&(
           <>
             <div className="settings-title">Grille Tarifaire</div>
-            <div className="settings-sub">Prix appliqués par type de déchet (DA / tonne)</div>
+            <div className="settings-sub">Prix par type de déchet — tonnage (DA/t) et rotation (DA/rot.)</div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {wasteTypes.map(w=>{
                 const isEdit = editWT?.id===w.id;
                 return (
                   <div key={w.id} className="card">
-                    <div className="fx aic jsb">
+                    <div className="fx aic jsb" style={{flexWrap:"wrap",gap:8}}>
                       <div>
                         <div style={{fontWeight:700,fontSize:13}}>{w.label}</div>
                         <div className="tsm tmu" style={{marginTop:2}}>Sites accepteurs : {w.siteTypes.join(", ")}</div>
                       </div>
                       {isEdit?(
-                        <div className="fx aic g2">
-                          <input className="fi" type="number" style={{width:110}} value={editWT.price}
-                            onChange={e=>setEditWT(f=>({...f,price:parseInt(e.target.value)||0}))}/>
-                          <span className="tsm tmu">DA/t</span>
+                        <div className="fx aic g2" style={{flexWrap:"wrap"}}>
+                          <div className="fx aic g1">
+                            <input className="fi" type="number" style={{width:105}} value={editWT.price}
+                              onChange={e=>setEditWT(f=>({...f,price:parseInt(e.target.value)||0}))}
+                              placeholder="Prix/tonne"/>
+                            <span className="tsm tmu">DA/t</span>
+                          </div>
+                          <div className="fx aic g1">
+                            <input className="fi" type="number" style={{width:105}} value={editWT.rotationPrice||0}
+                              onChange={e=>setEditWT(f=>({...f,rotationPrice:parseInt(e.target.value)||0}))}
+                              placeholder="Prix/rotation"/>
+                            <span className="tsm tmu">DA/rot.</span>
+                          </div>
                           <button className="btn bp bsm" onClick={()=>{updateWT(editWT);setEditWT(null);}}>✓</button>
                           <button className="btn bg bsm" onClick={()=>setEditWT(null)}>✕</button>
                         </div>
                       ):(
                         <div className="fx aic g3">
-                          <span style={{fontFamily:"var(--head)",fontSize:18,fontWeight:800,color:"var(--g)"}}>{fmt(w.price)}<span style={{fontSize:11,color:"var(--muted)",fontFamily:"var(--font)"}}>/t</span></span>
+                          <div className="fx aic g2">
+                            <div style={{textAlign:"right"}}>
+                              <span style={{fontFamily:"var(--head)",fontSize:16,fontWeight:800,color:"var(--g)"}}>{fmt(w.price)}</span>
+                              <span style={{fontSize:10,color:"var(--muted)",fontFamily:"var(--font)"}}>/t</span>
+                            </div>
+                            <div style={{width:1,height:24,background:"var(--bdr)"}}/>
+                            <div style={{textAlign:"right"}}>
+                              <span style={{fontFamily:"var(--head)",fontSize:16,fontWeight:800,color:"var(--orange)"}}>{fmt(w.rotationPrice||0)}</span>
+                              <span style={{fontSize:10,color:"var(--muted)",fontFamily:"var(--font)"}}>/rot.</span>
+                            </div>
+                          </div>
                           <button className="btn bg bsm" onClick={()=>setEditWT({...w})}>✏️ Modifier</button>
                         </div>
                       )}
