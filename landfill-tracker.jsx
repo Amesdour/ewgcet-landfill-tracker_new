@@ -1230,11 +1230,26 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           <span className="chip chip-dim">{site?.name}</span>
         </div>
         <div style={{padding:20,display:"flex",flexDirection:"column",gap:16}}>
+          {/* Auto-correct siteId if client has assigned sites and current site is not in the list */}
+          {client?.assignedSites?.length>0&&!client.assignedSites.includes(form.siteId)&&(()=>{setTimeout(()=>set("siteId",client.assignedSites[0]),0);return null;})()}
           <div className="fg fg2">
             <div className="field"><label>Site CET</label>
-              <select className="fi" value={form.siteId} onChange={e=>set("siteId",e.target.value)} disabled={!isAdmin&&authUser.siteId!=="all"}>
-                {sites.map(s=><option key={s.id} value={s.id}>{s.name} ({s.type}) — {s.region}</option>)}
-              </select>
+              {(!isAdmin&&client?.assignedSites?.length>0)?(
+                <div className="fi" style={{display:"flex",alignItems:"center",gap:8,background:"var(--s2)",cursor:"not-allowed",userSelect:"none"}}>
+                  <span>📍</span>
+                  <span style={{fontWeight:600,flex:1}}>{sites.find(s=>s.id===form.siteId)?.name||form.siteId}</span>
+                  <span className="badge b-info" style={{fontSize:9}}>{sites.find(s=>s.id===form.siteId)?.type}</span>
+                  <span className="mn tmu" style={{fontSize:9,marginLeft:4}}>Fixé par admin</span>
+                </div>
+              ):(
+                <select className="fi" value={form.siteId} onChange={e=>set("siteId",e.target.value)}
+                  disabled={!isAdmin&&authUser.siteId!=="all"}>
+                  {(client?.assignedSites?.length>0
+                    ? sites.filter(s=>client.assignedSites.includes(s.id))
+                    : sites
+                  ).map(s=><option key={s.id} value={s.id}>{s.name} ({s.type}) — {s.region}</option>)}
+                </select>
+              )}
             </div>
             <div className="field"><label>Horodatage (auto)</label>
               <input className="fi" readOnly value={new Date().toLocaleString("fr-DZ")}/>
@@ -1926,9 +1941,9 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
   const [modal, setModal] = useState(false);
   const [note,  setNote]  = useState("");
   const [creditInput, setCreditInput] = useState("");
-  const [addForm, setAddForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false,assignedSite:""});
+  const [addForm, setAddForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false,assignedSites:[]});
   const [editClientForm, setEditClientForm] = useState(null);
-  const [prepaidForm, setPrepaidForm] = useState({name:"",phone:"",address:"",balance:"",note:"",vatSubject:false,assignedSite:""});
+  const [prepaidForm, setPrepaidForm] = useState({name:"",phone:"",address:"",balance:"",note:"",vatSubject:false,assignedSites:[]});
 
   const convClients     = clients.filter(c=>c.type==="convention");
   const rotationClients = clients.filter(c=>c.type==="rotation");
@@ -1941,7 +1956,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
   const [weightInput, setWeightInput] = useState("");
   const [rotationInput, setRotationInput] = useState("");
   const [quotaPeriod, setQuotaPeriod] = useState("year"); // "year" | "month"
-  const [addRotForm, setAddRotForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false,assignedSite:""});
+  const [addRotForm, setAddRotForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false,assignedSites:[]});
 
   const doApprove = () => {
     const isCreditMode   = approveMode==="credit";
@@ -1967,11 +1982,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       payFrequency:addForm.payFrequency||"monthly", payInstrument:addForm.payInstrument||"cheque",
       phone:addForm.phone, address:addForm.address, nif:addForm.nif, rc:addForm.rc,
       docs:[], note:addForm.note, vatSubject:addForm.vatSubject||false,
-      assignedSite:addForm.assignedSite||"",
+      assignedSites:addForm.assignedSites||[],
     };
     addClient(nc);
     setModal(false);
-    setAddForm({name:"",clientType:"private",payFrequency:"monthly",payInstrument:"cheque",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false,assignedSite:""});
+    setAddForm({name:"",clientType:"private",payFrequency:"monthly",payInstrument:"cheque",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false,assignedSites:[]});
   };
 
   const doAddRotationClient = () => {
@@ -1982,11 +1997,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       payFrequency:addRotForm.payFrequency||"monthly", payInstrument:"cheque",
       phone:addRotForm.phone, address:addRotForm.address, nif:addRotForm.nif, rc:addRotForm.rc,
       docs:[], note:addRotForm.note, vatSubject:addRotForm.vatSubject||false,
-      assignedSite:addRotForm.assignedSite||"",
+      assignedSites:addRotForm.assignedSites||[],
     };
     addClient(nc);
     setModal(false);
-    setAddRotForm({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false,assignedSite:""});
+    setAddRotForm({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false,assignedSites:[]});
   };
 
   const doPrepaidAdd = () => {
@@ -1996,11 +2011,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       creditLimit:parseFloat(prepaidForm.balance)||0, consumed:0,
       phone:prepaidForm.phone, address:prepaidForm.address, nif:"", rc:"", docs:[], note:prepaidForm.note,
       vatSubject:prepaidForm.vatSubject||false,
-      assignedSite:prepaidForm.assignedSite||"",
+      assignedSites:prepaidForm.assignedSites||[],
     };
     addClient(nc);
     setModal(false);
-    setPrepaidForm({name:"",phone:"",address:"",balance:"",note:"",vatSubject:false,assignedSite:""});
+    setPrepaidForm({name:"",phone:"",address:"",balance:"",note:"",vatSubject:false,assignedSites:[]});
   };
 
   const doEditClient = () => {
@@ -2223,15 +2238,18 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   </div>
                 )}
 
-                {c.assignedSite&&(
-                  <div className="fx aic g2 mb2" style={{fontSize:11}}>
-                    <span style={{color:"var(--muted)"}}>📍 Centre assigné :</span>
-                    <span className="badge b-info" style={{fontSize:10,fontWeight:700}}>
-                      {(sites||[]).find(s=>s.id===c.assignedSite)?.name || c.assignedSite}
-                    </span>
-                    <span className="mn tmu" style={{fontSize:9}}>
-                      {(sites||[]).find(s=>s.id===c.assignedSite)?.type}
-                    </span>
+                {(c.assignedSites&&c.assignedSites.length>0)&&(
+                  <div className="fx aic g2 mb2" style={{fontSize:11,flexWrap:"wrap"}}>
+                    <span style={{color:"var(--muted)"}}>📍 Centres autorisés :</span>
+                    {c.assignedSites.map(sid=>{
+                      const s=(sites||[]).find(x=>x.id===sid);
+                      return(
+                        <span key={sid} className="badge b-info" style={{fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",gap:4}}>
+                          {s?.name||sid}
+                          <span style={{opacity:.7,fontWeight:400}}>{s?.type}</span>
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
                 {(c.type==="convention"||c.type==="rotation")&&c.payFrequency&&(
@@ -2532,11 +2550,23 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     </select>
                   </div>
                 </div>
-                <div className="field"><label>📍 Centre d'enfouissement assigné</label>
-                  <select className="fi" value={addForm.assignedSite||""} onChange={e=>setAddForm(f=>({...f,assignedSite:e.target.value}))}>
-                    <option value="">— Non défini —</option>
-                    {(sites||[]).filter(s=>s.status==="active").map(s=><option key={s.id} value={s.id}>{s.name} ({s.type})</option>)}
-                  </select>
+                <div className="field">
+                  <label>📍 Centres d'enfouissement autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
+                    {(sites||[]).filter(s=>s.status==="active").map(s=>{
+                      const checked=(addForm.assignedSites||[]).includes(s.id);
+                      return(
+                        <label key={s.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"7px 10px",borderRadius:6,border:`1px solid ${checked?"var(--g)":"var(--bdr)"}`,background:checked?"rgba(46,201,92,.07)":"transparent",fontSize:12,transition:"all .15s"}}>
+                          <input type="checkbox" checked={checked} style={{accentColor:"var(--g)",width:14,height:14}}
+                            onChange={e=>setAddForm(f=>({...f,assignedSites:e.target.checked?[...(f.assignedSites||[]),s.id]:(f.assignedSites||[]).filter(x=>x!==s.id)}))}/>
+                          <span style={{fontWeight:600,flex:1}}>{s.name}</span>
+                          <span className="badge b-info" style={{fontSize:9}}>{s.type}</span>
+                          <span className="tsm tmu" style={{fontSize:10}}>{s.region}</span>
+                        </label>
+                      );
+                    })}
+                    {(sites||[]).filter(s=>s.status==="active").length===0&&<span className="tsm tmu">Aucun centre actif</span>}
+                  </div>
                 </div>
                 <div className="field"><label>Note initiale</label>
                   <textarea className="fi" value={addForm.note} onChange={e=>setAddForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
@@ -2610,11 +2640,22 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     <option value="annual">📅 Annuelle (rotations/an)</option>
                   </select>
                 </div>
-                <div className="field"><label>📍 Centre d'enfouissement assigné</label>
-                  <select className="fi" value={addRotForm.assignedSite||""} onChange={e=>setAddRotForm(f=>({...f,assignedSite:e.target.value}))}>
-                    <option value="">— Non défini —</option>
-                    {(sites||[]).filter(s=>s.status==="active").map(s=><option key={s.id} value={s.id}>{s.name} ({s.type})</option>)}
-                  </select>
+                <div className="field">
+                  <label>📍 Centres d'enfouissement autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
+                    {(sites||[]).filter(s=>s.status==="active").map(s=>{
+                      const checked=(addRotForm.assignedSites||[]).includes(s.id);
+                      return(
+                        <label key={s.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"7px 10px",borderRadius:6,border:`1px solid ${checked?"var(--g)":"var(--bdr)"}`,background:checked?"rgba(46,201,92,.07)":"transparent",fontSize:12,transition:"all .15s"}}>
+                          <input type="checkbox" checked={checked} style={{accentColor:"var(--g)",width:14,height:14}}
+                            onChange={e=>setAddRotForm(f=>({...f,assignedSites:e.target.checked?[...(f.assignedSites||[]),s.id]:(f.assignedSites||[]).filter(x=>x!==s.id)}))}/>
+                          <span style={{fontWeight:600,flex:1}}>{s.name}</span>
+                          <span className="badge b-info" style={{fontSize:9}}>{s.type}</span>
+                          <span className="tsm tmu" style={{fontSize:10}}>{s.region}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="field"><label>Note initiale</label>
                   <textarea className="fi" value={addRotForm.note} onChange={e=>setAddRotForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
@@ -2671,11 +2712,22 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     <input className="fi" value={prepaidForm.address} onChange={e=>setPrepaidForm(f=>({...f,address:e.target.value}))} placeholder="Commune, wilaya"/>
                   </div>
                 </div>
-                <div className="field"><label>📍 Centre d'enfouissement assigné</label>
-                  <select className="fi" value={prepaidForm.assignedSite||""} onChange={e=>setPrepaidForm(f=>({...f,assignedSite:e.target.value}))}>
-                    <option value="">— Non défini —</option>
-                    {(sites||[]).filter(s=>s.status==="active").map(s=><option key={s.id} value={s.id}>{s.name} ({s.type})</option>)}
-                  </select>
+                <div className="field">
+                  <label>📍 Centres d'enfouissement autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
+                    {(sites||[]).filter(s=>s.status==="active").map(s=>{
+                      const checked=(prepaidForm.assignedSites||[]).includes(s.id);
+                      return(
+                        <label key={s.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"7px 10px",borderRadius:6,border:`1px solid ${checked?"var(--g)":"var(--bdr)"}`,background:checked?"rgba(46,201,92,.07)":"transparent",fontSize:12,transition:"all .15s"}}>
+                          <input type="checkbox" checked={checked} style={{accentColor:"var(--g)",width:14,height:14}}
+                            onChange={e=>setPrepaidForm(f=>({...f,assignedSites:e.target.checked?[...(f.assignedSites||[]),s.id]:(f.assignedSites||[]).filter(x=>x!==s.id)}))}/>
+                          <span style={{fontWeight:600,flex:1}}>{s.name}</span>
+                          <span className="badge b-info" style={{fontSize:9}}>{s.type}</span>
+                          <span className="tsm tmu" style={{fontSize:10}}>{s.region}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="field"><label>Note</label>
                   <textarea className="fi" value={prepaidForm.note} onChange={e=>setPrepaidForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
@@ -2756,11 +2808,22 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     <input className="fi" type="number" value={editClientForm.creditLimit||0} onChange={e=>setEditClientForm(f=>({...f,creditLimit:parseFloat(e.target.value)||0}))}/>
                   </div>
                 )}
-                <div className="field"><label>📍 Centre d'enfouissement assigné</label>
-                  <select className="fi" value={editClientForm.assignedSite||""} onChange={e=>setEditClientForm(f=>({...f,assignedSite:e.target.value}))}>
-                    <option value="">— Non défini —</option>
-                    {(sites||[]).filter(s=>s.status==="active").map(s=><option key={s.id} value={s.id}>{s.name} ({s.type})</option>)}
-                  </select>
+                <div className="field">
+                  <label>📍 Centres d'enfouissement autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(admin — plusieurs choix)</span></label>
+                  <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
+                    {(sites||[]).filter(s=>s.status==="active").map(s=>{
+                      const checked=(editClientForm.assignedSites||[]).includes(s.id);
+                      return(
+                        <label key={s.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"7px 10px",borderRadius:6,border:`1px solid ${checked?"var(--g)":"var(--bdr)"}`,background:checked?"rgba(46,201,92,.07)":"transparent",fontSize:12,transition:"all .15s"}}>
+                          <input type="checkbox" checked={checked} style={{accentColor:"var(--g)",width:14,height:14}}
+                            onChange={e=>setEditClientForm(f=>({...f,assignedSites:e.target.checked?[...(f.assignedSites||[]),s.id]:(f.assignedSites||[]).filter(x=>x!==s.id)}))}/>
+                          <span style={{fontWeight:600,flex:1}}>{s.name}</span>
+                          <span className="badge b-info" style={{fontSize:9}}>{s.type}</span>
+                          <span className="tsm tmu" style={{fontSize:10}}>{s.region}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="field"><label>Note</label>
                   <textarea className="fi" value={editClientForm.note||""} onChange={e=>setEditClientForm(f=>({...f,note:e.target.value}))} rows={2}/>

@@ -65,10 +65,12 @@ CREATE TABLE IF NOT EXISTS clients (
   docs              JSONB          DEFAULT '[]',
   note              TEXT           DEFAULT '',
   vat_subject       BOOLEAN        DEFAULT FALSE,
-  assigned_site     VARCHAR(20)    DEFAULT ''
+  assigned_site     VARCHAR(20)    DEFAULT '',
+  assigned_sites    JSONB          DEFAULT '[]'
 );
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS vat_subject BOOLEAN DEFAULT FALSE;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS assigned_site VARCHAR(20) DEFAULT '';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS assigned_sites JSONB DEFAULT '[]';
 
 INSERT INTO clients (id, name, client_type, type, status, credit_enabled, weight_limit_year, credit_limit, consumed, pay_frequency, pay_instrument, phone, address, nif, rc, docs, note, vat_subject) VALUES
   ('C001', 'Commune de Jijel',       'state',   'convention', 'approved',     FALSE, 5000, 0,      0, 'monthly', 'cheque', '034 70 12 34',  'Jijel Centre',          '099012345678901', '',                 '["Arrêté communal","Convention signée"]',          '', FALSE),
