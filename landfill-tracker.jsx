@@ -824,7 +824,7 @@ export default function App() {
             {page==="dashboard"  && <PageDashboard discharges={discharges} clients={clients} sites={sites} wasteTypes={wasteTypes} setPage={setPage}/>}
             {page==="gate"       && <PageGate addDischarge={addDischarge} addClient={addClient} clients={clients} sites={sites} wasteTypes={wasteTypes} discharges={discharges} authUser={authUser} isAdmin={isAdmin} company={company}/>}
             {page==="discharges" && <PageDischarges discharges={discharges} setDischarges={setDischarges} sites={sites} wasteTypes={wasteTypes} users={users} clients={clients} updateClient={updateClient} updateDischarge={updateDischarge} isAdmin={isAdmin} authUser={authUser} company={company}/>}
-            {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes}/>}
+            {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites}/>}
             {page==="operators"  && <PageOperators users={users} sites={sites} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} authUser={authUser}/>}
             {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} company={company}/>}
             {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany}/>}
@@ -1920,15 +1920,15 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
 /* ═══════════════════════════════════════════════════════════════════════════
    CLIENTS
 ═══════════════════════════════════════════════════════════════════════════ */
-function PageClients({clients,discharges,updateClient,addClient,deleteClient,isAdmin,docTypes}) {
+function PageClients({clients,discharges,updateClient,addClient,deleteClient,isAdmin,docTypes,sites}) {
   const [tab,   setTab]   = useState("convention");
   const [sel,   setSel]   = useState(null);
   const [modal, setModal] = useState(false);
   const [note,  setNote]  = useState("");
   const [creditInput, setCreditInput] = useState("");
-  const [addForm, setAddForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false});
+  const [addForm, setAddForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false,assignedSite:""});
   const [editClientForm, setEditClientForm] = useState(null);
-  const [prepaidForm, setPrepaidForm] = useState({name:"",phone:"",address:"",balance:"",note:"",vatSubject:false});
+  const [prepaidForm, setPrepaidForm] = useState({name:"",phone:"",address:"",balance:"",note:"",vatSubject:false,assignedSite:""});
 
   const convClients     = clients.filter(c=>c.type==="convention");
   const rotationClients = clients.filter(c=>c.type==="rotation");
@@ -1941,7 +1941,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
   const [weightInput, setWeightInput] = useState("");
   const [rotationInput, setRotationInput] = useState("");
   const [quotaPeriod, setQuotaPeriod] = useState("year"); // "year" | "month"
-  const [addRotForm, setAddRotForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false});
+  const [addRotForm, setAddRotForm] = useState({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false,assignedSite:""});
 
   const doApprove = () => {
     const isCreditMode   = approveMode==="credit";
@@ -1967,10 +1967,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       payFrequency:addForm.payFrequency||"monthly", payInstrument:addForm.payInstrument||"cheque",
       phone:addForm.phone, address:addForm.address, nif:addForm.nif, rc:addForm.rc,
       docs:[], note:addForm.note, vatSubject:addForm.vatSubject||false,
+      assignedSite:addForm.assignedSite||"",
     };
     addClient(nc);
     setModal(false);
-    setAddForm({name:"",clientType:"private",payFrequency:"monthly",payInstrument:"cheque",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false});
+    setAddForm({name:"",clientType:"private",payFrequency:"monthly",payInstrument:"cheque",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false,assignedSite:""});
   };
 
   const doAddRotationClient = () => {
@@ -1981,10 +1982,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       payFrequency:addRotForm.payFrequency||"monthly", payInstrument:"cheque",
       phone:addRotForm.phone, address:addRotForm.address, nif:addRotForm.nif, rc:addRotForm.rc,
       docs:[], note:addRotForm.note, vatSubject:addRotForm.vatSubject||false,
+      assignedSite:addRotForm.assignedSite||"",
     };
     addClient(nc);
     setModal(false);
-    setAddRotForm({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false});
+    setAddRotForm({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false,assignedSite:""});
   };
 
   const doPrepaidAdd = () => {
@@ -1994,10 +1996,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       creditLimit:parseFloat(prepaidForm.balance)||0, consumed:0,
       phone:prepaidForm.phone, address:prepaidForm.address, nif:"", rc:"", docs:[], note:prepaidForm.note,
       vatSubject:prepaidForm.vatSubject||false,
+      assignedSite:prepaidForm.assignedSite||"",
     };
     addClient(nc);
     setModal(false);
-    setPrepaidForm({name:"",phone:"",address:"",balance:"",note:"",vatSubject:false});
+    setPrepaidForm({name:"",phone:"",address:"",balance:"",note:"",vatSubject:false,assignedSite:""});
   };
 
   const doEditClient = () => {
@@ -2220,6 +2223,17 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   </div>
                 )}
 
+                {c.assignedSite&&(
+                  <div className="fx aic g2 mb2" style={{fontSize:11}}>
+                    <span style={{color:"var(--muted)"}}>📍 Centre assigné :</span>
+                    <span className="badge b-info" style={{fontSize:10,fontWeight:700}}>
+                      {(sites||[]).find(s=>s.id===c.assignedSite)?.name || c.assignedSite}
+                    </span>
+                    <span className="mn tmu" style={{fontSize:9}}>
+                      {(sites||[]).find(s=>s.id===c.assignedSite)?.type}
+                    </span>
+                  </div>
+                )}
                 {(c.type==="convention"||c.type==="rotation")&&c.payFrequency&&(
                   <div className="fx aic g3 mb3" style={{fontSize:11,color:"var(--muted)"}}>
                     <span>📅 Facturation: <strong style={{color:"var(--txt)"}}>{c.payFrequency==="monthly"?"Mensuelle":"Annuelle"}</strong></span>
@@ -2518,6 +2532,12 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     </select>
                   </div>
                 </div>
+                <div className="field"><label>📍 Centre d'enfouissement assigné</label>
+                  <select className="fi" value={addForm.assignedSite||""} onChange={e=>setAddForm(f=>({...f,assignedSite:e.target.value}))}>
+                    <option value="">— Non défini —</option>
+                    {(sites||[]).filter(s=>s.status==="active").map(s=><option key={s.id} value={s.id}>{s.name} ({s.type})</option>)}
+                  </select>
+                </div>
                 <div className="field"><label>Note initiale</label>
                   <textarea className="fi" value={addForm.note} onChange={e=>setAddForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
                 </div>
@@ -2590,6 +2610,12 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     <option value="annual">📅 Annuelle (rotations/an)</option>
                   </select>
                 </div>
+                <div className="field"><label>📍 Centre d'enfouissement assigné</label>
+                  <select className="fi" value={addRotForm.assignedSite||""} onChange={e=>setAddRotForm(f=>({...f,assignedSite:e.target.value}))}>
+                    <option value="">— Non défini —</option>
+                    {(sites||[]).filter(s=>s.status==="active").map(s=><option key={s.id} value={s.id}>{s.name} ({s.type})</option>)}
+                  </select>
+                </div>
                 <div className="field"><label>Note initiale</label>
                   <textarea className="fi" value={addRotForm.note} onChange={e=>setAddRotForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
                 </div>
@@ -2644,6 +2670,12 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   <div className="field"><label>Adresse</label>
                     <input className="fi" value={prepaidForm.address} onChange={e=>setPrepaidForm(f=>({...f,address:e.target.value}))} placeholder="Commune, wilaya"/>
                   </div>
+                </div>
+                <div className="field"><label>📍 Centre d'enfouissement assigné</label>
+                  <select className="fi" value={prepaidForm.assignedSite||""} onChange={e=>setPrepaidForm(f=>({...f,assignedSite:e.target.value}))}>
+                    <option value="">— Non défini —</option>
+                    {(sites||[]).filter(s=>s.status==="active").map(s=><option key={s.id} value={s.id}>{s.name} ({s.type})</option>)}
+                  </select>
                 </div>
                 <div className="field"><label>Note</label>
                   <textarea className="fi" value={prepaidForm.note} onChange={e=>setPrepaidForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
@@ -2724,6 +2756,12 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     <input className="fi" type="number" value={editClientForm.creditLimit||0} onChange={e=>setEditClientForm(f=>({...f,creditLimit:parseFloat(e.target.value)||0}))}/>
                   </div>
                 )}
+                <div className="field"><label>📍 Centre d'enfouissement assigné</label>
+                  <select className="fi" value={editClientForm.assignedSite||""} onChange={e=>setEditClientForm(f=>({...f,assignedSite:e.target.value}))}>
+                    <option value="">— Non défini —</option>
+                    {(sites||[]).filter(s=>s.status==="active").map(s=><option key={s.id} value={s.id}>{s.name} ({s.type})</option>)}
+                  </select>
+                </div>
                 <div className="field"><label>Note</label>
                   <textarea className="fi" value={editClientForm.note||""} onChange={e=>setEditClientForm(f=>({...f,note:e.target.value}))} rows={2}/>
                 </div>
