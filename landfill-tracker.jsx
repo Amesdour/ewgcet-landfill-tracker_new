@@ -2808,6 +2808,24 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     <input className="fi" type="number" value={editClientForm.creditLimit||0} onChange={e=>setEditClientForm(f=>({...f,creditLimit:parseFloat(e.target.value)||0}))}/>
                   </div>
                 )}
+                {editClientForm.type==="rotation"&&(
+                  <div className="fg fg2">
+                    <div className="field">
+                      <label>Périodicité du quota</label>
+                      <select className="fi" value={editClientForm.payFrequency||"monthly"} onChange={e=>setEditClientForm(f=>({...f,payFrequency:e.target.value}))}>
+                        <option value="monthly">🗓 Mensuelle (rotations/mois)</option>
+                        <option value="annual">📅 Annuelle (rotations/an)</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label>Quota de rotations {editClientForm.payFrequency==="annual"?"(rotations/an)":"(rotations/mois)"}</label>
+                      <input className="fi" type="number" step="1" min="0"
+                        value={editClientForm.weightLimitYear||0}
+                        onChange={e=>setEditClientForm(f=>({...f,weightLimitYear:parseInt(e.target.value)||0}))}
+                        placeholder={editClientForm.payFrequency==="annual"?"ex: 360":"ex: 30"}/>
+                    </div>
+                  </div>
+                )}
                 <div className="field">
                   <label>📍 Centres d'enfouissement autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(admin — plusieurs choix)</span></label>
                   <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
