@@ -319,6 +319,62 @@ textarea.fi{resize:vertical;min-height:80px}
 .pay-bar-track{background:var(--s3);border-radius:4px;height:6px;overflow:hidden;min-width:100px}
 .pay-bar-fill{height:100%;border-radius:4px;transition:width .5s cubic-bezier(.4,0,.2,1)}
 
+/* Mobile hamburger */
+.hamburger{display:none;align-items:center;justify-content:center;background:none;border:1px solid var(--bdr);border-radius:7px;font-size:18px;cursor:pointer;padding:5px 8px;color:var(--txt);transition:background .15s}
+.hamburger:hover{background:var(--s3)}
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:199;backdrop-filter:blur(2px)}
+
+/* Mobile bottom nav */
+.mobile-bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bdr);z-index:150;padding:4px 0 env(safe-area-inset-bottom,4px)}
+.mbn-inner{display:flex;align-items:stretch;overflow-x:auto;scrollbar-width:none}
+.mbn-inner::-webkit-scrollbar{display:none}
+.mbn-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 10px;border:none;background:none;color:var(--muted);font-size:9px;font-weight:600;font-family:var(--font);cursor:pointer;white-space:nowrap;flex-shrink:0;border-radius:8px;transition:all .15s;min-width:52px}
+.mbn-btn.act{color:var(--g)}
+.mbn-btn .mbn-ic{font-size:18px;line-height:1}
+.mbn-bdg{background:var(--err);color:#fff;font-family:var(--mono);font-size:7px;padding:1px 4px;border-radius:8px;min-width:14px;text-align:center;margin-top:-2px}
+
+@media(max-width:767px){
+  .hamburger{display:flex}
+  .sidebar-backdrop.open{display:block}
+  .sidebar{
+    position:fixed;top:0;left:0;height:100vh;z-index:200;
+    transform:translateX(-100%);transition:transform .25s cubic-bezier(.4,0,.2,1);
+    box-shadow:4px 0 24px rgba(0,0,0,.18)
+  }
+  .sidebar.open{transform:translateX(0)}
+  .main{width:100%;padding-bottom:72px}
+  .content{padding:14px 12px}
+  .topbar{padding:10px 12px;gap:8px}
+  .tb-title{font-size:17px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tb-right{gap:6px;flex-shrink:0}
+  .chip-hide-mobile{display:none!important}
+  .kpi-grid{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
+  .kpi-v{font-size:20px!important}
+  .fg2{grid-template-columns:1fr!important}
+  .fg3{grid-template-columns:1fr!important}
+  .sg{grid-template-columns:1fr}
+  .settings-grid{grid-template-columns:1fr!important}
+  .dash-2col{grid-template-columns:1fr!important}
+  .op-grid{grid-template-columns:1fr}
+  .modal{max-width:100vw!important;width:100%!important;max-height:92vh;border-radius:14px 14px 0 0;margin-top:auto}
+  .modal-lg{width:100%!important}
+  .ov{align-items:flex-end;padding:0}
+  .wb{flex-direction:column;align-items:flex-start;gap:4px}
+  .wv{font-size:26px}
+  .ph{flex-wrap:wrap;gap:8px}
+  .tabs{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{white-space:nowrap;font-size:12px;padding:8px 14px}
+  .seg{flex-wrap:wrap}
+  .mobile-bottom-nav{display:block}
+  .mbn-inner{justify-content:space-around}
+}
+@media(max-width:400px){
+  .kpi-grid{grid-template-columns:1fr 1fr}
+  .kpi-v{font-size:17px!important}
+  .content{padding:10px 8px}
+}
+
 /* Print-only / print-hide */
 .print-only{display:none!important}
 @media print{
@@ -629,6 +685,7 @@ export default function App() {
   const [theme,       setTheme]       = useState("light");
   const [loading,     setLoading]     = useState(true);
   const [invoices,    setInvoices]    = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [docTypes,    setDocTypes]    = useState(() => {
     try { return JSON.parse(localStorage.getItem('ewgcet_docTypes')) || {private:[...REQUIRED_DOCS_PRIVATE],state:[...REQUIRED_DOCS_STATE]}; }
     catch { return {private:[...REQUIRED_DOCS_PRIVATE],state:[...REQUIRED_DOCS_STATE]}; }
@@ -768,12 +825,14 @@ export default function App() {
   ];
   const nav = isAdmin ? navAdmin : navOp;
   const pageTitle = [...navAdmin,...navOp].find(n=>n.id===page)?.lbl ?? "—";
+  const closeSidebar = () => setSidebarOpen(false);
 
   return (
     <>
       <style>{STYLES}</style>
       <div className="shell">
-        <aside className="sidebar">
+        <div className={`sidebar-backdrop${sidebarOpen?" open":""}`} onClick={closeSidebar}/>
+        <aside className={`sidebar${sidebarOpen?" open":""}`}>
           <div className="sbl">
             <div style={{fontSize:24,marginBottom:6}}>♻️</div>
             <div className="sbl-title">{cof(company,'short')}</div>
@@ -783,7 +842,7 @@ export default function App() {
             <div className="nav-grp">
               <div className="nav-lbl">Navigation</div>
               {nav.map(n=>(
-                <button key={n.id} className={`nb${page===n.id?" act":""}`} onClick={()=>setPage(n.id)}>
+                <button key={n.id} className={`nb${page===n.id?" act":""}`} onClick={()=>{setPage(n.id);closeSidebar();}}>
                   <span className="ic">{n.ic}</span>{n.lbl}
                   {n.bdg?<span className="bdg">{n.bdg}</span>:null}
                 </button>
@@ -804,19 +863,20 @@ export default function App() {
 
         <main className="main">
           <div className="topbar">
+            <button className="hamburger" onClick={()=>setSidebarOpen(o=>!o)} aria-label="Menu">☰</button>
             <div className="tb-title">{pageTitle}</div>
             <div className="tb-right">
-              <span className="chip chip-dim fmn" style={{fontSize:10}}>
+              <span className="chip chip-dim fmn chip-hide-mobile" style={{fontSize:10}}>
                 {clock.toLocaleTimeString("fr-DZ",{hour:"2-digit",minute:"2-digit"})}
               </span>
-              <button className={`chip ${online?"chip-ok":"chip-warn"}`} onClick={()=>setOnline(o=>!o)}>
+              <button className={`chip ${online?"chip-ok":"chip-warn"} chip-hide-mobile`} onClick={()=>setOnline(o=>!o)}>
                 {online?"🟢 En ligne":"🟡 Hors ligne"}
               </button>
-              {alerts>0&&<span className="chip chip-err">⚠ {alerts} alerte{alerts>1?"s":""}</span>}
+              {alerts>0&&<span className="chip chip-err">⚠ {alerts}</span>}
               <button className="chip chip-dim" style={{cursor:"pointer"}}
                 onClick={()=>setTheme(t=>t==="dark"?"light":"dark")}
                 title={theme==="dark"?"Passer en mode clair":"Passer en mode sombre"}>
-                {theme==="dark"?"☀️ Clair":"🌙 Sombre"}
+                {theme==="dark"?"☀️":"🌙"}
               </button>
             </div>
           </div>
@@ -830,6 +890,17 @@ export default function App() {
             {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany}/>}
             {page==="schema"     && <PageSchema/>}
           </div>
+          <nav className="mobile-bottom-nav">
+            <div className="mbn-inner">
+              {nav.map(n=>(
+                <button key={n.id} className={`mbn-btn${page===n.id?" act":""}`} onClick={()=>setPage(n.id)}>
+                  <span className="mbn-ic">{n.ic}</span>
+                  <span>{n.lbl.split(" ")[0]}</span>
+                  {n.bdg?<span className="mbn-bdg">{n.bdg}</span>:null}
+                </button>
+              ))}
+            </div>
+          </nav>
         </main>
       </div>
     </>
@@ -889,7 +960,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
         ))}
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+      <div className="dash-2col" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
         <div className="panel">
           <div className="ph">
             <span className="pt">Derniers Déchargements</span>
