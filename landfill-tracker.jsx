@@ -1129,11 +1129,15 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
     setForm(f=>({...f, wasteType:validWasteTypes[0].id}));
   }
 
-  const approvedConvention = clients.filter(c=>c.type==="convention"&&c.status==="approved"&&!c.creditEnabled);
-  const approvedRotation   = clients.filter(c=>c.type==="rotation"&&c.status==="approved");
-  const approvedCredit     = clients.filter(c=>c.status==="approved"&&c.creditEnabled);
-  const approvedPrepaid    = clients.filter(c=>c.type==="prepaid"&&c.status==="approved");
-  const approvedCash       = clients.filter(c=>c.type==="daily"&&c.status==="approved");
+  const siteClientFilter = c => {
+    if (isAdmin || !authUser.siteId || authUser.siteId === "all") return true;
+    return !c.assignedSites || c.assignedSites.length === 0 || c.assignedSites.includes(authUser.siteId);
+  };
+  const approvedConvention = clients.filter(c=>c.type==="convention"&&c.status==="approved"&&!c.creditEnabled&&siteClientFilter(c));
+  const approvedRotation   = clients.filter(c=>c.type==="rotation"&&c.status==="approved"&&siteClientFilter(c));
+  const approvedCredit     = clients.filter(c=>c.status==="approved"&&c.creditEnabled&&siteClientFilter(c));
+  const approvedPrepaid    = clients.filter(c=>c.type==="prepaid"&&c.status==="approved"&&siteClientFilter(c));
+  const approvedCash       = clients.filter(c=>c.type==="daily"&&c.status==="approved"&&siteClientFilter(c));
 
   const onTruck = plate => {
     set("truck", plate);
