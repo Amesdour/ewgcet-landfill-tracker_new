@@ -1131,7 +1131,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
   const siteClientFilter = c => {
     if (isAdmin || !authUser.siteId || authUser.siteId === "all") return true;
-    return !c.assignedSites || c.assignedSites.length === 0 || c.assignedSites.includes(authUser.siteId);
+    return Array.isArray(c.assignedSites) && c.assignedSites.includes(authUser.siteId);
   };
   const approvedConvention = clients.filter(c=>c.type==="convention"&&c.status==="approved"&&!c.creditEnabled&&siteClientFilter(c));
   const approvedRotation   = clients.filter(c=>c.type==="rotation"&&c.status==="approved"&&siteClientFilter(c));
