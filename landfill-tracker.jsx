@@ -3226,15 +3226,24 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
       <td style="text-align:center;">${r.tva}%</td>
       <td style="text-align:right;">${fB(r.ht)}</td>
     </tr>`).join('');
-  const signataires = ['Le Directeur','Le D.A.F','Cachet &amp; Signature'];
   return `<!DOCTYPE html>
-<html lang="fr">
+<html xmlns:o='urn:schemas-microsoft-com:office:office'
+      xmlns:w='urn:schemas-microsoft-com:office:word'
+      xmlns='http://www.w3.org/TR/REC-html40' lang="fr">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <title>Facture ${invNum}</title>
+<!--[if gte mso 9]><xml>
+<w:WordDocument>
+  <w:View>Print</w:View>
+  <w:Zoom>100</w:Zoom>
+  <w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml><![endif]-->
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;padding:18px 22px;color:#000}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;width:18cm;margin:0 auto}
   table{border-collapse:collapse;width:100%}
   th,td{border:1px solid #000;padding:4px 8px}
   th{background:#f0f0f0;font-weight:bold;text-align:center}
@@ -3242,11 +3251,14 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   .sep{border-top:2px solid #000;margin:5px 0}
   .sep2{border-top:1px solid #000;margin:4px 0}
   .r{text-align:right}.c{text-align:center}.b{font-weight:bold}
-  @page{size:A4 portrait;margin:12mm 15mm}
+  @page WordSection1{size:21.0cm 29.7cm;margin:1.2cm 1.5cm;mso-page-orientation:portrait}
+  @page{size:21.0cm 29.7cm;margin:1.2cm 1.5cm}
+  div.WordSection1{page:WordSection1}
   @media print{body{padding:0}}
 </style>
 </head>
 <body>
+<div class="WordSection1">
 
 <!-- ── HEADER: French LEFT | Arabic CENTER | blank RIGHT ── -->
 <table class="nb" style="width:100%;margin-bottom:4px">
@@ -3268,9 +3280,6 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
       <div style="font-size:38px;line-height:1;margin-bottom:4px">&#9851;</div>
       <div style="font-size:13px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;line-height:1.6">
         الجمهورية الجزائرية الديمقراطية الشعبية
-      </div>
-      <div style="font-size:11.5px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-top:2px">
-        ولاية جيجل
       </div>
       <div style="font-size:9px;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-top:2px;color:#333">
         مؤسسة ولائية لتسيير مراكز الردم التقني
@@ -3364,12 +3373,12 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   </table>
 </div>
 
-<!-- ── SIGNATURES ── -->
-<div style="margin-top:44px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:36px;text-align:center">
-  ${signataires.map(lbl=>`<div>
-    <div style="font-weight:bold;font-size:10.5px;margin-bottom:48px;text-transform:uppercase">${lbl}</div>
+<!-- ── SIGNATURE ── -->
+<div style="margin-top:44px;display:flex;justify-content:flex-end">
+  <div style="text-align:center;min-width:160px">
+    <div style="font-weight:bold;font-size:10.5px;margin-bottom:56px;text-transform:uppercase">Le Directeur</div>
     <div style="border-top:1px solid #000;padding-top:4px;font-size:9px;color:#555">Signature &amp; Cachet</div>
-  </div>`).join('')}
+  </div>
 </div>
 
 <!-- ── FOOTER ── -->
@@ -3377,7 +3386,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   ${co('name')} — ${co('address')} — Tél&nbsp;: ${co('phone')} — ${co('email')}
 </div>
 
-</body></html>`;
+</div></body></html>`;
 }
 /* ═══════════════════════════════════════════════════════════════════════════
    INVOICE / RELEVÉ MENSUEL
@@ -3886,13 +3895,11 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
           {/* Print-only signature footer */}
           <div className="print-only inv-print-footer" style={{padding:"0 20px 20px"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:40,marginTop:20}}>
-              {["Le Directeur","Le Comptable","Cachet & Signature"].map(lbl=>(
-                <div key={lbl} style={{textAlign:"center"}}>
-                  <div style={{fontSize:10,fontWeight:700,marginBottom:50,color:"#333"}}>{lbl}</div>
-                  <div style={{borderTop:"1px solid #333",paddingTop:4,fontSize:9,color:"#555"}}>Signature</div>
-                </div>
-              ))}
+            <div style={{display:"flex",justifyContent:"flex-end",marginTop:20}}>
+              <div style={{textAlign:"center",minWidth:160}}>
+                <div style={{fontSize:10,fontWeight:700,marginBottom:56,color:"#333",textTransform:"uppercase"}}>Le Directeur</div>
+                <div style={{borderTop:"1px solid #333",paddingTop:4,fontSize:9,color:"#555"}}>Signature &amp; Cachet</div>
+              </div>
             </div>
             <div style={{marginTop:30,fontSize:9,color:"#777",textAlign:"center",borderTop:"1px solid #ddd",paddingTop:10}}>
               {cof(company,'name')} — {cof(company,'address')} — Tél: {cof(company,'phone')} — {cof(company,'email')}<br/>
