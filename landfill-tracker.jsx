@@ -3009,7 +3009,7 @@ function amountToWords(amount) {
 function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes) {
   const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
   const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
-  const TVA = 19;
+  const TVA = c.vatSubject ? 19 : 0;
   const groups = {};
   entries.forEach(d => {
     if (!groups[d.wasteType]) groups[d.wasteType]={net:0,total:0,unitPrice:d.unitPrice};
@@ -3183,14 +3183,15 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
   const switchToClient = (id) => { setSelC(id); setView("client"); };
 
-  // Generate/update invoice for a client+month
-  const generateInvoice = async (cl, cost) => {
+  // Generate/update invoice for a client+month (totalAmount stored as TTC)
+  const generateInvoice = async (cl, costHT) => {
+    const ttc = cl.vatSubject ? Math.round(costHT * 1.19 * 100) / 100 : costHT;
     const id = `FAC-${month.replace("-","")}-${cl.id}`;
     const existing = invoices.find(i=>i.id===id);
     if (existing) {
-      await updateInvoice({...existing, totalAmount:cost, status:existing.status==="paid"?"paid":"pending"});
+      await updateInvoice({...existing, totalAmount:ttc, status:existing.status==="paid"?"paid":"pending"});
     } else {
-      await addInvoice({id, clientId:cl.id, month, totalAmount:cost, status:"pending", note:""});
+      await addInvoice({id, clientId:cl.id, month, totalAmount:ttc, status:"pending", note:""});
     }
   };
 
@@ -3325,9 +3326,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         </td>
                         <td><span className="mn">{clE.length>0?fmtN(clN)+" t":"—"}</span></td>
                         <td>
-                          <span className="mn fw7" style={{color:clC>0?"var(--txt)":"var(--muted)"}}>
-                            {clC>0?fmt(clC):"—"}
-                          </span>
+                          {clC>0 ? (
+                            <div>
+                              <span className="mn fw7">{fmt(cl.vatSubject ? clC*1.19 : clC)}</span>
+                              {cl.vatSubject && <span className="mn tmu" style={{fontSize:9,marginLeft:4}}>TTC</span>}
+                            </div>
+                          ) : <span className="mn tmu">—</span>}
                         </td>
                         <td>
                           {inv
@@ -3497,9 +3501,28 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               {[["Nombre de dépôts",entries.length],["Tonnage total",fmtN(totalNet)+" t"]].map(([l,v])=>(
                 <div key={l} className="fx jsb mb1"><span className="tsm">{l}</span><span className="mn tsm fw7">{v}</span></div>
               ))}
-              <div className="fx jsb" style={{borderTop:"1px solid var(--bdr)",paddingTop:8,marginTop:6}}>
-                <span className="tsm fw7">Montant total HT</span>
-                <span className="tg fw8" style={{fontFamily:"var(--head)",fontSize:16}}>{fmt(totalCost)}</span>
+              <div style={{borderTop:"1px solid var(--bdr)",paddingTop:8,marginTop:6}}>
+                {c.vatSubject ? (
+                  <>
+                    <div className="fx jsb mb1">
+                      <span className="tsm">Montant HT</span>
+                      <span className="mn tsm fw7">{fmt(totalCost)}</span>
+                    </div>
+                    <div className="fx jsb mb1">
+                      <span className="tsm" style={{color:"var(--warn)"}}>TVA 19%</span>
+                      <span className="mn tsm fw7" style={{color:"var(--warn)"}}>{fmt(totalCost*0.19)}</span>
+                    </div>
+                    <div className="fx jsb" style={{borderTop:"1px solid var(--bdr)",paddingTop:6,marginTop:4}}>
+                      <span className="tsm fw7">Total TTC</span>
+                      <span className="tg fw8" style={{fontFamily:"var(--head)",fontSize:16}}>{fmt(totalCost*1.19)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="fx jsb">
+                    <span className="tsm fw7">Montant total HT <span style={{color:"var(--muted)",fontWeight:400}}>(exonéré TVA)</span></span>
+                    <span className="tg fw8" style={{fontFamily:"var(--head)",fontSize:16}}>{fmt(totalCost)}</span>
+                  </div>
+                )}
               </div>
               {(()=>{const inv=invoices.find(i=>i.id===invNum);
                 if (!inv||inv.paidAmount<=0) return null;
@@ -3599,12 +3622,32 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                     );
                   })}
                 {entries.length>0&&(
-                  <tr style={{background:"rgba(46,201,92,.04)"}}>
-                    <td colSpan={5} style={{textAlign:"right",fontWeight:700}}>TOTAL</td>
-                    <td className="mn fw7 tg">{fmtN(totalNet)} t</td>
-                    <td/>
-                    <td className="fw8 tg" style={{fontFamily:"var(--head)",fontSize:16}}>{fmt(totalCost)}</td>
-                  </tr>
+                  <>
+                    <tr style={{background:"rgba(46,201,92,.04)"}}>
+                      <td colSpan={5} style={{textAlign:"right",fontWeight:700}}>TOTAL HT</td>
+                      <td className="mn fw7 tg">{fmtN(totalNet)} t</td>
+                      <td/>
+                      <td className="mn fw7">{fmt(totalCost)}</td>
+                    </tr>
+                    {c.vatSubject&&(
+                      <>
+                        <tr style={{background:"rgba(234,179,8,.06)"}}>
+                          <td colSpan={7} style={{textAlign:"right",color:"var(--warn)",fontWeight:600,fontSize:11}}>TVA 19%</td>
+                          <td className="mn fw7" style={{color:"var(--warn)"}}>{fmt(totalCost*0.19)}</td>
+                        </tr>
+                        <tr style={{background:"rgba(46,201,92,.08)"}}>
+                          <td colSpan={7} style={{textAlign:"right",fontWeight:800}}>TOTAL TTC</td>
+                          <td className="fw8 tg" style={{fontFamily:"var(--head)",fontSize:16}}>{fmt(totalCost*1.19)}</td>
+                        </tr>
+                      </>
+                    )}
+                    {!c.vatSubject&&(
+                      <tr style={{background:"rgba(46,201,92,.04)"}}>
+                        <td colSpan={7} style={{textAlign:"right",fontWeight:800}}>NET À PAYER <span style={{fontWeight:400,fontSize:10,color:"var(--muted)"}}>(exonéré TVA)</span></td>
+                        <td className="fw8 tg" style={{fontFamily:"var(--head)",fontSize:16}}>{fmt(totalCost)}</td>
+                      </tr>
+                    )}
+                  </>
                 )}
               </tbody>
             </table>
