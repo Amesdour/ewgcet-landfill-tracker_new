@@ -817,7 +817,6 @@ export default function App() {
     {id:"operators",  lbl:"Opérateurs",         ic:"👷", bdg:pendingOps||null},
     {id:"invoice",    lbl:"Factures / Relevés", ic:"🧾"},
     {id:"settings",   lbl:"Paramètres",         ic:"⚙️"},
-    {id:"schema",     lbl:"Architecture DB",    ic:"🗄"},
   ];
   const navOp = [
     {id:"gate",       lbl:"Saisie Dépôt",       ic:"🚛"},
