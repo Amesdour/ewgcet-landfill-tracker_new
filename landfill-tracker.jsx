@@ -3039,7 +3039,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
       <td style="text-align:center;">${r.tva}%</td>
       <td style="text-align:right;">${fB(r.ht)}</td>
     </tr>`).join('');
-  const signataires = ['Le Directeur','Le Comptable','Cachet &amp; Signature'];
+  const signataires = ['Le Directeur','Le D.A.F','Cachet &amp; Signature'];
   return `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -3047,77 +3047,113 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 <title>Facture ${invNum}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;padding:20px 25px;color:#000}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;padding:18px 22px;color:#000}
   table{border-collapse:collapse;width:100%}
   th,td{border:1px solid #000;padding:4px 8px}
   th{background:#f0f0f0;font-weight:bold;text-align:center}
-  .nb td,.nb th{border:none}
-  .sep{border-top:2px solid #000;margin:6px 0}
+  .nb td,.nb th{border:none;padding:2px 4px}
+  .sep{border-top:2px solid #000;margin:5px 0}
+  .sep2{border-top:1px solid #000;margin:4px 0}
   .r{text-align:right}.c{text-align:center}.b{font-weight:bold}
-  @page{size:A4 portrait;margin:15mm}
+  @page{size:A4 portrait;margin:12mm 15mm}
   @media print{body{padding:0}}
 </style>
 </head>
 <body>
-<table class="nb" style="margin-bottom:6px">
+
+<!-- ── HEADER: French LEFT | Arabic CENTER | blank RIGHT ── -->
+<table class="nb" style="width:100%;margin-bottom:4px">
   <tr>
-    <td style="border:none;width:65px;vertical-align:middle;font-size:44px;line-height:1">&#9851;</td>
-    <td style="border:none;text-align:right;vertical-align:top">
-      <div style="font-size:17px;font-weight:bold;direction:rtl">الجمهورية الجزائرية الديمقراطية الشعبية</div>
-      <div style="font-size:15px;font-weight:bold;direction:rtl;margin-bottom:6px">ولاية جيجل</div>
-      <div style="font-size:10px;line-height:1.8">
-        Cité Administrative 01ème Étage Ayouf Ouest Jijel<br>
-        Etablissement public de Wilaya de Gestion des Centres d'Enfouissement Technique<br>
-        IF: 000918044299126 &nbsp;&nbsp; RC: 18/000442991H09<br>
-        TEL: 034473762 &nbsp;&nbsp; FAX: 034473762<br>
-        BNQ: BADR Jijel 00300676300261300093
+    <!-- LEFT: French company details -->
+    <td style="border:none;vertical-align:top;width:42%">
+      <div style="font-size:9.5px;line-height:1.85;color:#000">
+        <div style="font-size:11px;font-weight:bold;margin-bottom:3px">
+          Etablissement de Wilaya de Gestion des Centres d'Enfouissement Technique
+        </div>
+        <div>Cité Administrative, 01ème Étage, Ayouf Ouest — Jijel</div>
+        <div>IF&nbsp;: 000918044299126 &nbsp;·&nbsp; RC&nbsp;: 18/000442991H09</div>
+        <div>Tél&nbsp;: 034 47 37 62 &nbsp;·&nbsp; Fax&nbsp;: 034 47 37 62</div>
+        <div>BNQ&nbsp;: BADR Jijel — 00300676300261300093</div>
       </div>
     </td>
+    <!-- CENTER: Logo + Arabic government header -->
+    <td style="border:none;text-align:center;vertical-align:middle;width:28%;padding:0 8px">
+      <div style="font-size:38px;line-height:1;margin-bottom:4px">&#9851;</div>
+      <div style="font-size:13px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;line-height:1.6">
+        الجمهورية الجزائرية الديمقراطية الشعبية
+      </div>
+      <div style="font-size:11.5px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-top:2px">
+        ولاية جيجل
+      </div>
+      <div style="font-size:9px;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-top:2px;color:#333">
+        مؤسسة ولائية لتسيير مراكز الردم التقني
+      </div>
+    </td>
+    <!-- RIGHT: blank (balance) -->
+    <td style="border:none;width:30%"></td>
   </tr>
 </table>
+
 <div class="sep"></div>
-<div style="display:flex;justify-content:space-between;padding:5px 2px;font-weight:bold;font-size:12px">
+
+<!-- ── INVOICE REFERENCE LINE ── -->
+<div style="display:flex;justify-content:space-between;padding:4px 2px;font-weight:bold;font-size:11.5px">
   <span>FACTURE CLIENT : ${invNum}</span>
-  <span>JIJEL LE : ${date}</span>
+  <span>JIJEL, LE : ${date}</span>
 </div>
+
 <div class="sep"></div>
-<div style="text-align:right;margin:8px 2px 14px;font-size:11px;line-height:1.9">
-  <div>${c.id} - ${c.name}</div>
-  ${c.nif?`<div>M.F. : ${c.nif}</div>`:''}
-  ${c.rc ?`<div>R.C. : ${c.rc}</div>` :''}
-  ${c.address?`<div>${c.address}</div>`:''}
+
+<!-- ── CLIENT BLOCK (left-aligned) ── -->
+<div style="margin:8px 2px 12px;font-size:10.5px;line-height:1.85">
+  <div style="font-weight:bold;font-size:11px;margin-bottom:2px">FACTURÉ À :</div>
+  <div>${c.id} — ${c.name}</div>
+  ${c.nif    ? `<div>M.F.&nbsp;: ${c.nif}</div>` : ''}
+  ${c.rc     ? `<div>R.C.&nbsp;: ${c.rc}</div>`  : ''}
+  ${c.address? `<div>${c.address}</div>`           : ''}
+  <div style="margin-top:3px;font-size:9.5px;color:#555">
+    Régime TVA&nbsp;: ${TVA > 0 ? `Assujetti — ${TVA}%` : 'Non assujetti (exonéré)'}
+  </div>
 </div>
+
+<!-- ── ITEMS TABLE ── -->
 <table>
   <thead>
     <tr>
-      <th style="width:30px">N°</th>
-      <th>DÉSIGNATION</th>
-      <th style="width:80px">QUANTITÉ</th>
-      <th style="width:90px">PRIX U.</th>
-      <th style="width:55px">% TVA</th>
-      <th style="width:90px">HT</th>
+      <th style="width:28px">N°</th>
+      <th style="text-align:left;padding-left:8px">DÉSIGNATION</th>
+      <th style="width:75px">QUANTITÉ</th>
+      <th style="width:88px">PRIX U. (DA)</th>
+      <th style="width:50px">% TVA</th>
+      <th style="width:90px">MONTANT HT</th>
     </tr>
   </thead>
   <tbody>
     ${rowsHTML}
-    <tr class="b" style="background:#fafafa">
-      <td colspan="2" class="b">TOTAL GÉNÉRAL (${rows.length})</td>
-      <td class="r b">${fQ(totalQty)}</td>
+    <tr style="background:#f5f5f5">
+      <td colspan="2" class="b">TOTAL GÉNÉRAL (${rows.length} ligne${rows.length>1?'s':''})</td>
+      <td class="r b">${fQ(totalQty)} t</td>
       <td></td><td></td>
       <td class="r b">${fB(totalHT)}</td>
     </tr>
   </tbody>
 </table>
-<div style="margin-top:10px;border:1px solid #000;padding:6px 10px;font-size:10px">
-  <strong>Arrêtée la présente facture à la somme de:</strong><br>
-  <span style="font-weight:bold;text-transform:uppercase">${amountToWords(totalTTC)}</span>
+
+<!-- ── AMOUNT IN WORDS ── -->
+<div style="margin-top:8px;border:1px solid #000;padding:5px 10px;font-size:10px">
+  <strong>Arrêtée la présente facture à la somme de :</strong><br>
+  <span style="font-weight:bold;text-transform:uppercase;letter-spacing:.02em">${amountToWords(totalTTC)}</span>
 </div>
-<div style="display:flex;gap:16px;margin-top:12px;align-items:flex-start">
-  <table style="width:45%">
-    <thead><tr><th>TVA %</th><th>TVA (BASE)</th><th>TVA</th></tr></thead>
+
+<!-- ── TVA SUMMARY + TOTALS ── -->
+<div style="display:flex;gap:14px;margin-top:10px;align-items:flex-start">
+  <table style="width:44%">
+    <thead>
+      <tr><th>TVA %</th><th>BASE HT</th><th>MONTANT TVA</th></tr>
+    </thead>
     <tbody>
       <tr>
-        <td class="c">${TVA},00 %</td>
+        <td class="c">${TVA > 0 ? TVA+',00 %' : 'Exonéré'}</td>
         <td class="r">${fB(totalHT)}</td>
         <td class="r">${fB(totalTVA)}</td>
       </tr>
@@ -3128,27 +3164,32 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
       </tr>
     </tbody>
   </table>
-  <table style="width:52%;margin-left:auto">
+  <table style="width:50%;margin-left:auto">
     <tbody>
-      <tr><td>HT</td><td class="r">${fB(totalHT)}</td></tr>
-      <tr><td>TVA</td><td class="r">${fB(totalTVA)}</td></tr>
-      <tr><td>TTC</td><td class="r">${fB(totalTTC)}</td></tr>
-      <tr style="background:#eee">
-        <td class="b" style="font-size:13px">NET À PAYER</td>
+      <tr><td style="width:60%">Montant H.T.</td><td class="r">${fB(totalHT)}</td></tr>
+      <tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(totalTVA)}</td></tr>
+      <tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>
+      <tr style="background:#e8e8e8">
+        <td class="b" style="font-size:12px">NET À PAYER</td>
         <td class="r b" style="font-size:13px">${fB(totalTTC)}</td>
       </tr>
     </tbody>
   </table>
 </div>
-<div style="margin-top:50px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:40px;text-align:center">
+
+<!-- ── SIGNATURES ── -->
+<div style="margin-top:44px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:36px;text-align:center">
   ${signataires.map(lbl=>`<div>
-    <div class="b" style="margin-bottom:50px">${lbl}</div>
-    <div style="border-top:1px solid #000;padding-top:4px;font-size:9px;color:#555">Signature</div>
+    <div style="font-weight:bold;font-size:10.5px;margin-bottom:48px;text-transform:uppercase">${lbl}</div>
+    <div style="border-top:1px solid #000;padding-top:4px;font-size:9px;color:#555">Signature &amp; Cachet</div>
   </div>`).join('')}
 </div>
-<div style="margin-top:30px;padding-top:8px;border-top:1px solid #ccc;font-size:9px;color:#666;text-align:center">
-  ${co('name')} — ${co('address')} — Tél: ${co('phone')}
+
+<!-- ── FOOTER ── -->
+<div style="margin-top:24px;padding-top:6px;border-top:1px solid #bbb;font-size:8.5px;color:#666;text-align:center">
+  ${co('name')} — ${co('address')} — Tél&nbsp;: ${co('phone')} — ${co('email')}
 </div>
+
 </body></html>`;
 }
 /* ═══════════════════════════════════════════════════════════════════════════
