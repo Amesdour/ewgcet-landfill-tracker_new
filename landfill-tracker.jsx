@@ -1028,13 +1028,14 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const isAdmin = authUser.role === "admin";
   const defaultSite = isAdmin ? sites[0]?.id : authUser.siteId;
 
-  const [mode,      setMode]      = useState("convention"); // "convention" | "cash"
-  const [step,      setStep]      = useState(1);
-  const [form,      setForm]      = useState({siteId:defaultSite, truck:"", clientId:"", wasteType:"", gross:"", tare:""});
-  const [payModal,  setPayModal]  = useState(false);
-  const [cashConf,  setCashConf]  = useState(false);
-  const [lastEntry, setLastEntry] = useState(null);
-  const [hint,      setHint]      = useState(null);
+  const [mode,         setMode]         = useState("convention"); // "convention" | "cash"
+  const [step,         setStep]         = useState(1);
+  const [form,         setForm]         = useState({siteId:defaultSite, truck:"", clientId:"", wasteType:"", gross:"", tare:""});
+  const [payModal,     setPayModal]     = useState(false);
+  const [cashConf,     setCashConf]     = useState(false);
+  const [lastEntry,    setLastEntry]    = useState(null);
+  const [hint,         setHint]         = useState(null);
+  const [convSubMode,  setConvSubMode]  = useState("tonnage"); // "tonnage" | "rotation" for convention clients with rotationLimit
 
   // New cash client registration
   const [newCashModal, setNewCashModal] = useState(false);
@@ -1103,7 +1104,15 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const wouldExceedCredit    = client?.creditEnabled && client.creditLimit>0 && (client.consumed+total)>client.creditLimit;
   const wouldExceedWeight    = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 && (usedThisYear+net)>client.weightLimitYear;
   const wouldExceedRotations = isRotationClient && client.weightLimitYear>0 && (usedRotations+1)>client.weightLimitYear;
-  const wouldExceed = wouldExceedCredit || wouldExceedWeight || wouldExceedRotations;
+  // Convention clients with an admin-set rotation quota
+  const isConvWithRotation      = mode==="convention" && client && client.type==="convention" && (client.rotationLimit||0)>0;
+  const usedConvRotations       = isConvWithRotation
+    ? discharges.filter(d=>d.clientId===client.id&&d.payMethod==="rotation"&&d.ts.startsWith(periodPrefix)&&d.status!=="cancelled").length
+    : 0;
+  const rotationConvPct         = isConvWithRotation ? Math.round((usedConvRotations/(client.rotationLimit||1))*100) : 0;
+  const wouldExceedConvRot      = isConvWithRotation && convSubMode==="rotation" && client.rotationLimit>0 && (usedConvRotations+1)>client.rotationLimit;
+  const effectiveWouldExceedW   = wouldExceedWeight && !(isConvWithRotation && convSubMode==="rotation");
+  const wouldExceed = wouldExceedCredit || effectiveWouldExceedW || wouldExceedRotations || wouldExceedConvRot;
   const weightPct   = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
   const rotationPct = isRotationClient && client.weightLimitYear>0 ? Math.round((usedRotations/client.weightLimitYear)*100) : 0;
   const limitBlocked = !isAdmin && wouldExceed;
@@ -1128,7 +1137,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
   const reset = () => {
     setForm({siteId:defaultSite, truck:"", clientId:"", wasteType:validWasteTypes[0]?.id||"", gross:"", tare:""});
-    setStep(1); setLastEntry(null); setHint(null); setMode("convention");
+    setStep(1); setLastEntry(null); setHint(null); setMode("convention"); setConvSubMode("tonnage");
   };
 
   const handleAddCashClient = () => {
@@ -1288,7 +1297,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           )}
           {client&&(
             <div className={`alrt ${mode==="cash"?"aw":wouldExceed?"ae":"ao"}`} style={{marginBottom:0}}>
-              <span>{mode==="cash"?"💵":mode==="prepaid"?"🎫":mode==="rotation"?"🔄":client.creditEnabled?"💳":"📋"}</span>
+              <span>{mode==="cash"?"💵":mode==="prepaid"?"🎫":mode==="rotation"?"🔄":client.creditEnabled?"💳":isConvWithRotation&&convSubMode==="rotation"?"🔄":"📋"}</span>
               <div style={{flex:1}}>
                 {mode==="cash"
                   ?<><strong>Client Cash :</strong> Paiement en espèces requis. La barrière restera fermée jusqu'à confirmation.</>
@@ -1320,8 +1329,19 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                     </span>
                     {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Limite de crédit dépassée ({creditPct(client)}% utilisé) !</div>}
                   </>
-                  :<><strong>Client Convention Tonnes (tonnage{client.payFrequency==="monthly"?"/mois":"/an"}) :</strong> Décharge créditée au quota.
-                    {client.weightLimitYear>0&&(
+                  :<><strong>Client Convention Tonnes{isConvWithRotation&&convSubMode==="rotation"?" — Mode Rotation":""} ({client.payFrequency==="monthly"?"/mois":"/an"}) :</strong>{" "}
+                    {isConvWithRotation&&convSubMode==="rotation"?"Chaque décharge = 1 rotation sur le quota autorisé.":"Décharge créditée au quota de tonnage."}
+                    {isConvWithRotation&&convSubMode==="rotation"?(
+                      <div style={{marginTop:4}}>
+                        <div className="cbt" style={{height:4,marginBottom:3}}>
+                          <div className="cbf" style={{width:`${Math.min(rotationConvPct,100)}%`,background:wouldExceedConvRot?"var(--err)":rotationConvPct>80?"var(--warn)":"var(--orange)"}}/>
+                        </div>
+                        <span style={{fontFamily:"var(--mono)",fontSize:11}}>
+                          {usedConvRotations} / {client.rotationLimit} rotations — {rotationConvPct}% utilisé
+                        </span>
+                        {wouldExceedConvRot&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota de rotations dépassé !</span>}
+                      </div>
+                    ):client.weightLimitYear>0&&(
                       <div style={{marginTop:4}}>
                         <div className="cbt" style={{height:4,marginBottom:3}}>
                           <div className="cbf" style={{width:`${Math.min(weightPct,100)}%`,background:wouldExceedWeight?"var(--err)":weightPct>80?"var(--warn)":"var(--g)"}}/>
@@ -1333,6 +1353,24 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                       </div>
                     )}
                   </>}
+              </div>
+            </div>
+          )}
+
+          {/* Billing sub-mode toggle for convention clients with a rotation quota */}
+          {isConvWithRotation&&(
+            <div className="field" style={{marginTop:2}}>
+              <label style={{fontSize:11,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".08em"}}>Mode de facturation pour cette décharge</label>
+              <div className="seg" style={{marginTop:6}}>
+                <button className={`seg-btn${convSubMode==="tonnage"?" active":""}`}
+                  onClick={()=>setConvSubMode("tonnage")}>
+                  ⚖️ Tonnage
+                </button>
+                <button className={`seg-btn${convSubMode==="rotation"?" active":""}`}
+                  onClick={()=>setConvSubMode("rotation")}
+                  style={convSubMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)",color:"#fff"}:{}}>
+                  🔄 Rotation ({usedConvRotations}/{client?.rotationLimit||0})
+                </button>
               </div>
             </div>
           )}
@@ -1357,7 +1395,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             </select>
           </div>
 
-          {mode==="rotation"?(
+          {(mode==="rotation"||(isConvWithRotation&&convSubMode==="rotation"))?(
             net>0&&(
               <div className="cost-box" style={{borderColor:"var(--orange)"}}>
                 <div className="cl"><span className="clb">Poids enregistré</span><span className="clv">{fmtN(net)} t</span></div>
@@ -1365,11 +1403,19 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                   <span style={{fontSize:13,fontWeight:700,color:"var(--orange)"}}>Rotations comptabilisées</span>
                   <span className="ctv" style={{color:"var(--orange)",fontFamily:"var(--mono)"}}>+1 rotation</span>
                 </div>
-                {client&&client.weightLimitYear>0&&(
+                {mode==="rotation"&&client&&client.weightLimitYear>0&&(
                   <div className="cl" style={{marginTop:6}}>
                     <span className="clb">Après cette rotation</span>
                     <span className="clv" style={{color:wouldExceedRotations?"var(--err)":"var(--g)",fontFamily:"var(--mono)"}}>
                       {usedRotations+1} / {client.weightLimitYear} rotations
+                    </span>
+                  </div>
+                )}
+                {isConvWithRotation&&convSubMode==="rotation"&&client&&client.rotationLimit>0&&(
+                  <div className="cl" style={{marginTop:6}}>
+                    <span className="clb">Après cette rotation</span>
+                    <span className="clv" style={{color:wouldExceedConvRot?"var(--err)":"var(--g)",fontFamily:"var(--mono)"}}>
+                      {usedConvRotations+1} / {client.rotationLimit} rotations
                     </span>
                   </div>
                 )}
@@ -1409,14 +1455,16 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
               </div>
             </div>
           )}
-          <button className="btn bp bfw" style={{fontSize:15,padding:12,opacity:limitBlocked?.45:1,cursor:limitBlocked?"not-allowed":"pointer"}}
+          <button className="btn bp bfw"
+            style={{fontSize:15,padding:12,opacity:limitBlocked?.45:1,cursor:limitBlocked?"not-allowed":"pointer",
+              ...(isConvWithRotation&&convSubMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)"}:{})}}
             disabled={!canSubmit||limitBlocked}
-            onClick={()=>mode==="cash"?setPayModal(true):finalise(mode)}>
+            onClick={()=>mode==="cash"?setPayModal(true):finalise(isConvWithRotation&&convSubMode==="rotation"?"rotation":mode)}>
             {limitBlocked?"🚫 Entrée bloquée — Limite atteinte"
               :mode==="cash"?"💵 Procéder au Paiement Cash →"
-              :mode==="credit"?"💳 Enregistrer Crédit & Ouvrir Barrière →"
               :mode==="prepaid"?"🎫 Consommer Bonus & Ouvrir Barrière →"
               :mode==="rotation"?"🔄 Enregistrer Rotation & Ouvrir Barrière →"
+              :isConvWithRotation&&convSubMode==="rotation"?"🔄 Enregistrer Rotation (Convention) & Ouvrir Barrière →"
               :"📋 Enregistrer Convention & Ouvrir Barrière →"}
           </button>
         </div>
