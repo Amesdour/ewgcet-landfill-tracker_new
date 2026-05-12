@@ -348,6 +348,7 @@ textarea.fi{resize:vertical;min-height:80px}
   .tb-title{font-size:17px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .tb-right{gap:6px;flex-shrink:0}
   .chip-hide-mobile{display:none!important}
+  .btn-lbl{display:none!important}
   .kpi-grid{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px}
   .kpi-v{font-size:20px!important}
   .fg2{grid-template-columns:1fr!important}
@@ -2186,13 +2187,13 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
         </div>
         <div className="fx aic g2">
           {tab==="convention"&&(
-            <button className="btn bp bsm" onClick={()=>setModal("add_client")}>➕ Nouveau client convention</button>
+            <button className="btn bp bsm" onClick={()=>setModal("add_client")}>➕<span className="btn-lbl"> Nouveau client convention</span></button>
           )}
           {tab==="rotation"&&(
-            <button className="btn bp bsm" style={{background:"var(--orange)",borderColor:"var(--orange)"}} onClick={()=>setModal("add_rotation")}>➕ Nouveau client rotations</button>
+            <button className="btn bp bsm" style={{background:"var(--orange)",borderColor:"var(--orange)"}} onClick={()=>setModal("add_rotation")}>➕<span className="btn-lbl"> Nouveau client rotations</span></button>
           )}
           {tab==="prepaid"&&(
-            <button className="btn bp bsm" onClick={()=>setModal("add_prepaid")}>➕ Nouveau client prépayé</button>
+            <button className="btn bp bsm" onClick={()=>setModal("add_prepaid")}>➕<span className="btn-lbl"> Nouveau client prépayé</span></button>
           )}
         </div>
       </div>
@@ -3042,7 +3043,7 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
             Demandes en attente {pendingOps.length>0&&<span className="badge b-warn" style={{marginLeft:6,fontSize:8}}>{pendingOps.length}</span>}
           </button>
         </div>
-        <button className="btn bp bsm" onClick={()=>setModal(true)}>➕ Nouvel opérateur</button>
+        <button className="btn bp bsm" onClick={()=>setModal(true)}>➕<span className="btn-lbl"> Nouvel opérateur</span></button>
       </div>
 
       {tab==="active"&&(
