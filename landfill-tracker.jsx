@@ -3490,6 +3490,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const totalNet  = entries.reduce((s,d)=>s+d.net,0);
   const totalCost = entries.reduce((s,d)=>s+d.total,0);
   const invNum    = `FAC-${month.replace("-","")}-${selCId}`;
+  const currentInv = invoices.find(i=>i.id===invNum) || invoices.find(i=>i.clientId===selCId&&i.month===month);
 
   const monthLabel = new Date(month+"-02").toLocaleString("fr-FR",{month:"long",year:"numeric"});
   const globalRows = billed.map(cl=>{
@@ -3804,7 +3805,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 Émise le : {new Date().toLocaleDateString("fr-DZ")}<br/>
                 Période : <strong>{new Date(month+"-01").toLocaleString("fr-FR",{month:"long",year:"numeric"})}</strong>
               </div>
-              {(()=>{const inv=invoices.find(i=>i.id===invNum);return inv?<div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}><InvoiceStatusBadge s={inv.status}/>{(inv.status==="partial"||(inv.paidAmount>0&&inv.status!=="paid"))&&<PayProgress inv={inv}/>}</div>:null;})()}
+              {(()=>{const inv=currentInv;return inv?<div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}><InvoiceStatusBadge s={inv.status}/>{(inv.status==="partial"||(inv.paidAmount>0&&inv.status!=="paid"))&&<PayProgress inv={inv}/>}</div>:null;})()}
             </div>
           </div>
 
@@ -3849,7 +3850,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                   </div>
                 )}
               </div>
-              {(()=>{const inv=invoices.find(i=>i.id===invNum);
+              {(()=>{const inv=currentInv;
                 if (!inv||inv.paidAmount<=0) return null;
                 const rem=inv.totalAmount-(inv.paidAmount||0);
                 return <>
@@ -3995,15 +3996,15 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
           <div className="print-hide" style={{padding:"16px 20px",borderTop:"1px solid var(--bdr)",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
             {totalCost>0&&(
               <button className="btn bp bsm" onClick={()=>generateInvoice(c,totalCost)}>
-                🧾 {invoices.find(i=>i.id===invNum)?"Mettre à jour la facture":"Générer la facture"}
+                🧾 {currentInv?"Mettre à jour la facture":"Générer la facture"}
               </button>
             )}
-            {(()=>{const inv=invoices.find(i=>i.id===invNum);return inv&&inv.status!=="paid"
-              ?<button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(inv)}>💳 Enregistrer Paiement</button>
-              :null;})()}
-            {(()=>{const inv=invoices.find(i=>i.id===invNum);return inv&&inv.status==="pending"
-              ?<button className="btn be bsm" onClick={()=>markOverdue(inv)}>🔴 Marquer Impayée</button>
-              :null;})()}
+            {currentInv&&currentInv.status!=="paid"
+              ?<button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(currentInv)}>💳 Enregistrer Paiement</button>
+              :null}
+            {currentInv&&currentInv.status==="pending"
+              ?<button className="btn be bsm" onClick={()=>markOverdue(currentInv)}>🔴 Marquer Impayée</button>
+              :null}
                         <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"center"}}>
               <button className="btn bg bsm" onClick={downloadOfficialPDF} disabled={entries.length===0}
                 title="Télécharger la facture officielle en PDF">📥 PDF Officiel</button>
