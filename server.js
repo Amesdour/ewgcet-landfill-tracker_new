@@ -352,8 +352,8 @@ app.put('/api/invoices/:id', async (req, res) => {
   const inv = req.body;
   try {
     await q(
-      'UPDATE invoices SET status=$1,paid_at=$2,paid_amount=$3,note=$4 WHERE id=$5',
-      [inv.status,inv.paidAt||null,inv.paidAmount||0,inv.note||'',req.params.id]
+      'UPDATE invoices SET status=$1,paid_at=$2,paid_amount=$3,note=$4,total_amount=$5 WHERE id=$6',
+      [inv.status,inv.paidAt||null,inv.paidAmount||0,inv.note||'',inv.totalAmount||0,req.params.id]
     );
     ok(res, { ok:true });
   } catch(e) { er(res,e); }

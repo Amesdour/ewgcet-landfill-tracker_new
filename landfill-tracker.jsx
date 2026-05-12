@@ -3510,9 +3510,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const generateInvoice = async (cl, costHT) => {
     const ttc = cl.vatSubject ? Math.round(costHT * 1.19 * 100) / 100 : costHT;
     const id = `FAC-${month.replace("-","")}-${cl.id}`;
-    const existing = invoices.find(i=>i.id===id);
+    // Use same fallback lookup strategy so we always find the existing invoice
+    const existing = invoices.find(i=>i.id===id) || invoices.find(i=>i.clientId===cl.id&&i.month===month);
     if (existing) {
-      await updateInvoice({...existing, totalAmount:ttc, status:existing.status==="paid"?"paid":"pending"});
+      // Preserve status: keep "paid" and "partial" as-is, only reset overdue→pending
+      const preservedStatus = existing.status==="paid"?"paid":existing.status==="partial"?"partial":"pending";
+      await updateInvoice({...existing, totalAmount:ttc, status:preservedStatus});
     } else {
       await addInvoice({id, clientId:cl.id, month, totalAmount:ttc, status:"pending", note:""});
     }
