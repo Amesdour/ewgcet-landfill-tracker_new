@@ -1706,7 +1706,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
     return mf&&ms&&msf&&mdf;
   });
   const totalFiltered = filtered.reduce((s,d)=>s+d.total,0);
-  const tonsFiltered  = filtered.reduce((s,d)=>s+d.net,0);
+  const tonsFiltered  = filtered.filter(d=>d.payMethod!=="rotation").reduce((s,d)=>s+d.net,0);
   const flaggedCount  = discharges.filter(d=>d.status==="flagged").length;
 
   const openResolve = d => {
