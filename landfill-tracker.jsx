@@ -266,7 +266,7 @@ textarea.fi{resize:vertical;min-height:80px}
 .login-shell{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 0%,rgba(41,196,84,.08) 0%,var(--bg) 60%);padding:20px}
 .login-box{background:linear-gradient(180deg,var(--s1),var(--login-box-end));border:1px solid var(--bdr);border-radius:20px;padding:38px 42px;width:430px;max-width:100%;box-shadow:var(--sh),0 0 0 1px rgba(23,138,52,.06)}
 .login-logo{text-align:center;margin-bottom:30px}
-.login-logo-icon{font-size:44px;margin-bottom:10px;display:block;filter:drop-shadow(0 0 16px rgba(41,196,84,.3))}
+.login-logo-icon{width:90px;height:90px;object-fit:contain;margin:0 auto 10px;display:block;filter:drop-shadow(0 0 14px rgba(41,196,84,.25))}
 .login-company{font-family:var(--head);font-size:11px;font-weight:800;color:var(--g);letter-spacing:.08em;text-transform:uppercase;line-height:1.5;margin-bottom:4px}
 .login-wilaya{font-family:var(--mono);font-size:9px;color:var(--muted)}
 .login-title{font-family:var(--head);font-size:24px;font-weight:800;margin-bottom:22px;text-align:center;letter-spacing:.02em}
@@ -563,7 +563,7 @@ function LoginScreen({onLogin, onRegister, company}) {
     <div className="login-shell">
       <div className="login-box">
         <div className="login-logo">
-          <div className="login-logo-icon">♻️</div>
+          <img src="/logo.jpg" alt="EPWGCET" className="login-logo-icon"/>
           <div className="login-company">{cof(company,'name')}</div>
           <div className="login-wilaya">{cof(company,'wilaya')}</div>
         </div>
@@ -631,7 +631,7 @@ function RegisterScreen({onBack, onRegistered, sites, company}) {
     <div className="login-shell">
       <div className="login-box">
         <div className="login-logo">
-          <div className="login-logo-icon">♻️</div>
+          <img src="/logo.jpg" alt="EPWGCET" className="login-logo-icon"/>
           <div className="login-company">{cof(company,'short')}</div>
           <div className="login-wilaya">{cof(company,'wilaya')}</div>
         </div>
@@ -3346,11 +3346,16 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 <body>
 <div class="WordSection1">
 
-<!-- ── HEADER: French LEFT | Arabic CENTER | Logo RIGHT ── -->
+<!-- ── HEADER TOP: Arabic centered ── -->
+<div style="text-align:center;font-size:15px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-bottom:8px;color:#000">
+  الجمهورية الجزائرية الديموقراطية الشعبية
+</div>
+
+<!-- ── HEADER: French LEFT | Logo RIGHT ── -->
 <table class="nb" style="width:100%;margin-bottom:6px">
   <tr>
     <!-- LEFT: French company details -->
-    <td style="border:none;vertical-align:top;width:45%">
+    <td style="border:none;vertical-align:top;width:70%">
       <div style="font-size:12px;line-height:2;color:#000">
         <div style="font-size:13.5px;font-weight:bold;margin-bottom:4px">
           Etablissement Public de Wilaya de Gestion des Centres d'Enfouissement Technique
@@ -3361,18 +3366,10 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
         <div>BNQ&nbsp;: BADR Jijel — 00300676300261300093</div>
       </div>
     </td>
-    <!-- CENTER: Logo + Arabic government header -->
-    <td style="border:none;text-align:center;vertical-align:middle;width:30%;padding:0 10px">
-      <div style="font-size:44px;line-height:1;margin-bottom:5px">&#9851;</div>
-      <div style="font-size:14.5px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;line-height:1.7">
-        الجمهورية الجزائرية الديمقراطية الشعبية
-      </div>
-      <div style="font-size:11px;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-top:3px;color:#333">
-        مؤسسة ولائية لتسيير مراكز الردم التقني
-      </div>
+    <!-- RIGHT: Official Logo -->
+    <td style="border:none;text-align:right;vertical-align:middle;width:30%">
+      <img src="/logo.jpg" alt="EPWGCET" style="width:90px;height:90px;object-fit:contain"/>
     </td>
-    <!-- RIGHT: blank (balance) -->
-    <td style="border:none;width:25%"></td>
   </tr>
 </table>
 
