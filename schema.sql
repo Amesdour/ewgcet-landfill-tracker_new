@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS sites (
   localisation VARCHAR(200)   DEFAULT '',
   accepted_waste JSONB        DEFAULT '[]'
 );
-
+DELETE FROM sites WHERE id IN ('CDM-JIJ', 'CDM-TAH', 'CDM-ELM');
 INSERT INTO sites (id, name, region, type, capacity, used, status, commune, localisation, accepted_waste) VALUES
   ('CET-JIJ', 'Centre d''Enfouissement Technique Jijel',    'Jijel (Chef-lieu)', 'CET', 600000, 287400, 'active', 'Jijel',     '36.8167° N, 5.7667° E', '["MEN","IND","MED","INE"]'),
   ('CET-TAH', 'Centre d''Enfouissement Technique Taher',    'Taher',             'CET', 400000, 156700, 'active', 'Taher',     '36.7333° N, 5.9000° E', '["MEN","IND","INE"]'),
