@@ -563,7 +563,7 @@ function LoginScreen({onLogin, onRegister, company}) {
     <div className="login-shell">
       <div className="login-box">
         <div className="login-logo">
-          <img src="/logo.jpg" alt="EPWGCET" className="login-logo-icon"/>
+          <img src="/logo.png" alt="EPWGCET" className="login-logo-icon"/>
           <div className="login-company">{cof(company,'name')}</div>
           <div className="login-wilaya">{cof(company,'wilaya')}</div>
         </div>
@@ -631,7 +631,7 @@ function RegisterScreen({onBack, onRegistered, sites, company}) {
     <div className="login-shell">
       <div className="login-box">
         <div className="login-logo">
-          <img src="/logo.jpg" alt="EPWGCET" className="login-logo-icon"/>
+          <img src="/logo.png" alt="EPWGCET" className="login-logo-icon"/>
           <div className="login-company">{cof(company,'short')}</div>
           <div className="login-wilaya">{cof(company,'wilaya')}</div>
         </div>
@@ -725,7 +725,7 @@ export default function App() {
   if (loading) return (
     <><style>{STYLES}</style>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"var(--bg)",flexDirection:"column",gap:16}}>
-        <img src="/logo.jpg" alt="EPWGCET" style={{width:80,height:80,objectFit:"contain",marginBottom:4}}/>
+        <img src="/logo.png" alt="EPWGCET" style={{width:80,height:80,objectFit:"contain",marginBottom:4}}/>
         <div style={{fontFamily:"var(--head)",fontSize:22,fontWeight:800,color:"var(--g)",letterSpacing:".04em"}}>Chargement…</div>
         <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--muted)"}}>Connexion à la base de données…</div>
       </div>
@@ -834,7 +834,7 @@ export default function App() {
         <div className={`sidebar-backdrop${sidebarOpen?" open":""}`} onClick={closeSidebar}/>
         <aside className={`sidebar${sidebarOpen?" open":""}`}>
           <div className="sbl">
-            <img src="/logo.jpg" alt="EPWGCET" style={{width:48,height:48,objectFit:"contain",marginBottom:6,display:"block",margin:"0 auto 6px"}}/>
+            <img src="/logo.png" alt="EPWGCET" style={{width:48,height:48,objectFit:"contain",marginBottom:6,display:"block",margin:"0 auto 6px"}}/>
             <div className="sbl-title">{cof(company,'short')}</div>
             <div className="sbl-sub">{cof(company,'wilaya')}</div>
           </div>
@@ -1241,7 +1241,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
         <div className="rcpt-print-area">
           <div className="rcpt">
             <div className="rh">
-              <div style={{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:6}}><img src="/logo.jpg" alt="EPWGCET" style={{width:22,height:22,objectFit:"contain"}}/>{cof(company,'name')}</div>
+              <div style={{fontWeight:700,fontSize:13,display:"flex",alignItems:"center",gap:6}}><img src="/logo.png" alt="EPWGCET" style={{width:22,height:22,objectFit:"contain"}}/>{cof(company,'name')}</div>
               <div className="tmu" style={{marginTop:3,fontSize:11}}>{recSite?.name} — {recSite?.region}</div>
               <div className="tmu" style={{fontSize:10}}>{fmtTs(lastEntry.ts)} · #{lastEntry.id}</div>
             </div>
@@ -1946,7 +1946,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
             <div className="rcpt-print-area">
               <div className="rcpt">
                 <div className="rh">
-                  <div style={{fontWeight:700,fontSize:14,display:"flex",alignItems:"center",gap:6}}><img src="/logo.jpg" alt="EPWGCET" style={{width:24,height:24,objectFit:"contain"}}/>{cof(company,'short')}</div>
+                  <div style={{fontWeight:700,fontSize:14,display:"flex",alignItems:"center",gap:6}}><img src="/logo.png" alt="EPWGCET" style={{width:24,height:24,objectFit:"contain"}}/>{cof(company,'short')}</div>
                   <div className="tmu" style={{marginTop:3,fontSize:11,lineHeight:1.5}}>
                     {sites.find(s=>s.id===printD.siteId)?.name} — {sites.find(s=>s.id===printD.siteId)?.region}
                   </div>
@@ -3368,7 +3368,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
     </td>
     <!-- RIGHT: Official Logo -->
     <td style="border:none;text-align:right;vertical-align:middle;width:30%">
-      <img src="/logo.jpg" alt="EPWGCET" style="width:90px;height:90px;object-fit:contain"/>
+      <img src="/logo.png" alt="EPWGCET" style="width:90px;height:90px;object-fit:contain"/>
     </td>
   </tr>
 </table>
@@ -3792,7 +3792,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
           {/* ── Invoice print header ── */}
           <div style={{background:"linear-gradient(135deg,var(--s2),var(--s3))",borderBottom:"1px solid var(--bdr)",padding:20,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
-              <div style={{fontFamily:"var(--head)",fontSize:18,fontWeight:800,color:"var(--g)",display:"flex",alignItems:"center",gap:8}}><img src="/logo.jpg" alt="EPWGCET" style={{width:36,height:36,objectFit:"contain"}}/>{cof(company,'short')}</div>
+              <div style={{fontFamily:"var(--head)",fontSize:18,fontWeight:800,color:"var(--g)",display:"flex",alignItems:"center",gap:8}}><img src="/logo.png" alt="EPWGCET" style={{width:36,height:36,objectFit:"contain"}}/>{cof(company,'short')}</div>
               <div style={{fontSize:11,color:"var(--muted)",marginTop:4,lineHeight:1.6}}>
                 {cof(company,'name')}<br/>
                 {cof(company,'address')}<br/>
