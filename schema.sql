@@ -21,9 +21,9 @@ CREATE TABLE IF NOT EXISTS sites (
 );
 
 INSERT INTO sites (id, name, region, type, capacity, used, status, commune, localisation, accepted_waste) VALUES
-  ('CET-JIJ', 'CET Jijel',     'Jijel (Chef-lieu)', 'CET', 600000, 287400, 'active', 'Jijel',     '36.8167° N, 5.7667° E', '["MEN","IND","MED","INE"]'),
-  ('CET-TAH', 'CET Taher',     'Taher',              'CET', 400000, 156700, 'active', 'Taher',     '36.7333° N, 5.9000° E', '["MEN","IND","INE"]'),
-  ('CET-ELM', 'CET El Milia',  'El Milia',           'CET', 300000, 198300, 'active', 'El Milia',  '36.7500° N, 6.5667° E', '["MEN","IND"]'),
+  ('CET-JIJ', 'Centre d''Enfouissement Technique Jijel',    'Jijel (Chef-lieu)', 'CET', 600000, 287400, 'active', 'Jijel',     '36.8167° N, 5.7667° E', '["MEN","IND","MED","INE"]'),
+  ('CET-TAH', 'Centre d''Enfouissement Technique Taher',    'Taher',             'CET', 400000, 156700, 'active', 'Taher',     '36.7333° N, 5.9000° E', '["MEN","IND","INE"]'),
+  ('CET-ELM', 'Centre d''Enfouissement Technique El Milia', 'El Milia',          'CET', 300000, 198300, 'active', 'El Milia',  '36.7500° N, 6.5667° E', '["MEN","IND"]'),
   ('CDI-TAS', 'CDI Tasselemt', 'Tasselemt',          'CDI', 500000,  89000, 'active', 'Tasselemt', '36.6833° N, 6.1333° E', '["INE"]')
 ON CONFLICT (id) DO NOTHING;
 

@@ -5,8 +5,8 @@ import { useState, useEffect } from "react";
 ═══════════════════════════════════════════════════════════════════════════ */
 
 const COMPANY = {
-  name: "Etablissement Public de Wilaya de Gestion des Centres d'Enfouissement Technique",
-  short: "EPWGCET Jijel",
+  name: "Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL",
+  short: "EPWGCET",
   wilaya: "Wilaya de Jijel",
   direction: "Direction de l'Environnement",
   phone: "034 48 00 00",
@@ -27,9 +27,9 @@ const COMPANY_FIELDS_DEFAULT = [
 const cof = (co, id) => (Array.isArray(co) ? co : COMPANY_FIELDS_DEFAULT).find(f=>f.id===id)?.value || '';
 
 const SITES_DB_INIT = [
-  { id:"CET-JIJ", name:"CET Jijel",     region:"Jijel (Chef-lieu)", type:"CET", capacity:600000, used:287400, commune:"Jijel",      localisation:"36.8167° N, 5.7667° E", acceptedWaste:["MEN","IND","MED","INE"] },
-  { id:"CET-TAH", name:"CET Taher",     region:"Taher",              type:"CET", capacity:400000, used:156700, commune:"Taher",      localisation:"36.7333° N, 5.9000° E", acceptedWaste:["MEN","IND","INE"] },
-  { id:"CET-ELM", name:"CET El Milia",  region:"El Milia",           type:"CET", capacity:300000, used:198300, commune:"El Milia",   localisation:"36.7500° N, 6.5667° E", acceptedWaste:["MEN","IND"] },
+  { id:"CET-JIJ", name:"Centre d'Enfouissement Technique Jijel",     region:"Jijel (Chef-lieu)", type:"CET", capacity:600000, used:287400, commune:"Jijel",      localisation:"36.8167° N, 5.7667° E", acceptedWaste:["MEN","IND","MED","INE"] },
+  { id:"CET-TAH", name:"Centre d'Enfouissement Technique Taher",     region:"Taher",              type:"CET", capacity:400000, used:156700, commune:"Taher",      localisation:"36.7333° N, 5.9000° E", acceptedWaste:["MEN","IND","INE"] },
+  { id:"CET-ELM", name:"Centre d'Enfouissement Technique El Milia",  region:"El Milia",           type:"CET", capacity:300000, used:198300, commune:"El Milia",   localisation:"36.7500° N, 6.5667° E", acceptedWaste:["MEN","IND"] },
   { id:"CDI-TAS", name:"CDI Tasselemt", region:"Tasselemt",          type:"CDI", capacity:500000, used:89000,  commune:"Tasselemt",  localisation:"36.6833° N, 6.1333° E", acceptedWaste:["INE"] },
 ];
 
@@ -3358,7 +3358,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
     <td style="border:none;vertical-align:top;width:70%">
       <div style="font-size:12px;line-height:2;color:#000">
         <div style="font-size:13.5px;font-weight:bold;margin-bottom:4px">
-          Etablissement Public de Wilaya de Gestion des Centres d'Enfouissement Technique
+          Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL
         </div>
         <div>Cité Administrative, 01ème Étage, Ayouf Ouest — Jijel</div>
         <div>IF&nbsp;: 000918044299126 &nbsp;·&nbsp; RC&nbsp;: 18/000442991H09</div>
