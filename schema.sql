@@ -1,5 +1,5 @@
 -- ============================================================
---  EWGCET Landfill Tracker — Full Schema + Seed
+--  EPWGCET Landfill Tracker — Full Schema + Seed
 --  Run once to initialise a fresh PostgreSQL database.
 --  All statements are idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING).
 -- ============================================================
@@ -21,9 +21,9 @@ CREATE TABLE IF NOT EXISTS sites (
 );
 
 INSERT INTO sites (id, name, region, type, capacity, used, status, commune, localisation, accepted_waste) VALUES
-  ('CDM-JIJ', 'CDM Jijel',     'Jijel (Chef-lieu)', 'CDM', 600000, 287400, 'active', 'Jijel',     '36.8167° N, 5.7667° E', '["MEN","IND","MED","INE"]'),
-  ('CDM-TAH', 'CDM Taher',     'Taher',              'CDM', 400000, 156700, 'active', 'Taher',     '36.7333° N, 5.9000° E', '["MEN","IND","INE"]'),
-  ('CDM-ELM', 'CDM El Milia',  'El Milia',           'CDM', 300000, 198300, 'active', 'El Milia',  '36.7500° N, 6.5667° E', '["MEN","IND"]'),
+  ('CET-JIJ', 'CET Jijel',     'Jijel (Chef-lieu)', 'CET', 600000, 287400, 'active', 'Jijel',     '36.8167° N, 5.7667° E', '["MEN","IND","MED","INE"]'),
+  ('CET-TAH', 'CET Taher',     'Taher',              'CET', 400000, 156700, 'active', 'Taher',     '36.7333° N, 5.9000° E', '["MEN","IND","INE"]'),
+  ('CET-ELM', 'CET El Milia',  'El Milia',           'CET', 300000, 198300, 'active', 'El Milia',  '36.7500° N, 6.5667° E', '["MEN","IND"]'),
   ('CDI-TAS', 'CDI Tasselemt', 'Tasselemt',          'CDI', 500000,  89000, 'active', 'Tasselemt', '36.6833° N, 6.1333° E', '["INE"]')
 ON CONFLICT (id) DO NOTHING;
 
@@ -39,10 +39,10 @@ CREATE TABLE IF NOT EXISTS waste_types (
 ALTER TABLE waste_types ADD COLUMN IF NOT EXISTS rotation_price DECIMAL(14,2) DEFAULT 0;
 
 INSERT INTO waste_types (id, label, price, unit, site_types) VALUES
-  ('MEN', 'Ménager (DMA)',     850,  't', '["CDM"]'),
-  ('IND', 'Industriel (DIB)', 1200,  't', '["CDM"]'),
-  ('MED', 'Médical (DASRI)',  2500,  't', '["CDM"]'),
-  ('INE', 'Inerte / BTP',      600,  't', '["CDI","CDM"]')
+  ('MEN', 'Ménager (DMA)',     850,  't', '["CET"]'),
+  ('IND', 'Industriel (DIB)', 1200,  't', '["CET"]'),
+  ('MED', 'Médical (DASRI)',  2500,  't', '["CET"]'),
+  ('INE', 'Inerte / BTP',      600,  't', '["CDI","CET"]')
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── CLIENTS ─────────────────────────────────────────────────
@@ -99,10 +99,10 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 INSERT INTO users (id, name, email, password, role, status, phone, matricule, site_id, created_at) VALUES
-  ('U001', 'Directeur Administrateur', 'admin@ewgcet-jijel.dz',     'admin123', 'admin',    'active',  '034 48 00 01',  'ADM-001',     'all',     '2024-01-15'),
-  ('U002', 'Karim Boudali',            'k.boudali@ewgcet-jijel.dz', 'op1234',   'operator', 'active',  '0771 23 45 67', 'OP-2024-001', 'CDM-JIJ', '2024-03-10'),
-  ('U003', 'Sara Menacer',             's.menacer@ewgcet-jijel.dz', 'op1234',   'operator', 'active',  '0773 45 67 89', 'OP-2024-002', 'CDM-TAH', '2024-03-10'),
-  ('U004', 'Yacine Ferhat',            'y.ferhat@ewgcet-jijel.dz',  'op1234',   'operator', 'pending', '0774 56 78 90', 'OP-2024-003', 'CDM-ELM', '2024-04-20')
+  ('U001', 'Directeur Administrateur', 'admin@epwgcet-jijel.dz',    'admin123', 'admin',    'active',  '034 48 00 01',  'ADM-001',     'all',     '2024-01-15'),
+  ('U002', 'Karim Boudali',            'k.boudali@epwgcet-jijel.dz', 'op1234',   'operator', 'active',  '0771 23 45 67', 'OP-2024-001', 'CET-JIJ', '2024-03-10'),
+  ('U003', 'Sara Menacer',             's.menacer@epwgcet-jijel.dz', 'op1234',   'operator', 'active',  '0773 45 67 89', 'OP-2024-002', 'CET-TAH', '2024-03-10'),
+  ('U004', 'Yacine Ferhat',            'y.ferhat@epwgcet-jijel.dz',  'op1234',   'operator', 'pending', '0774 56 78 90', 'OP-2024-003', 'CET-ELM', '2024-04-20')
 ON CONFLICT (id) DO NOTHING;
 
 -- ─── DISCHARGES ──────────────────────────────────────────────

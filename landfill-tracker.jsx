@@ -5,12 +5,12 @@ import { useState, useEffect } from "react";
 ═══════════════════════════════════════════════════════════════════════════ */
 
 const COMPANY = {
-  name: "Etablissement de Wilaya de Gestion des Centres d'Enfouissement Technique",
-  short: "EWGCET Jijel",
+  name: "Etablissement Public de Wilaya de Gestion des Centres d'Enfouissement Technique",
+  short: "EPWGCET Jijel",
   wilaya: "Wilaya de Jijel",
   direction: "Direction de l'Environnement",
   phone: "034 48 00 00",
-  email: "contact@ewgcet-jijel.dz",
+  email: "contact@epwgcet-jijel.dz",
   address: "Cité Administrative, Jijel 18000",
   code: "18",
 };
@@ -27,17 +27,17 @@ const COMPANY_FIELDS_DEFAULT = [
 const cof = (co, id) => (Array.isArray(co) ? co : COMPANY_FIELDS_DEFAULT).find(f=>f.id===id)?.value || '';
 
 const SITES_DB_INIT = [
-  { id:"CDM-JIJ", name:"CDM Jijel",     region:"Jijel (Chef-lieu)", type:"CDM", capacity:600000, used:287400, commune:"Jijel",      localisation:"36.8167° N, 5.7667° E", acceptedWaste:["MEN","IND","MED","INE"] },
-  { id:"CDM-TAH", name:"CDM Taher",     region:"Taher",              type:"CDM", capacity:400000, used:156700, commune:"Taher",      localisation:"36.7333° N, 5.9000° E", acceptedWaste:["MEN","IND","INE"] },
-  { id:"CDM-ELM", name:"CDM El Milia",  region:"El Milia",           type:"CDM", capacity:300000, used:198300, commune:"El Milia",   localisation:"36.7500° N, 6.5667° E", acceptedWaste:["MEN","IND"] },
+  { id:"CET-JIJ", name:"CET Jijel",     region:"Jijel (Chef-lieu)", type:"CET", capacity:600000, used:287400, commune:"Jijel",      localisation:"36.8167° N, 5.7667° E", acceptedWaste:["MEN","IND","MED","INE"] },
+  { id:"CET-TAH", name:"CET Taher",     region:"Taher",              type:"CET", capacity:400000, used:156700, commune:"Taher",      localisation:"36.7333° N, 5.9000° E", acceptedWaste:["MEN","IND","INE"] },
+  { id:"CET-ELM", name:"CET El Milia",  region:"El Milia",           type:"CET", capacity:300000, used:198300, commune:"El Milia",   localisation:"36.7500° N, 6.5667° E", acceptedWaste:["MEN","IND"] },
   { id:"CDI-TAS", name:"CDI Tasselemt", region:"Tasselemt",          type:"CDI", capacity:500000, used:89000,  commune:"Tasselemt",  localisation:"36.6833° N, 6.1333° E", acceptedWaste:["INE"] },
 ];
 
 const WASTE_TYPES_INIT = [
-  { id:"MEN", label:"Ménager (DMA)",    price:850,  siteTypes:["CDM"] },
-  { id:"IND", label:"Industriel (DIB)", price:1200, siteTypes:["CDM"] },
-  { id:"MED", label:"Médical (DASRI)",  price:2500, siteTypes:["CDM"] },
-  { id:"INE", label:"Inerte / BTP",     price:600,  siteTypes:["CDI","CDM"] },
+  { id:"MEN", label:"Ménager (DMA)",    price:850,  siteTypes:["CET"] },
+  { id:"IND", label:"Industriel (DIB)", price:1200, siteTypes:["CET"] },
+  { id:"MED", label:"Médical (DASRI)",  price:2500, siteTypes:["CET"] },
+  { id:"INE", label:"Inerte / BTP",     price:600,  siteTypes:["CDI","CET"] },
 ];
 
 const TRUCKS_DB = [
@@ -60,10 +60,10 @@ const CLIENTS_INIT = [
 ];
 
 const USERS_INIT = [
-  { id:"U001", name:"Directeur Administrateur", email:"admin@ewgcet-jijel.dz",     password:"admin123", role:"admin",    status:"active",  phone:"034 48 00 01", matricule:"ADM-001",     siteId:"all",     createdAt:"2024-01-15" },
-  { id:"U002", name:"Karim Boudali",             email:"k.boudali@ewgcet-jijel.dz", password:"op1234",   role:"operator", status:"active",  phone:"0771 23 45 67", matricule:"OP-2024-001", siteId:"CDM-JIJ", createdAt:"2024-03-10" },
-  { id:"U003", name:"Sara Menacer",              email:"s.menacer@ewgcet-jijel.dz", password:"op1234",   role:"operator", status:"active",  phone:"0773 45 67 89", matricule:"OP-2024-002", siteId:"CDM-TAH", createdAt:"2024-03-10" },
-  { id:"U004", name:"Yacine Ferhat",             email:"y.ferhat@ewgcet-jijel.dz",  password:"op1234",   role:"operator", status:"pending", phone:"0774 56 78 90", matricule:"OP-2024-003", siteId:"CDM-ELM", createdAt:"2024-04-20" },
+  { id:"U001", name:"Directeur Administrateur", email:"admin@epwgcet-jijel.dz",     password:"admin123", role:"admin",    status:"active",  phone:"034 48 00 01", matricule:"ADM-001",     siteId:"all",     createdAt:"2024-01-15" },
+  { id:"U002", name:"Karim Boudali",             email:"k.boudali@epwgcet-jijel.dz", password:"op1234",   role:"operator", status:"active",  phone:"0771 23 45 67", matricule:"OP-2024-001", siteId:"CET-JIJ", createdAt:"2024-03-10" },
+  { id:"U003", name:"Sara Menacer",              email:"s.menacer@epwgcet-jijel.dz", password:"op1234",   role:"operator", status:"active",  phone:"0773 45 67 89", matricule:"OP-2024-002", siteId:"CET-TAH", createdAt:"2024-03-10" },
+  { id:"U004", name:"Yacine Ferhat",             email:"y.ferhat@epwgcet-jijel.dz",  password:"op1234",   role:"operator", status:"pending", phone:"0774 56 78 90", matricule:"OP-2024-003", siteId:"CET-ELM", createdAt:"2024-04-20" },
 ];
 
 const DISCHARGES_INIT = [];
@@ -572,7 +572,7 @@ function LoginScreen({onLogin, onRegister, company}) {
         <div className="fg" style={{gap:14}}>
           <div className="field">
             <label>Adresse e-mail</label>
-            <input className="fi" type="email" placeholder="exemple@ewgcet-jijel.dz" value={email}
+            <input className="fi" type="email" placeholder="exemple@epwgcet-jijel.dz" value={email}
               onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
           </div>
           <div className="field">
@@ -596,7 +596,7 @@ function LoginScreen({onLogin, onRegister, company}) {
    REGISTER SCREEN
 ═══════════════════════════════════════════════════════════════════════════ */
 function RegisterScreen({onBack, onRegistered, sites, company}) {
-  const [form, setForm] = useState({name:"",email:"",password:"",phone:"",siteId:"CDM-JIJ"});
+  const [form, setForm] = useState({name:"",email:"",password:"",phone:"",siteId:"CET-JIJ"});
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -646,7 +646,7 @@ function RegisterScreen({onBack, onRegistered, sites, company}) {
             <input className="fi" placeholder="Prénom Nom" value={form.name} onChange={e=>set("name",e.target.value)}/>
           </div>
           <div className="field"><label>Adresse e-mail professionnelle</label>
-            <input className="fi" type="email" placeholder="prenom.nom@ewgcet-jijel.dz" value={form.email} onChange={e=>set("email",e.target.value)}/>
+            <input className="fi" type="email" placeholder="prenom.nom@epwgcet-jijel.dz" value={form.email} onChange={e=>set("email",e.target.value)}/>
           </div>
           <div className="field"><label>Téléphone</label>
             <input className="fi" placeholder="0770 00 00 00" value={form.phone} onChange={e=>set("phone",e.target.value)}/>
@@ -949,7 +949,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
           {kc:"var(--g)",    ic:"💰", l:"Recettes Totales",    v:fmt(totalRev),           s:month},
           {kc:"var(--info)", ic:"⚖️", l:"Tonnage Total",       v:fmtN(totalTons)+" t",    s:discharges.length+" déchargements"},
           {kc:"var(--g2)",   ic:"💵", l:"Recettes Cash",       v:fmt(cashRev),             s:discharges.filter(d=>d.payMethod==="cash").length+" transactions cash"},
-          {kc:"var(--warn)", ic:"🏭", l:"Sites Actifs",        v:String(sites.length),    s:"3 CDM · 1 CDI · Wilaya Jijel"},
+          {kc:"var(--warn)", ic:"🏭", l:"Sites Actifs",        v:String(sites.length),    s:"3 CET · 1 CDI · Wilaya Jijel"},
         ].map(k=>(
           <div key={k.l} className="kpi" style={{"--kc":k.kc}}>
             <div className="kpi-i">{k.ic}</div>
@@ -1683,7 +1683,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     const dateStr = new Date().toISOString().slice(0,10);
-    a.href = url; a.download = `EWGCET-dechargements-${dateStr}.csv`;
+    a.href = url; a.download = `EPWGCET-dechargements-${dateStr}.csv`;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
   };
@@ -3004,8 +3004,8 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
 function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
   const [modal,     setModal]     = useState(false);
   const [editOp,    setEditOp]    = useState(null);
-  const [editForm,  setEditForm]  = useState({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CDM-JIJ"});
-  const [form,      setForm]      = useState({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CDM-JIJ"});
+  const [editForm,  setEditForm]  = useState({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CET-JIJ"});
+  const [form,      setForm]      = useState({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CET-JIJ"});
   const [tab,       setTab]       = useState("active");
   const set    = (k,v) => setForm(f=>({...f,[k]:v}));
   const setEd  = (k,v) => setEditForm(f=>({...f,[k]:v}));
@@ -3023,7 +3023,7 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
     };
     addUser(u);
     setModal(false);
-    setForm({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CDM-JIJ"});
+    setForm({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CET-JIJ"});
   };
 
   const toggleStatus = u => updateUser({...u, status:u.status==="active"?"inactive":u.status==="inactive"?"active":u.status});
@@ -3094,7 +3094,7 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
                 </div>
                 {u.id !== authUser.id && (
                   <div className="fx g2">
-                    <button className="btn bg bsm" style={{flex:1}} onClick={()=>{setEditOp(u);setEditForm({name:u.name,email:u.email,password:"",phone:u.phone||"",matricule:u.matricule||"",siteId:u.siteId||"CDM-JIJ"});}}>
+                    <button className="btn bg bsm" style={{flex:1}} onClick={()=>{setEditOp(u);setEditForm({name:u.name,email:u.email,password:"",phone:u.phone||"",matricule:u.matricule||"",siteId:u.siteId||"CET-JIJ"});}}>
                       ✏️ Modifier
                     </button>
                     <button className={`btn bsm ${u.status==="active"?"be":"bp"}`}
@@ -3165,7 +3165,7 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
                 </div>
                 <div className="fg fg2">
                   <div className="field"><label>Adresse e-mail *</label>
-                    <input className="fi" type="email" value={form.email} onChange={e=>set("email",e.target.value)} placeholder="prenom.nom@ewgcet-jijel.dz"/>
+                    <input className="fi" type="email" value={form.email} onChange={e=>set("email",e.target.value)} placeholder="prenom.nom@epwgcet-jijel.dz"/>
                   </div>
                   <div className="field"><label>Téléphone</label>
                     <input className="fi" value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="0770 00 00 00"/>
@@ -3353,7 +3353,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
     <td style="border:none;vertical-align:top;width:45%">
       <div style="font-size:12px;line-height:2;color:#000">
         <div style="font-size:13.5px;font-weight:bold;margin-bottom:4px">
-          Etablissement de Wilaya de Gestion des Centres d'Enfouissement Technique
+          Etablissement Public de Wilaya de Gestion des Centres d'Enfouissement Technique
         </div>
         <div>Cité Administrative, 01ème Étage, Ayouf Ouest — Jijel</div>
         <div>IF&nbsp;: 000918044299126 &nbsp;·&nbsp; RC&nbsp;: 18/000442991H09</div>
@@ -4207,7 +4207,7 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
                 <input className="fi" value={profileForm.name} onChange={e=>{setProfileForm(f=>({...f,name:e.target.value}));setProfileMsg(null);}} placeholder="Nom et prénom"/>
               </div>
               <div className="field"><label>Adresse e-mail</label>
-                <input className="fi" type="email" value={profileForm.email} onChange={e=>{setProfileForm(f=>({...f,email:e.target.value}));setProfileMsg(null);}} placeholder="email@ewgcet-jijel.dz"/>
+                <input className="fi" type="email" value={profileForm.email} onChange={e=>{setProfileForm(f=>({...f,email:e.target.value}));setProfileMsg(null);}} placeholder="email@epwgcet-jijel.dz"/>
               </div>
               <div className="fg fg2">
                 <div className="field"><label>Téléphone</label>
@@ -4514,7 +4514,7 @@ function PageSchema() {
     ]},
     {name:"SITES",icon:"🏭",color:"var(--warn)",fields:[
       ["site_id","VARCHAR(10)","PK"],["name","VARCHAR(100)",""],
-      ["region","VARCHAR(50)",""],["type","ENUM(CDM,CDI)",""],
+      ["region","VARCHAR(50)",""],["type","ENUM(CET,CDI)",""],
       ["capacity_tons","DECIMAL(10,0)",""],["used_tons","DECIMAL(10,2)",""],
     ]},
     {name:"TRUCKS",icon:"🚛",color:"var(--info)",fields:[
