@@ -1156,11 +1156,10 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const approvedPrepaid    = clients.filter(c=>c.type==="prepaid"&&c.status==="approved"&&siteClientFilter(c));
   const approvedCash       = clients.filter(c=>c.type==="daily"&&c.status==="approved"&&siteClientFilter(c));
 
-  // Collect+Treatment: convention or prepaid clients, approved, serviceType=treat_and_collect, assigned to current site
+  // Collect+Treatment: approved clients with treat_and_collect or both services, assigned to current site
   const treatAndCollectClients = clients.filter(c=>
-    (c.type==="convention"||c.type==="prepaid") &&
     c.status==="approved" &&
-    c.serviceType==="treat_and_collect" &&
+    (c.serviceType==="treat_and_collect"||c.serviceType==="both") &&
     (!(c.assignedSites?.length>0) || c.assignedSites.includes(form.siteId))
   );
   const activeCompanyTrucks = (companyTrucks||[]).filter(t=>t.status==="active");
@@ -3152,19 +3151,28 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     <hr className="dvdr"/>
                     <div className="field">
                       <label>🚛 Type de service EPWGCET <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(admin)</span></label>
-                      <div className="seg" style={{marginTop:6}}>
-                        <button className={`seg-btn${editClientForm.serviceType!=="treat_and_collect"?" active":""}`}
-                          onClick={()=>setEditClientForm(f=>({...f,serviceType:"treatment_only"}))}>
-                          🏭 Traitement uniquement
-                        </button>
-                        <button className={`seg-btn${editClientForm.serviceType==="treat_and_collect"?" active":""}`}
-                          onClick={()=>setEditClientForm(f=>({...f,serviceType:"treat_and_collect"}))}
-                          style={editClientForm.serviceType==="treat_and_collect"?{background:"var(--purple)",borderColor:"var(--purple)",color:"#fff"}:{}}>
+                      <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:8}}>
+                        <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}}>
+                          <input type="checkbox" checked={editClientForm.serviceType==="treatment_only"||editClientForm.serviceType==="both"}
+                            onChange={e=>{
+                              const hasCollect = editClientForm.serviceType==="treat_and_collect"||editClientForm.serviceType==="both";
+                              const hasTraitement = e.target.checked;
+                              setEditClientForm(f=>({...f,serviceType:hasTraitement&&hasCollect?"both":hasTraitement?"treatment_only":hasCollect?"treat_and_collect":"treatment_only"}));
+                            }}/>
+                          🏭 Traitement
+                        </label>
+                        <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}}>
+                          <input type="checkbox" checked={editClientForm.serviceType==="treat_and_collect"||editClientForm.serviceType==="both"}
+                            onChange={e=>{
+                              const hasTraitement = editClientForm.serviceType==="treatment_only"||editClientForm.serviceType==="both";
+                              const hasCollect = e.target.checked;
+                              setEditClientForm(f=>({...f,serviceType:hasTraitement&&hasCollect?"both":hasCollect?"treat_and_collect":hasTraitement?"treatment_only":"treatment_only"}));
+                            }}/>
                           🚛 Collecte et Traitement
-                        </button>
+                        </label>
                       </div>
                     </div>
-                    {editClientForm.serviceType==="treat_and_collect"&&(
+                    {(editClientForm.serviceType==="treat_and_collect"||editClientForm.serviceType==="both")&&(
                       <div className="field">
                         <label>Mode de facturation pour la collecte</label>
                         <div className="seg" style={{marginTop:6}}>
