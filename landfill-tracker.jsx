@@ -1344,7 +1344,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             <button className={`seg-btn${opType==="collect"?" active":""}`}
               onClick={()=>{setOpType("collect");set("clientId","");setHint(null);set("truck","");}}
               style={opType==="collect"?{background:"var(--purple)",borderColor:"var(--purple)",color:"#fff"}:{}}>
-              🚛 Collecte + Traitement
+              🚛 Collecte et Traitement
             </button>
           </div>
         </div>
@@ -1377,7 +1377,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
       <div className="panel">
         <div className="ph">
-          <span className="pt">{opType==="collect"?"🚛 Collecte + Traitement":"🏭 Formulaire de Traitement"}</span>
+          <span className="pt">{opType==="collect"?"🚛 Collecte et Traitement":"🏭 Formulaire de Traitement"}</span>
           <span className="chip chip-dim">{site?.name}</span>
         </div>
         <div style={{padding:20,display:"flex",flexDirection:"column",gap:16}}>
@@ -1446,7 +1446,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             <div className="field">
               {opType==="collect"?(
                 <>
-                  <label>Client (Collecte + Traitement)</label>
+                  <label>Client (Collecte et Traitement)</label>
                   {(() => {
                     const selTruck = activeCompanyTrucks.find(t=>t.plate===form.truck);
                     if (selTruck && selTruck.tare && !form.tare) { setTimeout(()=>set("tare",String(selTruck.tare)),0); }
@@ -1462,7 +1462,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                   </select>
                   {treatAndCollectClients.length===0&&(
                     <div className="alrt ai" style={{marginTop:4,padding:"4px 8px",fontSize:10}}>
-                      <span>ℹ️</span><span>Aucun client Collecte+Traitement pour ce site</span>
+                      <span>ℹ️</span><span>Aucun client Collecte et Traitement pour ce site</span>
                     </div>
                   )}
                 </>
@@ -3160,7 +3160,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                         <button className={`seg-btn${editClientForm.serviceType==="treat_and_collect"?" active":""}`}
                           onClick={()=>setEditClientForm(f=>({...f,serviceType:"treat_and_collect"}))}
                           style={editClientForm.serviceType==="treat_and_collect"?{background:"var(--purple)",borderColor:"var(--purple)",color:"#fff"}:{}}>
-                          🚛 Traitement + Collecte
+                          🚛 Collecte et Traitement
                         </button>
                       </div>
                     </div>
@@ -4520,7 +4520,7 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
         {tab==="tarifs"&&(
           <>
             <div className="settings-title">Grille Tarifaire</div>
-            <div className="settings-sub">4 tarifs par type de déchet — Traitement (tonnage / rotation) et Collecte+Traitement (tonnage / rotation)</div>
+            <div className="settings-sub">4 tarifs par type de déchet — Traitement (tonnage / rotation) et Collecte et Traitement (tonnage / rotation)</div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {wasteTypes.map(w=>{
                 const isEdit = editWT?.id===w.id;
@@ -4546,7 +4546,7 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
                             <span className="tsm tmu">DA/rot.</span>
                           </div>
                         </div>
-                        <div style={{fontSize:11,fontFamily:"var(--mono)",color:"var(--purple)",textTransform:"uppercase",letterSpacing:".08em"}}>🚛 Collecte + Traitement</div>
+                        <div style={{fontSize:11,fontFamily:"var(--mono)",color:"var(--purple)",textTransform:"uppercase",letterSpacing:".08em"}}>🚛 Collecte et Traitement</div>
                         <div className="fx aic g2" style={{flexWrap:"wrap"}}>
                           <div className="fx aic g1">
                             <input className="fi" type="number" style={{width:120}} value={editWT.collectPrice||0}
