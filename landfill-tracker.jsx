@@ -3147,11 +3147,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 <div className="field"><label>Note</label>
                   <textarea className="fi" value={editClientForm.note||""} onChange={e=>setEditClientForm(f=>({...f,note:e.target.value}))} rows={2}/>
                 </div>
-                {(editClientForm.type==="convention"||editClientForm.type==="prepaid")&&(
+                {isAdmin&&(editClientForm.type==="convention"||editClientForm.type==="prepaid")&&(
                   <>
                     <hr className="dvdr"/>
                     <div className="field">
-                      <label>🚛 Type de service EPWGCET</label>
+                      <label>🚛 Type de service EPWGCET <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(admin)</span></label>
                       <div className="seg" style={{marginTop:6}}>
                         <button className={`seg-btn${editClientForm.serviceType!=="treat_and_collect"?" active":""}`}
                           onClick={()=>setEditClientForm(f=>({...f,serviceType:"treatment_only"}))}>
