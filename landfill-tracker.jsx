@@ -3147,7 +3147,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 <div className="field"><label>Note</label>
                   <textarea className="fi" value={editClientForm.note||""} onChange={e=>setEditClientForm(f=>({...f,note:e.target.value}))} rows={2}/>
                 </div>
-                {isAdmin&&(editClientForm.type==="convention"||editClientForm.type==="prepaid")&&(
+                {isAdmin&&(
                   <>
                     <hr className="dvdr"/>
                     <div className="field">
