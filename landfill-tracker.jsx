@@ -2407,6 +2407,12 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   {isAccountType&&cl.status!=="approved"&&(
                     <div style={{fontSize:10,color:"var(--muted)",marginTop:3}}>{cl.clientType==="state"?"🏛 Etat":"🏢 Privé"} · Dossier en cours</div>
                   )}
+                  {(cl.serviceType==="treat_and_collect"||cl.serviceType==="both")&&(
+                    <div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>
+                      {cl.serviceType==="both"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)"}}>🏭 Traitement</span>}
+                      <span style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:"rgba(139,92,246,.1)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)"}}>🚛 Collecte et Traitement</span>
+                    </div>
+                  )}
                   {tab==="cash"&&(
                     <div style={{fontSize:10,color:"var(--muted)",marginTop:3}}>{cl.phone}</div>
                   )}
@@ -2436,6 +2442,9 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     {c.type==="rotation"&&<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Convention Rotation</span>}
                     {c.type==="rotation"&&<ClientStatusBadge s={c.status}/>}
                     {c.type==="convention"&&<ClientStatusBadge s={c.status}/>}
+                    {c.serviceType==="treatment_only"&&<span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:10}}>🏭 Traitement</span>}
+                    {c.serviceType==="treat_and_collect"&&<span className="badge" style={{background:"rgba(139,92,246,.1)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:10}}>🚛 Collecte et Traitement</span>}
+                    {c.serviceType==="both"&&<><span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:10}}>🏭 Traitement</span><span className="badge" style={{background:"rgba(139,92,246,.1)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:10}}>🚛 Collecte et Traitement</span></>}
                     {isAdmin&&(
                       <div className="fx aic g2">
                         <button className="btn bg bsm" style={{fontSize:10,padding:"3px 8px"}}
