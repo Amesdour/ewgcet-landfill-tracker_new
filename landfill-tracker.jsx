@@ -3698,6 +3698,21 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const entries = discharges.filter(d=>d.clientId===selCId&&d.ts.startsWith(month)&&d.status!=="cancelled");
   const totalNet  = entries.reduce((s,d)=>s+d.net,0);
   const totalCost = entries.reduce((s,d)=>s+d.total,0);
+
+  // Group entries into invoice line items by (opType, wasteType, billingMode, unitPrice)
+  const lineItems = Object.values(
+    entries.reduce((acc, d) => {
+      const opT         = d.opType==="collect" ? "collect" : "treatment";
+      const billingMode = d.payMethod==="rotation" ? "rotation" : "tonnage";
+      const wt          = wasteTypes.find(w=>w.id===d.wasteType);
+      const key         = `${opT}|${d.wasteType}|${billingMode}|${d.unitPrice}`;
+      if (!acc[key]) acc[key] = { opType:opT, wtLabel:wt?.label||d.wasteType, billingMode, unitPrice:d.unitPrice||0, qty:0, count:0, total:0 };
+      acc[key].count += 1;
+      acc[key].qty   += billingMode==="rotation" ? 1 : (d.net||0);
+      acc[key].total += d.total||0;
+      return acc;
+    }, {})
+  );
   const invNum    = `FAC-${month.replace("-","")}-${selCId}`;
   const currentInv = invoices.find(i=>i.id===invNum) || invoices.find(i=>i.clientId===selCId&&i.month===month);
 
@@ -4140,49 +4155,69 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
           <div className="tw" style={{padding:"16px 0 0"}}>
             <table>
-              <thead><tr><th>#</th><th>Date</th><th>Site</th><th>Camion</th><th>Type</th><th>Net(t)</th><th>{c.type==="rotation"?"Tarif/rot.":"Tarif/t"}</th><th>Montant</th></tr></thead>
+              <thead>
+                <tr>
+                  <th style={{width:32}}>#</th>
+                  <th>Description de la Prestation</th>
+                  <th style={{textAlign:"right"}}>Quantité</th>
+                  <th style={{textAlign:"right"}}>Prix Unitaire</th>
+                  <th style={{textAlign:"right"}}>Montant (DA)</th>
+                </tr>
+              </thead>
               <tbody>
-                {entries.length===0
-                  ?<tr><td colSpan={8} style={{textAlign:"center",color:"var(--muted)",padding:30}}>Aucun dépôt pour cette période</td></tr>
-                  :entries.map((d,i)=>{
-                    const wt=wasteTypes.find(w=>w.id===d.wasteType);
-                    return (
-                      <tr key={d.id}>
-                        <td className="mn tmu">{i+1}</td>
-                        <td className="mn">{fmtTs(d.ts)}</td>
-                        <td><span className="badge b-info">{d.siteId}</span></td>
-                        <td className="mn">{d.truck}</td>
-                        <td>{wt?.label}</td>
-                        <td className="mn">{fmtN(d.net)}</td>
-                        <td className="mn tmu">{fmt(d.unitPrice)}</td>
-                        <td className="mn fw7">{fmt(d.total)}</td>
-                      </tr>
-                    );
-                  })}
+                {lineItems.length===0
+                  ?<tr><td colSpan={5} style={{textAlign:"center",color:"var(--muted)",padding:30}}>Aucun dépôt pour cette période</td></tr>
+                  :lineItems.map((item,i)=>(
+                    <tr key={i}>
+                      <td className="mn tmu">{i+1}</td>
+                      <td>
+                        <div style={{fontWeight:700,fontSize:12}}>
+                          {item.opType==="collect"
+                            ?<span style={{color:"var(--purple)"}}>🚛 Collecte et Traitement</span>
+                            :<span>🏭 Traitement</span>}
+                          {" — "}{item.wtLabel}
+                        </div>
+                        <div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>
+                          {item.billingMode==="rotation"?"Facturation au passage (Rotation)":"Facturation au poids (Tonnage)"}
+                          {" · "}{item.count} opération{item.count>1?"s":""}
+                        </div>
+                      </td>
+                      <td className="mn" style={{textAlign:"right"}}>
+                        {item.billingMode==="rotation"
+                          ?`${item.qty} rot.`
+                          :`${fmtN(item.qty)} t`}
+                      </td>
+                      <td className="mn tmu" style={{textAlign:"right"}}>
+                        {fmt(item.unitPrice)}{item.billingMode==="rotation"?" /rot.":" /t"}
+                      </td>
+                      <td className="mn fw7" style={{textAlign:"right"}}>{fmt(item.total)}</td>
+                    </tr>
+                  ))
+                }
                 {entries.length>0&&(
                   <>
                     <tr style={{background:"rgba(46,201,92,.04)"}}>
-                      <td colSpan={5} style={{textAlign:"right",fontWeight:700}}>TOTAL HT</td>
-                      <td className="mn fw7 tg">{fmtN(totalNet)} t</td>
+                      <td colSpan={2} style={{textAlign:"right",fontWeight:700}}>TOTAL HT</td>
+                      <td className="mn tmu" style={{textAlign:"right"}}>{fmtN(totalNet)} t</td>
                       <td/>
-                      <td className="mn fw7">{fmt(totalCost)}</td>
+                      <td className="mn fw7" style={{textAlign:"right"}}>{fmt(totalCost)}</td>
                     </tr>
                     {c.vatSubject&&(
                       <>
                         <tr style={{background:"rgba(234,179,8,.06)"}}>
-                          <td colSpan={7} style={{textAlign:"right",color:"var(--warn)",fontWeight:600,fontSize:11}}>TVA 19%</td>
-                          <td className="mn fw7" style={{color:"var(--warn)"}}>{fmt(totalCost*0.19)}</td>
+                          <td colSpan={4} style={{textAlign:"right",color:"var(--warn)",fontWeight:600,fontSize:11}}>TVA 19%</td>
+                          <td className="mn fw7" style={{textAlign:"right",color:"var(--warn)"}}>{fmt(totalCost*0.19)}</td>
                         </tr>
                         <tr style={{background:"rgba(46,201,92,.08)"}}>
-                          <td colSpan={7} style={{textAlign:"right",fontWeight:800}}>TOTAL TTC</td>
-                          <td className="fw8 tg" style={{fontFamily:"var(--head)",fontSize:16}}>{fmt(totalCost*1.19)}</td>
+                          <td colSpan={4} style={{textAlign:"right",fontWeight:800}}>TOTAL TTC</td>
+                          <td className="fw8 tg" style={{fontFamily:"var(--head)",fontSize:16,textAlign:"right"}}>{fmt(totalCost*1.19)}</td>
                         </tr>
                       </>
                     )}
                     {!c.vatSubject&&(
                       <tr style={{background:"rgba(46,201,92,.04)"}}>
-                        <td colSpan={7} style={{textAlign:"right",fontWeight:800}}>NET À PAYER <span style={{fontWeight:400,fontSize:10,color:"var(--muted)"}}>(exonéré TVA)</span></td>
-                        <td className="fw8 tg" style={{fontFamily:"var(--head)",fontSize:16}}>{fmt(totalCost)}</td>
+                        <td colSpan={4} style={{textAlign:"right",fontWeight:800}}>NET À PAYER <span style={{fontWeight:400,fontSize:10,color:"var(--muted)"}}>(exonéré TVA)</span></td>
+                        <td className="fw8 tg" style={{fontFamily:"var(--head)",fontSize:16,textAlign:"right"}}>{fmt(totalCost)}</td>
                       </tr>
                     )}
                   </>
