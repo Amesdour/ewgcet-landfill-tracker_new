@@ -105,6 +105,8 @@ const mapSite = r => ({
 const mapWT = r => ({
   id:r.id, label:r.label, price:parseFloat(r.price)||0,
   rotationPrice:parseFloat(r.rotation_price)||0,
+  collectPrice:parseFloat(r.collect_price)||0,
+  collectRotationPrice:parseFloat(r.collect_rotation_price)||0,
   unit:r.unit||'t', siteTypes:r.site_types||[],
 });
 
@@ -329,8 +331,8 @@ app.put('/api/waste-types/:id', async (req, res) => {
   const w = req.body;
   try {
     await q(
-      'UPDATE waste_types SET label=$1,price=$2,rotation_price=$3,unit=$4,site_types=$5 WHERE id=$6',
-      [w.label,w.price||0,w.rotationPrice||0,w.unit||'t',JSON.stringify(w.siteTypes||[]),w.id]
+      'UPDATE waste_types SET label=$1,price=$2,rotation_price=$3,unit=$4,site_types=$5,collect_price=$6,collect_rotation_price=$7 WHERE id=$8',
+      [w.label,w.price||0,w.rotationPrice||0,w.unit||'t',JSON.stringify(w.siteTypes||[]),w.collectPrice||0,w.collectRotationPrice||0,w.id]
     );
     ok(res, { ok:true });
   } catch(e) { er(res,e); }

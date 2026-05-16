@@ -1221,16 +1221,31 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
     ? (form.truck && form.clientId && (isCollectRotation || gross>tare) && form.wasteType)
     : (form.truck && form.clientId && gross>tare && form.wasteType);
 
+  // Collect-mode pricing
+  const collectUnitPrice     = isCollectRotation ? (wt?.collectRotationPrice??0) : (wt?.collectPrice??0);
+  const collectTotal         = isCollectRotation ? (wt?.collectRotationPrice??0) : net*(wt?.collectPrice??0);
+
   const finalise = method => {
     const effectiveMethod = opType==="collect"
       ? (isCollectRotation ? "rotation" : "convention")
       : method;
+    let unitPrice, finalTotal;
+    if (opType==="collect") {
+      unitPrice  = collectUnitPrice;
+      finalTotal = collectTotal;
+    } else if (effectiveMethod==="rotation") {
+      unitPrice  = wt?.rotationPrice ?? 0;
+      finalTotal = wt?.rotationPrice ?? 0;
+    } else {
+      unitPrice  = wt?.price ?? 0;
+      finalTotal = total;
+    }
     const e = {
       id:uid(), ts:nowIso(), siteId:form.siteId,
       clientId:form.clientId, clientName:client?.name ?? form.clientId,
       truck:form.truck.toUpperCase(), wasteType:form.wasteType, gross, tare, net,
-      unitPrice:effectiveMethod==="rotation"?(wt?.rotationPrice??0):(wt?.price??0),
-      total:effectiveMethod==="rotation"?(wt?.rotationPrice??0):total,
+      unitPrice,
+      total: finalTotal,
       status:wouldExceed?"flagged":effectiveMethod==="cash"?"paid":"settled",
       payMethod:effectiveMethod, opId:authUser.id,
       opType:opType,
@@ -1587,7 +1602,38 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             </select>
           </div>
 
-          {(mode==="rotation"||(isConvWithRotation&&convSubMode==="rotation"))?(
+          {opType==="collect"?(
+            (form.clientId&&form.truck)&&(
+              <div className="cost-box" style={{borderColor:"var(--purple)"}}>
+                <div className="cl">
+                  <span className="clb">Mode</span>
+                  <span className="clv" style={{color:"var(--purple)",fontWeight:700}}>
+                    {isCollectRotation?"🔄 Collecte — Rotation":"⚖️ Collecte — Tonnage"}
+                  </span>
+                </div>
+                {isCollectRotation?(
+                  <>
+                    <div className="cl"><span className="clb">Poids enregistré</span><span className="clv">{fmtN(net)} t</span></div>
+                    <div className="cl ct" style={{borderColor:"var(--purple)"}}>
+                      <span style={{fontSize:13,fontWeight:700,color:"var(--purple)"}}>Prix par passage</span>
+                      <span className="ctv" style={{color:"var(--purple)",fontFamily:"var(--mono)"}}>{fmt(wt?.collectRotationPrice??0)}</span>
+                    </div>
+                  </>
+                ):(
+                  net>0&&(
+                    <>
+                      <div className="cl"><span className="clb">Poids net</span><span className="clv">{fmtN(net)} t</span></div>
+                      <div className="cl"><span className="clb">Tarif collecte ({wt?.label})</span><span className="clv">{fmt(wt?.collectPrice??0)} / t</span></div>
+                      <div className="cl ct" style={{borderColor:"var(--purple)"}}>
+                        <span style={{fontSize:13,fontWeight:700,color:"var(--purple)"}}>Coût Total</span>
+                        <span className="ctv" style={{color:"var(--purple)"}}>{fmt(collectTotal)}</span>
+                      </div>
+                    </>
+                  )
+                )}
+              </div>
+            )
+          ):(mode==="rotation"||(isConvWithRotation&&convSubMode==="rotation"))?(
             net>0&&(
               <div className="cost-box" style={{borderColor:"var(--orange)"}}>
                 <div className="cl"><span className="clb">Poids enregistré</span><span className="clv">{fmtN(net)} t</span></div>
@@ -4474,51 +4520,79 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
         {tab==="tarifs"&&(
           <>
             <div className="settings-title">Grille Tarifaire</div>
-            <div className="settings-sub">Prix par type de déchet — tonnage (DA/t) et rotation (DA/rot.)</div>
+            <div className="settings-sub">4 tarifs par type de déchet — Traitement (tonnage / rotation) et Collecte+Traitement (tonnage / rotation)</div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {wasteTypes.map(w=>{
                 const isEdit = editWT?.id===w.id;
                 return (
                   <div key={w.id} className="card">
-                    <div className="fx aic jsb" style={{flexWrap:"wrap",gap:8}}>
-                      <div>
-                        <div style={{fontWeight:700,fontSize:13}}>{w.label}</div>
-                        <div className="tsm tmu" style={{marginTop:2}}>Sites accepteurs : {w.siteTypes.join(", ")}</div>
-                      </div>
-                      {isEdit?(
+                    <div style={{fontWeight:700,fontSize:13,marginBottom:isEdit?10:6}}>{w.label}
+                      <span className="tsm tmu" style={{fontWeight:400,marginLeft:8}}>Sites : {w.siteTypes.join(", ")}</span>
+                    </div>
+                    {isEdit?(
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        <div style={{fontSize:11,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".08em"}}>🏭 Traitement</div>
                         <div className="fx aic g2" style={{flexWrap:"wrap"}}>
                           <div className="fx aic g1">
-                            <input className="fi" type="number" style={{width:105}} value={editWT.price}
+                            <input className="fi" type="number" style={{width:120}} value={editWT.price}
                               onChange={e=>setEditWT(f=>({...f,price:parseInt(e.target.value)||0}))}
-                              placeholder="Prix/tonne"/>
+                              placeholder="Tonnage"/>
                             <span className="tsm tmu">DA/t</span>
                           </div>
                           <div className="fx aic g1">
-                            <input className="fi" type="number" style={{width:105}} value={editWT.rotationPrice||0}
+                            <input className="fi" type="number" style={{width:120}} value={editWT.rotationPrice||0}
                               onChange={e=>setEditWT(f=>({...f,rotationPrice:parseInt(e.target.value)||0}))}
-                              placeholder="Prix/rotation"/>
+                              placeholder="Rotation"/>
                             <span className="tsm tmu">DA/rot.</span>
                           </div>
-                          <button className="btn bp bsm" onClick={()=>{updateWT(editWT);setEditWT(null);}}>✓</button>
-                          <button className="btn bg bsm" onClick={()=>setEditWT(null)}>✕</button>
                         </div>
-                      ):(
-                        <div className="fx aic g3">
-                          <div className="fx aic g2">
-                            <div style={{textAlign:"right"}}>
-                              <span style={{fontFamily:"var(--head)",fontSize:16,fontWeight:800,color:"var(--g)"}}>{fmt(w.price)}</span>
-                              <span style={{fontSize:10,color:"var(--muted)",fontFamily:"var(--font)"}}>/t</span>
-                            </div>
-                            <div style={{width:1,height:24,background:"var(--bdr)"}}/>
-                            <div style={{textAlign:"right"}}>
-                              <span style={{fontFamily:"var(--head)",fontSize:16,fontWeight:800,color:"var(--orange)"}}>{fmt(w.rotationPrice||0)}</span>
-                              <span style={{fontSize:10,color:"var(--muted)",fontFamily:"var(--font)"}}>/rot.</span>
-                            </div>
+                        <div style={{fontSize:11,fontFamily:"var(--mono)",color:"var(--purple)",textTransform:"uppercase",letterSpacing:".08em"}}>🚛 Collecte + Traitement</div>
+                        <div className="fx aic g2" style={{flexWrap:"wrap"}}>
+                          <div className="fx aic g1">
+                            <input className="fi" type="number" style={{width:120}} value={editWT.collectPrice||0}
+                              onChange={e=>setEditWT(f=>({...f,collectPrice:parseInt(e.target.value)||0}))}
+                              placeholder="Tonnage collecte"/>
+                            <span className="tsm tmu">DA/t</span>
                           </div>
-                          <button className="btn bg bsm" onClick={()=>setEditWT({...w})}>✏️ Modifier</button>
+                          <div className="fx aic g1">
+                            <input className="fi" type="number" style={{width:120}} value={editWT.collectRotationPrice||0}
+                              onChange={e=>setEditWT(f=>({...f,collectRotationPrice:parseInt(e.target.value)||0}))}
+                              placeholder="Rotation collecte"/>
+                            <span className="tsm tmu">DA/rot.</span>
+                          </div>
                         </div>
-                      )}
-                    </div>
+                        <div className="fx g2">
+                          <button className="btn bp bsm" onClick={()=>{updateWT(editWT);setEditWT(null);}}>✓ Sauvegarder</button>
+                          <button className="btn bg bsm" onClick={()=>setEditWT(null)}>Annuler</button>
+                        </div>
+                      </div>
+                    ):(
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",justifyContent:"space-between"}}>
+                        <div className="fg fg2" style={{flex:1,gap:8}}>
+                          <div className="card-sm" style={{borderTop:"2px solid var(--g)"}}>
+                            <div style={{fontSize:9,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:4}}>🏭 Traitement / Tonnage</div>
+                            <span style={{fontFamily:"var(--head)",fontSize:15,fontWeight:800,color:"var(--g)"}}>{fmt(w.price)}</span>
+                            <span style={{fontSize:10,color:"var(--muted)"}}> /t</span>
+                          </div>
+                          <div className="card-sm" style={{borderTop:"2px solid var(--orange)"}}>
+                            <div style={{fontSize:9,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:4}}>🏭 Traitement / Rotation</div>
+                            <span style={{fontFamily:"var(--head)",fontSize:15,fontWeight:800,color:"var(--orange)"}}>{fmt(w.rotationPrice||0)}</span>
+                            <span style={{fontSize:10,color:"var(--muted)"}}> /rot.</span>
+                          </div>
+                          <div className="card-sm" style={{borderTop:"2px solid var(--purple)"}}>
+                            <div style={{fontSize:9,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:4}}>🚛 Collecte / Tonnage</div>
+                            <span style={{fontFamily:"var(--head)",fontSize:15,fontWeight:800,color:"var(--purple)"}}>{fmt(w.collectPrice||0)}</span>
+                            <span style={{fontSize:10,color:"var(--muted)"}}> /t</span>
+                          </div>
+                          <div className="card-sm" style={{borderTop:"2px solid var(--info)"}}>
+                            <div style={{fontSize:9,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".08em",marginBottom:4}}>🚛 Collecte / Rotation</div>
+                            <span style={{fontFamily:"var(--head)",fontSize:15,fontWeight:800,color:"var(--info)"}}>{fmt(w.collectRotationPrice||0)}</span>
+                            <span style={{fontSize:10,color:"var(--muted)"}}> /rot.</span>
+                          </div>
+                        </div>
+                        <button className="btn bg bsm" onClick={()=>setEditWT({...w})}>✏️ Modifier</button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
