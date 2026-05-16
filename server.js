@@ -64,6 +64,11 @@ const mapDischarge = r => ({
   unitPrice:parseFloat(r.unit_price), total:parseFloat(r.total), status:r.status,
   payMethod:r.pay_method, opId:r.op_id,
   correctionReason:r.correction_reason||'',
+  opType:r.op_type||'treatment',
+});
+
+const mapCompanyTruck = r => ({
+  id:r.id, plate:r.plate, label:r.label||'', tare:parseFloat(r.tare)||0, status:r.status||'active',
 });
 
 const mapClient = r => ({
@@ -79,6 +84,8 @@ const mapClient = r => ({
   docs:r.docs||[], note:r.note||'',
   vatSubject:r.vat_subject||false,
   assignedSites:r.assigned_sites||[],
+  serviceType:r.service_type||'treatment_only',
+  collectBillingMode:r.collect_billing_mode||'tonnage',
 });
 
 const mapUser = r => ({
@@ -121,10 +128,10 @@ app.post('/api/discharges', async (req, res) => {
   const d = req.body;
   try {
     await q(
-      `INSERT INTO discharges(id,ts,site_id,client_id,client_name,truck,waste_type,gross,tare,net,unit_price,total,status,pay_method,op_id)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      `INSERT INTO discharges(id,ts,site_id,client_id,client_name,truck,waste_type,gross,tare,net,unit_price,total,status,pay_method,op_id,op_type)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
       [d.id,d.ts,d.siteId,d.clientId,d.clientName,d.truck,d.wasteType,
-       d.gross,d.tare,d.net,d.unitPrice,d.total,d.status,d.payMethod,d.opId]
+       d.gross,d.tare,d.net,d.unitPrice,d.total,d.status,d.payMethod,d.opId,d.opType||'treatment']
     );
     if ((d.payMethod==='convention'||d.payMethod==='credit'||d.payMethod==='prepaid') && d.clientId) {
       await q('UPDATE clients SET consumed=consumed+$1 WHERE id=$2',[d.total,d.clientId]);
@@ -146,10 +153,10 @@ app.put('/api/discharges/:id', async (req, res) => {
       await q(
         `UPDATE discharges SET truck=$1,waste_type=$2,gross=$3,tare=$4,net=$5,
          unit_price=$6,total=$7,status=$8,pay_method=$9,site_id=$10,ts=$11,
-         correction_reason=$12 WHERE id=$13`,
+         correction_reason=$12,op_type=$13 WHERE id=$14`,
         [d.truck,d.wasteType,d.gross,d.tare,d.net,d.unitPrice,
          d.total,d.status,d.payMethod,d.siteId,d.ts,
-         d.correctionReason||'',req.params.id]
+         d.correctionReason||'',d.opType||'treatment',req.params.id]
       );
       // Adjust client consumed if billing type is account-based
       if (oldD) {
@@ -196,13 +203,14 @@ app.post('/api/clients', async (req, res) => {
   const c = req.body;
   try {
     await q(
-      `INSERT INTO clients(id,name,client_type,type,status,credit_limit,consumed,credit_enabled,weight_limit_year,pay_frequency,pay_instrument,phone,address,nif,rc,docs,note,vat_subject,assigned_sites)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) ON CONFLICT(id) DO NOTHING`,
+      `INSERT INTO clients(id,name,client_type,type,status,credit_limit,consumed,credit_enabled,weight_limit_year,pay_frequency,pay_instrument,phone,address,nif,rc,docs,note,vat_subject,assigned_sites,service_type,collect_billing_mode)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) ON CONFLICT(id) DO NOTHING`,
       [c.id,c.name,c.clientType,c.type,c.status,c.creditLimit||0,0,
        c.creditEnabled||false,c.weightLimitYear||0,
        c.payFrequency||'monthly',c.payInstrument||'cheque',
        c.phone||'',c.address||'',c.nif||'',c.rc||'',JSON.stringify(c.docs||[]),c.note||'',
-       c.vatSubject||false,JSON.stringify(c.assignedSites||[])]
+       c.vatSubject||false,JSON.stringify(c.assignedSites||[]),
+       c.serviceType||'treatment_only',c.collectBillingMode||'tonnage']
     );
     ok(res, { ok:true });
   } catch(e) { er(res,e); }
@@ -215,12 +223,13 @@ app.put('/api/clients/:id', async (req, res) => {
       `UPDATE clients SET name=$1,client_type=$2,type=$3,status=$4,credit_limit=$5,
        credit_enabled=$6,weight_limit_year=$7,pay_frequency=$8,pay_instrument=$9,
        phone=$10,address=$11,nif=$12,rc=$13,docs=$14,note=$15,vat_subject=$16,
-       assigned_sites=$17,rotation_limit=$18 WHERE id=$19`,
+       assigned_sites=$17,rotation_limit=$18,service_type=$19,collect_billing_mode=$20 WHERE id=$21`,
       [c.name,c.clientType,c.type,c.status,c.creditLimit||0,
        c.creditEnabled||false,c.weightLimitYear||0,
        c.payFrequency||'monthly',c.payInstrument||'cheque',
        c.phone||'',c.address||'',c.nif||'',c.rc||'',JSON.stringify(c.docs||[]),c.note||'',
-       c.vatSubject||false,JSON.stringify(c.assignedSites||[]),c.rotationLimit||0,req.params.id]
+       c.vatSubject||false,JSON.stringify(c.assignedSites||[]),c.rotationLimit||0,
+       c.serviceType||'treatment_only',c.collectBillingMode||'tonnage',req.params.id]
     );
     ok(res, { ok:true });
   } catch(e) { er(res,e); }
@@ -389,6 +398,43 @@ app.post('/api/auth/change-password', async (req, res) => {
     ok(res, { ok: true });
   } catch(e) { er(res,e); }
 });
+/* ─── COMPANY TRUCKS ──────────────────────────────────────────────────────── */
+app.get('/api/company-trucks', async (req, res) => {
+  try {
+    const { rows } = await q('SELECT * FROM company_trucks ORDER BY plate');
+    ok(res, rows.map(mapCompanyTruck));
+  } catch(e) { er(res,e); }
+});
+
+app.post('/api/company-trucks', async (req, res) => {
+  const t = req.body;
+  try {
+    await q(
+      `INSERT INTO company_trucks(id,plate,label,tare,status) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING`,
+      [t.id, t.plate.toUpperCase(), t.label||'', t.tare||0, t.status||'active']
+    );
+    ok(res, { ok:true });
+  } catch(e) { er(res,e); }
+});
+
+app.put('/api/company-trucks/:id', async (req, res) => {
+  const t = req.body;
+  try {
+    await q(
+      `UPDATE company_trucks SET plate=$1,label=$2,tare=$3,status=$4 WHERE id=$5`,
+      [t.plate.toUpperCase(), t.label||'', t.tare||0, t.status||'active', req.params.id]
+    );
+    ok(res, { ok:true });
+  } catch(e) { er(res,e); }
+});
+
+app.delete('/api/company-trucks/:id', async (req, res) => {
+  try {
+    await q('DELETE FROM company_trucks WHERE id=$1',[req.params.id]);
+    ok(res, { ok:true });
+  } catch(e) { er(res,e); }
+});
+
 // Serve built frontend in production
 if (IS_PROD) {
   const distPath = join(__dirname, 'dist');

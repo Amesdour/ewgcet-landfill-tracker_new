@@ -687,6 +687,7 @@ export default function App() {
   const [loading,     setLoading]     = useState(true);
   const [invoices,    setInvoices]    = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [companyTrucks, setCompanyTrucks] = useState([]);
   const [docTypes,    setDocTypes]    = useState(() => {
     try { return JSON.parse(localStorage.getItem('ewgcet_docTypes')) || {private:[...REQUIRED_DOCS_PRIVATE],state:[...REQUIRED_DOCS_STATE]}; }
     catch { return {private:[...REQUIRED_DOCS_PRIVATE],state:[...REQUIRED_DOCS_STATE]}; }
@@ -711,13 +712,15 @@ export default function App() {
       fetch('/api/users').then(r=>r.json()),
       fetch('/api/discharges').then(r=>r.json()),
       fetch('/api/invoices').then(r=>r.json()),
-    ]).then(([s,wt,c,u,d,inv])=>{
+      fetch('/api/company-trucks').then(r=>r.json()),
+    ]).then(([s,wt,c,u,d,inv,ct])=>{
       setSites(Array.isArray(s)?s:[]);
       setWasteTypes(Array.isArray(wt)?wt:[]);
       setClients(Array.isArray(c)?c:[]);
       setUsers(Array.isArray(u)?u:[]);
       setDischarges(Array.isArray(d)?d:[]);
       setInvoices(Array.isArray(inv)?inv:[]);
+      setCompanyTrucks(Array.isArray(ct)?ct:[]);
       setLoading(false);
     }).catch(()=>setLoading(false));
   },[]);
@@ -795,6 +798,18 @@ export default function App() {
   const updateWT     = async wt => {
     await fetch(`/api/waste-types/${wt.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(wt)});
     setWasteTypes(p=>p.map(x=>x.id===wt.id?wt:x));
+  };
+  const addCompanyTruck    = async t => {
+    await fetch('/api/company-trucks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(t)});
+    setCompanyTrucks(p=>[...p,t]);
+  };
+  const updateCompanyTruck = async t => {
+    await fetch(`/api/company-trucks/${t.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(t)});
+    setCompanyTrucks(p=>p.map(x=>x.id===t.id?t:x));
+  };
+  const deleteCompanyTruck = async id => {
+    await fetch(`/api/company-trucks/${id}`,{method:'DELETE'});
+    setCompanyTrucks(p=>p.filter(t=>t.id!==id));
   };
   const addInvoice = async inv => {
     await fetch('/api/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(inv)});
@@ -882,12 +897,12 @@ export default function App() {
           </div>
           <div className="content">
             {page==="dashboard"  && <PageDashboard discharges={discharges} clients={clients} sites={sites} wasteTypes={wasteTypes} setPage={setPage}/>}
-            {page==="gate"       && <PageGate addDischarge={addDischarge} addClient={addClient} clients={clients} sites={sites} wasteTypes={wasteTypes} discharges={discharges} authUser={authUser} isAdmin={isAdmin} company={company}/>}
+            {page==="gate"       && <PageGate addDischarge={addDischarge} addClient={addClient} clients={clients} sites={sites} wasteTypes={wasteTypes} discharges={discharges} authUser={authUser} isAdmin={isAdmin} company={company} companyTrucks={companyTrucks}/>}
             {page==="discharges" && <PageDischarges discharges={discharges} setDischarges={setDischarges} sites={sites} wasteTypes={wasteTypes} users={users} clients={clients} updateClient={updateClient} updateDischarge={updateDischarge} isAdmin={isAdmin} authUser={authUser} company={company}/>}
             {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites}/>}
             {page==="operators"  && <PageOperators users={users} sites={sites} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} authUser={authUser}/>}
             {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} company={company}/>}
-            {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany}/>}
+            {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany} companyTrucks={companyTrucks} addCompanyTruck={addCompanyTruck} updateCompanyTruck={updateCompanyTruck} deleteCompanyTruck={deleteCompanyTruck}/>}
             {page==="schema"     && <PageSchema/>}
           </div>
           <nav className="mobile-bottom-nav">
@@ -1095,11 +1110,12 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
 /* ═══════════════════════════════════════════════════════════════════════════
    GATE — SAISIE OPÉRATEUR
 ═══════════════════════════════════════════════════════════════════════════ */
-function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharges, authUser, company}) {
+function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharges, authUser, company, companyTrucks}) {
   const isAdmin = authUser.role === "admin";
   const defaultSite = isAdmin ? sites[0]?.id : authUser.siteId;
 
-  const [mode,         setMode]         = useState("convention"); // "convention" | "cash"
+  const [mode,         setMode]         = useState("convention"); // "convention" | "rotation" | "prepaid" | "cash"
+  const [opType,       setOpType]       = useState("treatment");  // "treatment" | "collect"
   const [step,         setStep]         = useState(1);
   const [form,         setForm]         = useState({siteId:defaultSite, truck:"", clientId:"", wasteType:"", gross:"", tare:""});
   const [payModal,     setPayModal]     = useState(false);
@@ -1139,6 +1155,15 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const approvedCredit     = clients.filter(c=>c.status==="approved"&&c.creditEnabled&&siteClientFilter(c));
   const approvedPrepaid    = clients.filter(c=>c.type==="prepaid"&&c.status==="approved"&&siteClientFilter(c));
   const approvedCash       = clients.filter(c=>c.type==="daily"&&c.status==="approved"&&siteClientFilter(c));
+
+  // Collect+Treatment: convention or prepaid clients, approved, serviceType=treat_and_collect, assigned to current site
+  const treatAndCollectClients = clients.filter(c=>
+    (c.type==="convention"||c.type==="prepaid") &&
+    c.status==="approved" &&
+    c.serviceType==="treat_and_collect" &&
+    (!(c.assignedSites?.length>0) || c.assignedSites.includes(form.siteId))
+  );
+  const activeCompanyTrucks = (companyTrucks||[]).filter(t=>t.status==="active");
 
   const onTruck = plate => {
     set("truck", plate);
@@ -1191,17 +1216,24 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const weightPct   = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
   const rotationPct = isRotationClient && client.weightLimitYear>0 ? Math.round((usedRotations/client.weightLimitYear)*100) : 0;
   const limitBlocked = !isAdmin && wouldExceed;
-  const canSubmit = form.truck && form.clientId && gross>tare && form.wasteType;
+  const isCollectRotation = opType==="collect" && client?.collectBillingMode==="rotation";
+  const canSubmit = opType==="collect"
+    ? (form.truck && form.clientId && (isCollectRotation || gross>tare) && form.wasteType)
+    : (form.truck && form.clientId && gross>tare && form.wasteType);
 
   const finalise = method => {
+    const effectiveMethod = opType==="collect"
+      ? (isCollectRotation ? "rotation" : "convention")
+      : method;
     const e = {
       id:uid(), ts:nowIso(), siteId:form.siteId,
       clientId:form.clientId, clientName:client?.name ?? form.clientId,
       truck:form.truck.toUpperCase(), wasteType:form.wasteType, gross, tare, net,
-      unitPrice:method==="rotation"?(wt?.rotationPrice??0):(wt?.price??0),
-      total:method==="rotation"?(wt?.rotationPrice??0):total,
-      status:wouldExceed?"flagged":method==="cash"?"paid":"settled",
-      payMethod:method, opId:authUser.id,
+      unitPrice:effectiveMethod==="rotation"?(wt?.rotationPrice??0):(wt?.price??0),
+      total:effectiveMethod==="rotation"?(wt?.rotationPrice??0):total,
+      status:wouldExceed?"flagged":effectiveMethod==="cash"?"paid":"settled",
+      payMethod:effectiveMethod, opId:authUser.id,
+      opType:opType,
     };
     addDischarge(e);
     setLastEntry(e);
@@ -1212,7 +1244,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
   const reset = () => {
     setForm({siteId:defaultSite, truck:"", clientId:"", wasteType:validWasteTypes[0]?.id||"", gross:"", tare:""});
-    setStep(1); setLastEntry(null); setHint(null); setMode("convention"); setConvSubMode("tonnage");
+    setStep(1); setLastEntry(null); setHint(null); setMode("convention"); setConvSubMode("tonnage"); setOpType("treatment");
   };
 
   const handleAddCashClient = () => {
@@ -1285,7 +1317,26 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
         ))}
       </div>
 
-      {/* Mode toggle */}
+      {/* Operation type toggle */}
+      {(treatAndCollectClients.length>0||opType==="collect")&&(
+        <div className="gate-mode">
+          <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>Type d'opération</div>
+          <div className="seg">
+            <button className={`seg-btn${opType==="treatment"?" active":""}`}
+              onClick={()=>{setOpType("treatment");set("clientId","");setHint(null);}}>
+              🏭 Traitement
+            </button>
+            <button className={`seg-btn${opType==="collect"?" active":""}`}
+              onClick={()=>{setOpType("collect");set("clientId","");setHint(null);set("truck","");}}
+              style={opType==="collect"?{background:"var(--purple)",borderColor:"var(--purple)",color:"#fff"}:{}}>
+              🚛 Collecte + Traitement
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mode toggle (treatment only) */}
+      {opType==="treatment"&&(
       <div className="gate-mode">
         <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>Type de client</div>
         <div className="seg">
@@ -1307,10 +1358,11 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           </button>
         </div>
       </div>
+      )}
 
       <div className="panel">
         <div className="ph">
-          <span className="pt">🚛 Formulaire de Dépôt</span>
+          <span className="pt">{opType==="collect"?"🚛 Collecte + Traitement":"🏭 Formulaire de Traitement"}</span>
           <span className="chip chip-dim">{site?.name}</span>
         </div>
         <div style={{padding:20,display:"flex",flexDirection:"column",gap:16}}>
@@ -1353,26 +1405,81 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           <hr className="dvdr" style={{margin:"2px 0"}}/>
 
           <div className="fg fg2">
-            <div className="field"><label>N° Plaque / Scan QR 📷</label>
-              <input className="fi" placeholder="ex: 18-TRK-001" value={form.truck} onChange={e=>onTruck(e.target.value)}/>
+            <div className="field">
+              {opType==="collect"?(
+                <>
+                  <label>Camion EPWGCET</label>
+                  <select className="fi" value={form.truck} onChange={e=>set("truck",e.target.value)}>
+                    <option value="">-- Sélectionner un camion --</option>
+                    {activeCompanyTrucks.map(t=>(
+                      <option key={t.id} value={t.plate}>{t.plate}{t.label?` — ${t.label}`:""}{t.tare?` (tare: ${t.tare}t)`:""}</option>
+                    ))}
+                  </select>
+                  {activeCompanyTrucks.length===0&&(
+                    <div className="alrt ae" style={{marginTop:4,padding:"4px 8px",fontSize:10}}>
+                      <span>⚠</span><span>Aucun camion actif — ajoutez des camions dans Paramètres → Flotte</span>
+                    </div>
+                  )}
+                </>
+              ):(
+                <>
+                  <label>N° Plaque / Scan QR 📷</label>
+                  <input className="fi" placeholder="ex: 18-TRK-001" value={form.truck} onChange={e=>onTruck(e.target.value)}/>
+                </>
+              )}
             </div>
             <div className="field">
-              <label>
-                {mode==="convention"?"Client Convention Tonnes":mode==="rotation"?"Client Convention Rotation":mode==="credit"?"Client Crédit":"Client Cash"}
-                {mode==="cash"&&(
-                  <span style={{marginLeft:8,cursor:"pointer",color:"var(--g)",fontSize:9}} onClick={()=>setNewCashModal(true)}>
-                    + Nouveau client cash
-                  </span>
-                )}
-              </label>
-              <select className="fi" value={form.clientId} onChange={e=>set("clientId",e.target.value)}>
-                <option value="">-- Sélectionner --</option>
-                {(mode==="convention"?approvedConvention:mode==="rotation"?approvedRotation:mode==="credit"?approvedCredit:mode==="prepaid"?approvedPrepaid:approvedCash).map(c=>(
-                  <option key={c.id} value={c.id}>{c.name}{(mode==="convention"||mode==="rotation"||mode==="credit")?` [${c.clientType==="state"?"État":"Privé"}]`:""}</option>
-                ))}
-              </select>
+              {opType==="collect"?(
+                <>
+                  <label>Client (Collecte + Traitement)</label>
+                  {(() => {
+                    const selTruck = activeCompanyTrucks.find(t=>t.plate===form.truck);
+                    if (selTruck && selTruck.tare && !form.tare) { setTimeout(()=>set("tare",String(selTruck.tare)),0); }
+                    return null;
+                  })()}
+                  <select className="fi" value={form.clientId} onChange={e=>set("clientId",e.target.value)}>
+                    <option value="">-- Sélectionner --</option>
+                    {treatAndCollectClients.map(c=>(
+                      <option key={c.id} value={c.id}>
+                        {c.name} [{c.collectBillingMode==="rotation"?"Rotation":"Tonnage"}]
+                      </option>
+                    ))}
+                  </select>
+                  {treatAndCollectClients.length===0&&(
+                    <div className="alrt ai" style={{marginTop:4,padding:"4px 8px",fontSize:10}}>
+                      <span>ℹ️</span><span>Aucun client Collecte+Traitement pour ce site</span>
+                    </div>
+                  )}
+                </>
+              ):(
+                <>
+                  <label>
+                    {mode==="convention"?"Client Convention Tonnes":mode==="rotation"?"Client Convention Rotation":mode==="credit"?"Client Crédit":"Client Cash"}
+                    {mode==="cash"&&(
+                      <span style={{marginLeft:8,cursor:"pointer",color:"var(--g)",fontSize:9}} onClick={()=>setNewCashModal(true)}>
+                        + Nouveau client cash
+                      </span>
+                    )}
+                  </label>
+                  <select className="fi" value={form.clientId} onChange={e=>set("clientId",e.target.value)}>
+                    <option value="">-- Sélectionner --</option>
+                    {(mode==="convention"?approvedConvention:mode==="rotation"?approvedRotation:mode==="credit"?approvedCredit:mode==="prepaid"?approvedPrepaid:approvedCash).map(c=>(
+                      <option key={c.id} value={c.id}>{c.name}{(mode==="convention"||mode==="rotation"||mode==="credit")?` [${c.clientType==="state"?"État":"Privé"}]`:""}</option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
           </div>
+          {/* Collect mode: billing info badge */}
+          {opType==="collect"&&client&&(
+            <div className="alrt ai" style={{padding:"6px 12px"}}>
+              <span>🚛</span>
+              <span style={{fontSize:11}}>
+                Mode de facturation : <strong>{client.collectBillingMode==="rotation"?"Par rotation (prix fixe par passage)":"Au tonnage (prix/tonne)"}</strong>
+              </span>
+            </div>
+          )}
 
           {hint&&(
             <div className="alrt ao" style={{marginBottom:0}}>
@@ -1542,10 +1649,16 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           )}
           <button className="btn bp bfw"
             style={{fontSize:15,padding:12,opacity:limitBlocked?.45:1,cursor:limitBlocked?"not-allowed":"pointer",
-              ...(isConvWithRotation&&convSubMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)"}:{})}}
+              ...(opType==="collect"?{background:"var(--purple)",borderColor:"var(--purple)"}:
+                  isConvWithRotation&&convSubMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)"}:{})}}
             disabled={!canSubmit||limitBlocked}
-            onClick={()=>mode==="cash"?setPayModal(true):finalise(isConvWithRotation&&convSubMode==="rotation"?"rotation":mode)}>
+            onClick={()=>{
+              if (opType==="collect") { finalise(""); return; }
+              if (mode==="cash") { setPayModal(true); return; }
+              finalise(isConvWithRotation&&convSubMode==="rotation"?"rotation":mode);
+            }}>
             {limitBlocked?"🚫 Entrée bloquée — Limite atteinte"
+              :opType==="collect"?(isCollectRotation?"🚛 Enregistrer Collecte (Rotation) & Ouvrir Barrière →":"🚛 Enregistrer Collecte (Tonnage) & Ouvrir Barrière →")
               :mode==="cash"?"💵 Procéder au Paiement Cash →"
               :mode==="prepaid"?"🎫 Consommer Bonus & Ouvrir Barrière →"
               :mode==="rotation"?"🔄 Enregistrer Rotation & Ouvrir Barrière →"
@@ -2988,6 +3101,41 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 <div className="field"><label>Note</label>
                   <textarea className="fi" value={editClientForm.note||""} onChange={e=>setEditClientForm(f=>({...f,note:e.target.value}))} rows={2}/>
                 </div>
+                {isAdmin&&(editClientForm.type==="convention"||editClientForm.type==="prepaid")&&(
+                  <>
+                    <hr className="dvdr"/>
+                    <div className="field">
+                      <label>🚛 Type de service EPWGCET <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(admin)</span></label>
+                      <div className="seg" style={{marginTop:6}}>
+                        <button className={`seg-btn${editClientForm.serviceType!=="treat_and_collect"?" active":""}`}
+                          onClick={()=>setEditClientForm(f=>({...f,serviceType:"treatment_only"}))}>
+                          🏭 Traitement uniquement
+                        </button>
+                        <button className={`seg-btn${editClientForm.serviceType==="treat_and_collect"?" active":""}`}
+                          onClick={()=>setEditClientForm(f=>({...f,serviceType:"treat_and_collect"}))}
+                          style={editClientForm.serviceType==="treat_and_collect"?{background:"var(--purple)",borderColor:"var(--purple)",color:"#fff"}:{}}>
+                          🚛 Traitement + Collecte
+                        </button>
+                      </div>
+                    </div>
+                    {editClientForm.serviceType==="treat_and_collect"&&(
+                      <div className="field">
+                        <label>Mode de facturation pour la collecte</label>
+                        <div className="seg" style={{marginTop:6}}>
+                          <button className={`seg-btn${editClientForm.collectBillingMode!=="rotation"?" active":""}`}
+                            onClick={()=>setEditClientForm(f=>({...f,collectBillingMode:"tonnage"}))}>
+                            ⚖️ Tonnage (prix/tonne)
+                          </button>
+                          <button className={`seg-btn${editClientForm.collectBillingMode==="rotation"?" active":""}`}
+                            onClick={()=>setEditClientForm(f=>({...f,collectBillingMode:"rotation"}))}
+                            style={editClientForm.collectBillingMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)",color:"#fff"}:{}}>
+                            🔄 Rotation (prix fixe/passage)
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             </div>
             <div className="mf"><button className="btn bg" onClick={()=>{setModal(false);setEditClientForm(null);}}>Annuler</button><button className="btn bp" disabled={!editClientForm.name} onClick={doEditClient}>✓ Enregistrer</button></div>
@@ -4068,7 +4216,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 /* ═══════════════════════════════════════════════════════════════════════════
    SETTINGS
 ═══════════════════════════════════════════════════════════════════════════ */
-function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,setAuthUser,docTypes,updateDocTypes,company,updateCompany}) {
+function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,setAuthUser,docTypes,updateDocTypes,company,updateCompany,companyTrucks,addCompanyTruck,updateCompanyTruck,deleteCompanyTruck}) {
+  const isAdmin = authUser.role==="admin";
   const [tab, setTab] = useState("general");
   const [editWT, setEditWT] = useState(null);
   const [editSite, setEditSite] = useState(null);
@@ -4080,12 +4229,16 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
   const [companyEdit, setCompanyEdit] = useState(company ? [...company] : [...COMPANY_FIELDS_DEFAULT]);
   const [companyMsg, setCompanyMsg] = useState(null);
   const [newCompanyField, setNewCompanyField] = useState({label:"",value:""});
+  const [truckForm, setTruckForm] = useState({plate:"",label:"",tare:"",status:"active"});
+  const [editTruck, setEditTruck] = useState(null);
+  const [truckMsg, setTruckMsg] = useState(null);
 
   const settingsNav = [
     {id:"general",   ic:"🏢", lbl:"Informations générales"},
     {id:"profile",   ic:"👤", lbl:"Mon Profil"},
     {id:"sites",     ic:"🏭", lbl:"Sites CET"},
     {id:"tarifs",    ic:"💰", lbl:"Tarifs & Tarification"},
+    {id:"fleet",     ic:"🚛", lbl:"Flotte EPWGCET"},
     {id:"documents", ic:"📋", lbl:"Types de documents"},
     {id:"security",  ic:"🔐", lbl:"Sécurité du compte"},
     {id:"about",     ic:"ℹ️", lbl:"À propos"},
@@ -4373,6 +4526,91 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
             <div className="alrt ai mt4" style={{marginTop:16,marginBottom:0}}>
               <span>ℹ️</span>
               <span style={{fontSize:11}}>Les modifications tarifaires s'appliquent aux nouveaux déchargements uniquement. Les relevés existants conservent les prix en vigueur lors de la saisie.</span>
+            </div>
+          </>
+        )}
+
+        {tab==="fleet"&&(
+          <>
+            <div className="settings-title">Flotte EPWGCET</div>
+            <div className="settings-sub">Gérer les camions de collecte de l'entreprise</div>
+            {truckMsg&&(
+              <div className={`alrt ${truckMsg.t==="ok"?"ao":"ae"}`} style={{marginBottom:14}}>
+                <span>{truckMsg.t==="ok"?"✅":"⚠"}</span><span>{truckMsg.m}</span>
+              </div>
+            )}
+            {/* Truck list */}
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+              {(companyTrucks||[]).length===0&&(
+                <div style={{fontSize:12,color:"var(--muted)",padding:"8px 0"}}>Aucun camion enregistré.</div>
+              )}
+              {(companyTrucks||[]).map(t=>{
+                const isEdit = editTruck?.id===t.id;
+                return (
+                  <div key={t.id} className="card" style={{padding:"12px 16px"}}>
+                    {isEdit?(
+                      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                        <div className="fg fg3">
+                          <div className="field"><label>Immatriculation *</label>
+                            <input className="fi" value={editTruck.plate} onChange={e=>setEditTruck(f=>({...f,plate:e.target.value.toUpperCase()}))} placeholder="ex: 18-TRK-001"/>
+                          </div>
+                          <div className="field"><label>Désignation</label>
+                            <input className="fi" value={editTruck.label||""} onChange={e=>setEditTruck(f=>({...f,label:e.target.value}))} placeholder="ex: Benne n°3"/>
+                          </div>
+                          <div className="field"><label>Tare (t)</label>
+                            <input className="fi" type="number" step="0.1" min="0" value={editTruck.tare||""} onChange={e=>setEditTruck(f=>({...f,tare:parseFloat(e.target.value)||0}))} placeholder="0.0"/>
+                          </div>
+                        </div>
+                        <div className="field"><label>Statut</label>
+                          <div className="seg" style={{marginTop:4}}>
+                            <button className={`seg-btn${editTruck.status==="active"?" active":""}`} onClick={()=>setEditTruck(f=>({...f,status:"active"}))}>✅ Actif</button>
+                            <button className={`seg-btn${editTruck.status!=="active"?" active":""}`} onClick={()=>setEditTruck(f=>({...f,status:"inactive"}))}>⏸ Inactif</button>
+                          </div>
+                        </div>
+                        <div className="fx g2">
+                          <button className="btn bp bsm" onClick={()=>{updateCompanyTruck(editTruck);setEditTruck(null);setTruckMsg({t:"ok",m:"Camion mis à jour."});setTimeout(()=>setTruckMsg(null),3000);}}>✓ Sauvegarder</button>
+                          <button className="btn bg bsm" onClick={()=>setEditTruck(null)}>Annuler</button>
+                        </div>
+                      </div>
+                    ):(
+                      <div className="fx aic jsb">
+                        <div className="fx aic g3">
+                          <span className={`badge ${t.status==="active"?"b-ok":"b-dim"}`}>{t.status==="active"?"✅ Actif":"⏸ Inactif"}</span>
+                          <span style={{fontWeight:700,fontFamily:"var(--mono)",fontSize:14}}>{t.plate}</span>
+                          {t.label&&<span style={{fontSize:12,color:"var(--muted)"}}>{t.label}</span>}
+                          {t.tare>0&&<span className="badge" style={{fontSize:10}}>Tare: {t.tare} t</span>}
+                        </div>
+                        <div className="fx g2">
+                          <button className="btn bg bsm" onClick={()=>setEditTruck({...t})}>✏️ Modifier</button>
+                          <button className="btn be bsm" onClick={()=>{deleteCompanyTruck(t.id);setTruckMsg({t:"ok",m:"Camion supprimé."});setTimeout(()=>setTruckMsg(null),3000);}}>🗑</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {/* Add new truck */}
+            <div className="card" style={{padding:"16px"}}>
+              <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>+ Nouveau camion</div>
+              <div className="fg fg3" style={{marginBottom:10}}>
+                <div className="field"><label>Immatriculation *</label>
+                  <input className="fi" value={truckForm.plate} onChange={e=>setTruckForm(f=>({...f,plate:e.target.value.toUpperCase()}))} placeholder="ex: 18-TRK-001"/>
+                </div>
+                <div className="field"><label>Désignation</label>
+                  <input className="fi" value={truckForm.label||""} onChange={e=>setTruckForm(f=>({...f,label:e.target.value}))} placeholder="ex: Benne n°3"/>
+                </div>
+                <div className="field"><label>Tare (t)</label>
+                  <input className="fi" type="number" step="0.1" min="0" value={truckForm.tare||""} onChange={e=>setTruckForm(f=>({...f,tare:e.target.value}))} placeholder="0.0"/>
+                </div>
+              </div>
+              <button className="btn bp" style={{width:"fit-content"}} disabled={!truckForm.plate.trim()} onClick={()=>{
+                const newT = {id:"ct_"+Date.now(),plate:truckForm.plate.trim().toUpperCase(),label:truckForm.label.trim(),tare:parseFloat(truckForm.tare)||0,status:"active"};
+                addCompanyTruck(newT);
+                setTruckForm({plate:"",label:"",tare:"",status:"active"});
+                setTruckMsg({t:"ok",m:"Camion ajouté avec succès."});
+                setTimeout(()=>setTruckMsg(null),3000);
+              }}>+ Ajouter le camion</button>
             </div>
           </>
         )}
