@@ -1331,23 +1331,21 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
         ))}
       </div>
 
-      {/* Operation type toggle */}
-      {(treatAndCollectClients.length>0||opType==="collect")&&(
-        <div className="gate-mode">
-          <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>Type d'opération</div>
-          <div className="seg">
-            <button className={`seg-btn${opType==="treatment"?" active":""}`}
-              onClick={()=>{setOpType("treatment");set("clientId","");setHint(null);}}>
-              🏭 Traitement
-            </button>
-            <button className={`seg-btn${opType==="collect"?" active":""}`}
-              onClick={()=>{setOpType("collect");set("clientId","");setHint(null);set("truck","");}}
-              style={opType==="collect"?{background:"var(--purple)",borderColor:"var(--purple)",color:"#fff"}:{}}>
-              🚛 Collecte et Traitement
-            </button>
-          </div>
+      {/* Operation type toggle — always visible */}
+      <div className="gate-mode">
+        <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>Type d'opération</div>
+        <div className="seg">
+          <button className={`seg-btn${opType==="treatment"?" active":""}`}
+            onClick={()=>{setOpType("treatment");set("clientId","");setHint(null);}}>
+            🏭 Traitement
+          </button>
+          <button className={`seg-btn${opType==="collect"?" active":""}`}
+            onClick={()=>{setOpType("collect");set("clientId","");setHint(null);set("truck","");}}
+            style={opType==="collect"?{background:"var(--purple)",borderColor:"var(--purple)",color:"#fff"}:{}}>
+            🚛 Collecte et Traitement
+          </button>
         </div>
-      )}
+      </div>
 
       {/* Mode toggle (treatment only) */}
       {opType==="treatment"&&(
