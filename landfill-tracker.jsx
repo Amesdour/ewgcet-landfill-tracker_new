@@ -3736,12 +3736,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const generateInvoice = async (cl, costHT) => {
     const ttc = cl.vatSubject ? Math.round(costHT * 1.19 * 100) / 100 : costHT;
     const id = `FAC-${month.replace("-","")}-${cl.id}`;
-    // Use same fallback lookup strategy so we always find the existing invoice
     const existing = invoices.find(i=>i.id===id) || invoices.find(i=>i.clientId===cl.id&&i.month===month);
     if (existing) {
-      // Preserve status: keep "paid" and "partial" as-is, only reset overdue→pending
-      const preservedStatus = existing.status==="paid"?"paid":existing.status==="partial"?"partial":"pending";
-      await updateInvoice({...existing, totalAmount:ttc, status:preservedStatus});
+      // Always reset to pending on update so payment buttons reappear after recalculation
+      await updateInvoice({...existing, totalAmount:ttc, status:"pending", paidAmount:0, paidAt:null});
     } else {
       await addInvoice({id, clientId:cl.id, month, totalAmount:ttc, status:"pending", note:""});
     }
@@ -4262,23 +4260,23 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 🧾 {currentInv?"Mettre à jour la facture":"Générer la facture"}
               </button>
             )}
-            {/* Paid banner with download */}
-            {currentInv?.status==="paid"&&entries.length>0&&(
+            {/* Paid banner — always visible when invoice is paid */}
+            {currentInv?.status==="paid"&&(
               <div style={{display:"flex",alignItems:"center",gap:10,background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.3)",borderRadius:8,padding:"8px 14px",flex:1}}>
                 <span style={{fontWeight:700,color:"var(--g)",fontSize:13}}>✅ Facture soldée</span>
                 {currentInv.paidAt&&<span style={{fontSize:11,color:"var(--muted)"}}>le {currentInv.paidAt}</span>}
                 <div style={{marginLeft:"auto",display:"flex",gap:8}}>
                   <button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}}
-                    onClick={downloadOfficialPDF}>📥 Télécharger PDF</button>
-                  <button className="btn bg bsm" onClick={downloadOfficialWord}>📄 Word</button>
+                    onClick={downloadOfficialPDF} disabled={entries.length===0}>📥 Télécharger PDF</button>
+                  <button className="btn bg bsm" onClick={downloadOfficialWord} disabled={entries.length===0}>📄 Word</button>
                 </div>
               </div>
             )}
-            {/* Actions for unpaid invoices */}
+            {/* Actions for unpaid / partial invoices */}
             {currentInv&&currentInv.status!=="paid"&&(
               <>
                 <button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(currentInv)}>💳 Enregistrer Paiement</button>
-                {currentInv.status==="pending"&&(
+                {(currentInv.status==="pending"||currentInv.status==="partial")&&(
                   <button className="btn be bsm" onClick={()=>markOverdue(currentInv)}>🔴 Marquer Impayée</button>
                 )}
                 <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"center"}}>
