@@ -3624,7 +3624,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
     ${rowsHTML}
     <tr style="background:#f5f5f5">
       <td colspan="2" class="b" style="font-size:13px">TOTAL GÉNÉRAL (${rows.length} ligne${rows.length>1?'s':''})</td>
-      <td class="r b">${totalQtyDisplay}</td>
+      <td class="c" style="color:#999;font-size:11px">—</td>
       <td></td><td></td>
       <td class="r b">${fB(totalHT)}</td>
     </tr>
@@ -4211,7 +4211,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                   <>
                     <tr style={{background:"rgba(46,201,92,.04)"}}>
                       <td colSpan={2} style={{textAlign:"right",fontWeight:700}}>TOTAL HT</td>
-                      <td className="mn tmu" style={{textAlign:"right"}}>{fmtN(totalNet)} t</td>
+                      <td className="mn tmu" style={{textAlign:"right",color:"var(--muted)",fontSize:10}}>—</td>
                       <td/>
                       <td className="mn fw7" style={{textAlign:"right"}}>{fmt(totalCost)}</td>
                     </tr>
