@@ -3519,10 +3519,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   const rowsHTML = rows.map(r=>`
     <tr>
       <td style="text-align:center;">${r.num}</td>
-      <td>
-        <strong>${r.label}</strong><br>
-        <em style="font-size:11px;color:#555">${r.isRotation ? 'Facturation au passage (Rotation)' : 'Facturation au poids (Tonnage)'} &mdash; ${r.count} op&eacute;ration${r.count>1?'s':''}</em>
-      </td>
+      <td><strong>${r.label}</strong></td>
       <td style="text-align:right;">${r.isRotation ? r.qty+' rot.' : fQ(r.qty)+' t'}</td>
       <td style="text-align:right;">${fB(r.unitPrice)}&nbsp;/&nbsp;${r.isRotation ? 'rot.' : 't'}</td>
       <td style="text-align:center;">${r.tva}%</td>
@@ -4192,10 +4189,6 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                             ?<span style={{color:"var(--purple)"}}>🚛 Collecte et Traitement</span>
                             :<span>🏭 Traitement</span>}
                           {" — "}{item.wtLabel}
-                        </div>
-                        <div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>
-                          {item.billingMode==="rotation"?"Facturation au passage (Rotation)":"Facturation au poids (Tonnage)"}
-                          {" · "}{item.count} opération{item.count>1?"s":""}
                         </div>
                       </td>
                       <td className="mn" style={{textAlign:"right"}}>
