@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS waste_types (
   site_types     JSONB         DEFAULT '[]'
 );
 ALTER TABLE waste_types ADD COLUMN IF NOT EXISTS rotation_price DECIMAL(14,2) DEFAULT 0;
+ALTER TABLE waste_types ADD COLUMN IF NOT EXISTS collect_price DECIMAL(14,2) DEFAULT 0;
+ALTER TABLE waste_types ADD COLUMN IF NOT EXISTS collect_rotation_price DECIMAL(14,2) DEFAULT 0;
 
 INSERT INTO waste_types (id, label, price, unit, site_types) VALUES
   ('MEN', 'Ménager (DMA)',     850,  't', '["CET"]'),
@@ -72,6 +74,8 @@ ALTER TABLE clients ADD COLUMN IF NOT EXISTS vat_subject BOOLEAN DEFAULT FALSE;
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS assigned_site VARCHAR(20) DEFAULT '';
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS assigned_sites JSONB DEFAULT '[]';
 ALTER TABLE clients ADD COLUMN IF NOT EXISTS rotation_limit INTEGER DEFAULT 0;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS service_type VARCHAR(30) DEFAULT 'treatment_only';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS collect_billing_mode VARCHAR(20) DEFAULT 'tonnage';
 
 INSERT INTO clients (id, name, client_type, type, status, credit_enabled, weight_limit_year, credit_limit, consumed, pay_frequency, pay_instrument, phone, address, nif, rc, docs, note, vat_subject) VALUES
   ('C001', 'Commune de Jijel',       'state',   'convention', 'approved',     FALSE, 5000, 0,      0, 'monthly', 'cheque', '034 70 12 34',  'Jijel Centre',          '099012345678901', '',                 '["Arrêté communal","Convention signée"]',          '', FALSE),
@@ -122,7 +126,18 @@ CREATE TABLE IF NOT EXISTS discharges (
   status            VARCHAR(20)   DEFAULT 'ok',
   pay_method        VARCHAR(20),
   op_id             VARCHAR(20),
-  correction_reason TEXT          DEFAULT ''
+  correction_reason TEXT          DEFAULT '',
+  op_type           VARCHAR(20)   DEFAULT 'treatment'
+);
+ALTER TABLE discharges ADD COLUMN IF NOT EXISTS op_type VARCHAR(20) DEFAULT 'treatment';
+
+-- ─── COMPANY TRUCKS ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS company_trucks (
+  id      VARCHAR(40)  PRIMARY KEY,
+  plate   VARCHAR(30)  NOT NULL,
+  label   VARCHAR(100) DEFAULT '',
+  tare    DECIMAL(10,3) DEFAULT 0,
+  status  VARCHAR(20)  DEFAULT 'active'
 );
 
 -- ─── INVOICES ────────────────────────────────────────────────

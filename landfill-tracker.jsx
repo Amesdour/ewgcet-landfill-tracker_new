@@ -3483,19 +3483,21 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
   const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
   const TVA = c.vatSubject ? 19 : 0;
-  // Group by wasteType + billing mode (tonnage vs rotation) so each appears as its own line
+  // Group by opType + wasteType + billingMode so Traitement and Collecte et Traitement appear as separate lines
   const groups = {};
   entries.forEach(d => {
+    const opT  = d.opType === 'collect' ? 'collect' : 'treatment';
     const isRot = d.payMethod === 'rotation';
-    const key = `${d.wasteType}__${isRot ? 'rotation' : 'tonnage'}`;
-    if (!groups[key]) groups[key] = {wasteType:d.wasteType, isRotation:isRot, count:0, net:0, total:0, unitPrice:d.unitPrice};
+    const key = `${opT}__${d.wasteType}__${isRot ? 'rotation' : 'tonnage'}__${d.unitPrice}`;
+    if (!groups[key]) groups[key] = {opType:opT, wasteType:d.wasteType, isRotation:isRot, count:0, net:0, total:0, unitPrice:d.unitPrice};
     groups[key].count += 1;
     groups[key].net   += d.net;
     groups[key].total += d.total;
   });
   const rows = Object.values(groups).map((g,i)=>({
     num: i+1,
-    label: wasteTypes.find(w=>w.id===g.wasteType)?.label || g.wasteType,
+    opType: g.opType,
+    label: `${g.opType==='collect'?'Collecte et Traitement — ':'Traitement — '}${wasteTypes.find(w=>w.id===g.wasteType)?.label || g.wasteType}`,
     isRotation: g.isRotation,
     qty: g.isRotation ? g.count : g.net,
     unitPrice: g.unitPrice,
@@ -3517,7 +3519,10 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   const rowsHTML = rows.map(r=>`
     <tr>
       <td style="text-align:center;">${r.num}</td>
-      <td>${r.label} &mdash; <em>${r.isRotation ? 'Rotation' : 'Tonnage'}</em></td>
+      <td>
+        <strong>${r.label}</strong><br>
+        <em style="font-size:11px;color:#555">${r.isRotation ? 'Facturation au passage (Rotation)' : 'Facturation au poids (Tonnage)'} &mdash; ${r.count} op&eacute;ration${r.count>1?'s':''}</em>
+      </td>
       <td style="text-align:right;">${r.isRotation ? r.qty+' rot.' : fQ(r.qty)+' t'}</td>
       <td style="text-align:right;">${fB(r.unitPrice)}&nbsp;/&nbsp;${r.isRotation ? 'rot.' : 't'}</td>
       <td style="text-align:center;">${r.tva}%</td>
@@ -3892,8 +3897,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                             :<span className="mn tmu" style={{fontSize:10}}>Non générée</span>}
                         </td>
                         <td>
-                          <div className="fx aic g2">
-                            <button className="btn bi bsm" onClick={()=>switchToClient(cl.id)}>📋</button>
+                          <div className="fx aic g2" style={{flexWrap:"wrap"}}>
+                            <button className="btn bi bsm" title="Voir relevé" onClick={()=>switchToClient(cl.id)}>📋</button>
                             {clC>0&&!inv&&(
                               <button className="btn bp bsm" style={{fontSize:10}} onClick={()=>generateInvoice(cl,clC)}>🧾 Facturer</button>
                             )}
@@ -3902,6 +3907,17 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                             )}
                             {inv&&inv.status==="pending"&&(
                               <button className="btn be bsm" style={{fontSize:10}} onClick={()=>markOverdue(inv)}>🔴 Impayée</button>
+                            )}
+                            {inv&&clE.length>0&&(
+                              <button className="btn bg bsm" style={{fontSize:10}} title="Télécharger la facture PDF"
+                                onClick={()=>{
+                                  const invId=`FAC-${month.replace("-","")}-${cl.id}`;
+                                  const html=generateOfficialBillHTML(cl,clE,company,month,invId,wasteTypes);
+                                  const win=window.open('','_blank');
+                                  win.document.write(html);
+                                  win.document.close();
+                                  setTimeout(()=>win.print(),600);
+                                }}>📥 PDF</button>
                             )}
                           </div>
                         </td>
