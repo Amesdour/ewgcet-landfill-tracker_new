@@ -4256,7 +4256,13 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
           </div>
 
           <div className="print-hide" style={{padding:"16px 20px",borderTop:"1px solid var(--bdr)",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-            {/* Paid banner with instant download */}
+            {/* Always-visible: generate / update button */}
+            {totalCost>0&&(
+              <button className="btn bp bsm" onClick={()=>generateInvoice(c,totalCost)}>
+                🧾 {currentInv?"Mettre à jour la facture":"Générer la facture"}
+              </button>
+            )}
+            {/* Paid banner with download */}
             {currentInv?.status==="paid"&&entries.length>0&&(
               <div style={{display:"flex",alignItems:"center",gap:10,background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.3)",borderRadius:8,padding:"8px 14px",flex:1}}>
                 <span style={{fontWeight:700,color:"var(--g)",fontSize:13}}>✅ Facture soldée</span>
@@ -4269,17 +4275,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               </div>
             )}
             {/* Actions for unpaid invoices */}
-            {(!currentInv||currentInv.status!=="paid")&&(
+            {currentInv&&currentInv.status!=="paid"&&(
               <>
-                {totalCost>0&&(
-                  <button className="btn bp bsm" onClick={()=>generateInvoice(c,totalCost)}>
-                    🧾 {currentInv?"Mettre à jour":"Générer la facture"}
-                  </button>
-                )}
-                {currentInv&&currentInv.status!=="paid"&&(
-                  <button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(currentInv)}>💳 Enregistrer Paiement</button>
-                )}
-                {currentInv&&currentInv.status==="pending"&&(
+                <button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(currentInv)}>💳 Enregistrer Paiement</button>
+                {currentInv.status==="pending"&&(
                   <button className="btn be bsm" onClick={()=>markOverdue(currentInv)}>🔴 Marquer Impayée</button>
                 )}
                 <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"center"}}>
