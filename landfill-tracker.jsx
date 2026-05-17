@@ -3770,6 +3770,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     });
     setPayInvModal(null);
     setPayConfirm(false);
+    // Auto-download the PDF receipt when payment is complete
+    if (isFull && c && entries.length > 0) {
+      const html = generateOfficialBillHTML(c, entries, company, month, inv.id, wasteTypes);
+      const win = window.open('', '_blank');
+      if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(), 600); }
+    }
   };
 
   const markPaid = async (inv) => openPayModal(inv);
@@ -4250,24 +4256,41 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
           </div>
 
           <div className="print-hide" style={{padding:"16px 20px",borderTop:"1px solid var(--bdr)",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-            {totalCost>0&&(
-              <button className="btn bp bsm" onClick={()=>generateInvoice(c,totalCost)}>
-                🧾 {currentInv?"Mettre à jour la facture":"Générer la facture"}
-              </button>
+            {/* Paid banner with instant download */}
+            {currentInv?.status==="paid"&&entries.length>0&&(
+              <div style={{display:"flex",alignItems:"center",gap:10,background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.3)",borderRadius:8,padding:"8px 14px",flex:1}}>
+                <span style={{fontWeight:700,color:"var(--g)",fontSize:13}}>✅ Facture soldée</span>
+                {currentInv.paidAt&&<span style={{fontSize:11,color:"var(--muted)"}}>le {currentInv.paidAt}</span>}
+                <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+                  <button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}}
+                    onClick={downloadOfficialPDF}>📥 Télécharger PDF</button>
+                  <button className="btn bg bsm" onClick={downloadOfficialWord}>📄 Word</button>
+                </div>
+              </div>
             )}
-            {currentInv&&currentInv.status!=="paid"
-              ?<button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(currentInv)}>💳 Enregistrer Paiement</button>
-              :null}
-            {currentInv&&currentInv.status==="pending"
-              ?<button className="btn be bsm" onClick={()=>markOverdue(currentInv)}>🔴 Marquer Impayée</button>
-              :null}
-                        <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"center"}}>
-              <button className="btn bg bsm" onClick={downloadOfficialPDF} disabled={entries.length===0}
-                title="Télécharger la facture officielle en PDF">📥 PDF Officiel</button>
-              <button className="btn bi bsm" onClick={downloadOfficialWord} disabled={entries.length===0}
-                title="Télécharger la facture officielle en format Word (.doc)">📄 Word (.doc)</button>
-            </div>
-            <div style={{fontSize:11,color:"var(--muted)"}}>Réf: {invNum}</div>
+            {/* Actions for unpaid invoices */}
+            {(!currentInv||currentInv.status!=="paid")&&(
+              <>
+                {totalCost>0&&(
+                  <button className="btn bp bsm" onClick={()=>generateInvoice(c,totalCost)}>
+                    🧾 {currentInv?"Mettre à jour":"Générer la facture"}
+                  </button>
+                )}
+                {currentInv&&currentInv.status!=="paid"&&(
+                  <button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(currentInv)}>💳 Enregistrer Paiement</button>
+                )}
+                {currentInv&&currentInv.status==="pending"&&(
+                  <button className="btn be bsm" onClick={()=>markOverdue(currentInv)}>🔴 Marquer Impayée</button>
+                )}
+                <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"center"}}>
+                  <button className="btn bg bsm" onClick={downloadOfficialPDF} disabled={entries.length===0}
+                    title="Télécharger la facture officielle en PDF">📥 PDF</button>
+                  <button className="btn bi bsm" onClick={downloadOfficialWord} disabled={entries.length===0}
+                    title="Télécharger en format Word (.doc)">📄 Word</button>
+                </div>
+              </>
+            )}
+            <div style={{fontSize:11,color:"var(--muted)",width:"100%",marginTop:4}}>Réf: {invNum}</div>
           </div>
         </div>
         </div>
