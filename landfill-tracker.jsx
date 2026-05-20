@@ -3740,8 +3740,13 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     const existing = invoices.find(i=>i.id===id) || invoices.find(i=>i.clientId===cl.id&&i.month===month);
     if (existing) {
       if (existing.status === "paid") {
-        // Invoice already paid — only update the amount, never reset payment
-        await updateInvoice({...existing, totalAmount:ttc});
+        if (ttc > (existing.paidAmount||0)) {
+          // New charges added after payment — remaining balance now due
+          await updateInvoice({...existing, totalAmount:ttc, status:"partial"});
+        } else {
+          // Amount unchanged or lower — keep fully paid
+          await updateInvoice({...existing, totalAmount:ttc});
+        }
       } else if (existing.status === "partial") {
         // Partial payment recorded — update amount, recalculate status, keep paidAmount/paidAt
         const newStatus = (existing.paidAmount||0) >= ttc ? "paid" : "partial";
@@ -3894,7 +3899,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         </td>
                         <td><span className="mn">{clE.length>0?fmtN(clN)+" t":"—"}</span></td>
                         <td>
-                          {inv&&inv.status==="paid"
+                          {inv&&inv.status==="paid"&&(cl.vatSubject?clC*1.19:clC)<=(inv.paidAmount||0)
                             ?<span className="mn fw7" style={{color:"var(--muted)"}}>0 DA</span>
                             :clC>0 ? (
                               <div>
@@ -3914,7 +3919,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         <td>
                           <div className="fx aic g2" style={{flexWrap:"wrap"}}>
                             <button className="btn bi bsm" title="Voir relevé" onClick={()=>switchToClient(cl.id)}>📋</button>
-                            {clC>0&&!inv&&(
+                            {clC>0&&(!inv||(inv.status==="paid"&&(cl.vatSubject?clC*1.19:clC)>(inv.paidAmount||0)))&&(
                               <button className="btn bp bsm" style={{fontSize:10}} onClick={()=>generateInvoice(cl,clC)}>🧾 Facturer</button>
                             )}
                             {inv&&inv.status!=="paid"&&(
