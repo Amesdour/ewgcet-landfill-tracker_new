@@ -2,7 +2,7 @@ import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -26,12 +26,42 @@ const q  = (sql, p) => pool.query(sql, p);
 const ok = (res, data) => res.json(data);
 const er = (res, err, code=500) => { console.error(err); res.status(code).json({error:String(err)}); };
 
-async function initDb() {
+async function runMigrations() {
   try {
-    const schema = readFileSync(join(__dirname, 'schema.sql'), 'utf8');
-    await pool.query(schema);
-    console.log('Database schema initialised.');
-    // Migrate plaintext passwords to bcrypt hashes (idempotent)
+    // Create tracking table if it doesn't exist
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename   VARCHAR(200) PRIMARY KEY,
+        applied_at TIMESTAMP    DEFAULT NOW()
+      )
+    `);
+
+    const migrationsDir = join(__dirname, 'migrations');
+    if (!existsSync(migrationsDir)) {
+      console.log('No migrations directory found, skipping.');
+      return;
+    }
+
+    const files = readdirSync(migrationsDir)
+      .filter(f => f.endsWith('.sql'))
+      .sort();
+
+    for (const file of files) {
+      const { rows } = await pool.query(
+        'SELECT filename FROM schema_migrations WHERE filename=$1', [file]
+      );
+      if (rows.length > 0) continue; // already applied
+
+      console.log(`Running migration: ${file}`);
+      const sql = readFileSync(join(migrationsDir, file), 'utf8');
+      await pool.query(sql);
+      await pool.query(
+        'INSERT INTO schema_migrations (filename) VALUES ($1)', [file]
+      );
+      console.log(`Migration applied: ${file}`);
+    }
+
+    // Hash any plaintext passwords (idempotent)
     const { rows: users } = await pool.query('SELECT id, password FROM users');
     for (const u of users) {
       if (u.password && !u.password.startsWith('$2')) {
@@ -39,9 +69,10 @@ async function initDb() {
         await pool.query('UPDATE users SET password=$1 WHERE id=$2', [hash, u.id]);
       }
     }
-    if (users.length) console.log('Password migration complete.');
+
+    console.log('Migrations complete.');
   } catch (e) {
-    console.error('DB init error:', e.message);
+    console.error('Migration error:', e.message);
   }
 }
 
@@ -451,5 +482,5 @@ if (IS_PROD) {
 // Start listening immediately so health checks pass, then init DB in background
 app.listen(PORT, () => {
   console.log(`API server running on port ${PORT}`);
-  initDb().catch(e => console.error('DB init failed:', e.message));
+  runMigrations().catch(e => console.error('Migration failed:', e.message));
 });
