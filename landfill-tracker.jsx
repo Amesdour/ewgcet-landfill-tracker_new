@@ -4203,28 +4203,57 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               <tbody>
                 {lineItems.length===0
                   ?<tr><td colSpan={5} style={{textAlign:"center",color:"var(--muted)",padding:30}}>Aucun dépôt pour cette période</td></tr>
-                  :lineItems.map((item,i)=>(
-                    <tr key={i}>
-                      <td className="mn tmu">{i+1}</td>
-                      <td>
-                        <div style={{fontWeight:700,fontSize:12}}>
-                          {item.opType==="collect"
-                            ?<span style={{color:"var(--purple)"}}>🚛 Collecte et Traitement</span>
-                            :<span>🏭 Traitement</span>}
-                          {" — "}{item.wtLabel}
-                        </div>
-                      </td>
-                      <td className="mn" style={{textAlign:"right"}}>
-                        {item.billingMode==="rotation"
-                          ?`${item.qty} rot.`
-                          :`${fmtN(item.qty)} t`}
-                      </td>
-                      <td className="mn tmu" style={{textAlign:"right"}}>
-                        {fmt(item.unitPrice)}{item.billingMode==="rotation"?" /rot.":" /t"}
-                      </td>
-                      <td className="mn fw7" style={{textAlign:"right"}}>{fmt(item.total)}</td>
-                    </tr>
-                  ))
+                  :(()=>{
+                    let coverLeft = currentInv ? (currentInv.paidAmount||0) : 0;
+                    return lineItems.map((item,i)=>{
+                      let payStatus = 'unpaid';
+                      let partialPaid = 0;
+                      if (coverLeft >= item.total) {
+                        payStatus = 'paid'; coverLeft -= item.total;
+                      } else if (coverLeft > 0) {
+                        payStatus = 'partial'; partialPaid = coverLeft; coverLeft = 0;
+                      }
+                      const isPaid    = payStatus==='paid';
+                      const isPartial = payStatus==='partial';
+                      const isUnpaid  = payStatus==='unpaid';
+                      return (
+                        <tr key={i} style={{
+                          background: isPaid ? 'rgba(46,201,92,.06)' : isPartial ? 'rgba(234,179,8,.06)' : (currentInv&&currentInv.paidAmount>0) ? 'rgba(239,68,68,.04)' : undefined,
+                          opacity: isPaid ? 0.75 : 1,
+                        }}>
+                          <td className="mn tmu">{i+1}</td>
+                          <td>
+                            <div style={{fontWeight:700,fontSize:12,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
+                              {item.opType==="collect"
+                                ?<span style={{color:"var(--purple)"}}>🚛 Collecte et Traitement</span>
+                                :<span>🏭 Traitement</span>}
+                              {" — "}{item.wtLabel}
+                              {isPaid&&<span style={{fontSize:9,fontWeight:800,color:'var(--g)',background:'rgba(46,201,92,.18)',border:'1px solid var(--g)',borderRadius:4,padding:'1px 6px',letterSpacing:'.05em'}}>✓ PAYÉ</span>}
+                              {isPartial&&<span style={{fontSize:9,fontWeight:800,color:'var(--warn)',background:'rgba(234,179,8,.18)',border:'1px solid var(--warn)',borderRadius:4,padding:'1px 6px',letterSpacing:'.05em'}}>⏳ PARTIEL</span>}
+                              {isUnpaid&&currentInv&&currentInv.paidAmount>0&&<span style={{fontSize:9,fontWeight:800,color:'var(--err)',background:'rgba(239,68,68,.12)',border:'1px solid var(--err)',borderRadius:4,padding:'1px 6px',letterSpacing:'.05em'}}>À PAYER</span>}
+                            </div>
+                          </td>
+                          <td className="mn" style={{textAlign:"right",color:isPaid?"var(--muted)":undefined}}>
+                            {item.billingMode==="rotation"?`${item.qty} rot.`:`${fmtN(item.qty)} t`}
+                          </td>
+                          <td className="mn tmu" style={{textAlign:"right",color:isPaid?"var(--muted)":undefined}}>
+                            {fmt(item.unitPrice)}{item.billingMode==="rotation"?" /rot.":" /t"}
+                          </td>
+                          <td className="mn fw7" style={{textAlign:"right"}}>
+                            {isPaid
+                              ?<span style={{color:'var(--g)'}}>{fmt(item.total)}</span>
+                              :isPartial
+                                ?<div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:1}}>
+                                  <span>{fmt(item.total)}</span>
+                                  <span style={{fontSize:9,color:'var(--g)'}}>dont {fmt(partialPaid)} réglé</span>
+                                  <span style={{fontSize:9,color:'var(--err)',fontWeight:800}}>reste {fmt(item.total-partialPaid)}</span>
+                                </div>
+                                :<span style={{color:currentInv&&currentInv.paidAmount>0?'var(--err)':undefined}}>{fmt(item.total)}</span>}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()
                 }
                 {entries.length>0&&(
                   <>
