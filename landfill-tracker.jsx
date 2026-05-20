@@ -3878,12 +3878,14 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         </td>
                         <td><span className="mn">{clE.length>0?fmtN(clN)+" t":"—"}</span></td>
                         <td>
-                          {clC>0 ? (
-                            <div>
-                              <span className="mn fw7">{fmt(cl.vatSubject ? clC*1.19 : clC)}</span>
-                              {cl.vatSubject && <span className="mn tmu" style={{fontSize:9,marginLeft:4}}>TTC</span>}
-                            </div>
-                          ) : <span className="mn tmu">—</span>}
+                          {inv&&inv.status==="paid"
+                            ?<span className="mn fw7" style={{color:"var(--muted)"}}>0 DA</span>
+                            :clC>0 ? (
+                              <div>
+                                <span className="mn fw7">{fmt(cl.vatSubject ? clC*1.19 : clC)}</span>
+                                {cl.vatSubject && <span className="mn tmu" style={{fontSize:9,marginLeft:4}}>TTC</span>}
+                              </div>
+                            ) : <span className="mn tmu">—</span>}
                         </td>
                         <td>
                           {inv
