@@ -3723,7 +3723,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     return {cl, entries:clEntries, net:clNet, cost:clCost, inv:existInv};
   });
   const grandNet  = globalRows.filter(r=>r.cl.type!=="rotation").reduce((s,r)=>s+r.net,0);
-  const grandCost = globalRows.reduce((s,r)=>s+r.cost,0);
+  const grandCost = globalRows.reduce((s,r)=>s+(r.inv&&r.inv.status==="paid"?0:r.cost),0);
   const grandDeps = globalRows.reduce((s,r)=>s+r.entries.length,0);
 
   const switchToClient = (id) => { setSelC(id); setView("client"); };
