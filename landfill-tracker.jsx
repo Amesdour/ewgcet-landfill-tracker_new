@@ -3734,8 +3734,17 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     const id = `FAC-${month.replace("-","")}-${cl.id}`;
     const existing = invoices.find(i=>i.id===id) || invoices.find(i=>i.clientId===cl.id&&i.month===month);
     if (existing) {
-      // Always reset to pending on update so payment buttons reappear after recalculation
-      await updateInvoice({...existing, totalAmount:ttc, status:"pending", paidAmount:0, paidAt:null});
+      if (existing.status === "paid") {
+        // Invoice already paid — only update the amount, never reset payment
+        await updateInvoice({...existing, totalAmount:ttc});
+      } else if (existing.status === "partial") {
+        // Partial payment recorded — update amount, recalculate status, keep paidAmount/paidAt
+        const newStatus = (existing.paidAmount||0) >= ttc ? "paid" : "partial";
+        await updateInvoice({...existing, totalAmount:ttc, status:newStatus});
+      } else {
+        // Unpaid — safe to update amount and keep pending
+        await updateInvoice({...existing, totalAmount:ttc, status:"pending", paidAmount:0, paidAt:null});
+      }
     } else {
       await addInvoice({id, clientId:cl.id, month, totalAmount:ttc, status:"pending", note:""});
     }
