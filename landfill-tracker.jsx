@@ -3723,7 +3723,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     return {cl, entries:clEntries, net:clNet, cost:clCost, inv:existInv};
   });
   const grandNet  = globalRows.filter(r=>r.cl.type!=="rotation").reduce((s,r)=>s+r.net,0);
-  const grandCost = globalRows.reduce((s,r)=>s+(r.inv&&r.inv.status==="paid"?0:r.cost),0);
+  const grandCost = globalRows.reduce((s,r)=>{
+    if (!r.inv) return s + r.cost;
+    if (r.inv.status==="paid") return s;
+    if (r.inv.status==="partial") return s + (r.inv.totalAmount - (r.inv.paidAmount||0));
+    return s + r.cost;
+  },0);
   const grandDeps = globalRows.reduce((s,r)=>s+r.entries.length,0);
 
   const switchToClient = (id) => { setSelC(id); setView("client"); };
@@ -3752,7 +3757,9 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
   const generateAllInvoices = async () => {
     for (const row of globalRows) {
-      if (row.entries.length > 0) await generateInvoice(row.cl, row.cost);
+      if (row.entries.length > 0 && !(row.inv && row.inv.status === "paid")) {
+        await generateInvoice(row.cl, row.cost);
+      }
     }
   };
 
@@ -3810,8 +3817,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     URL.revokeObjectURL(url);
   };
   // All overdue/pending invoices
-  const debtInvoices = invoices.filter(i=>i.status==="overdue"||i.status==="pending");
-  const debtTotal = debtInvoices.reduce((s,i)=>s+i.totalAmount,0);
+  const debtInvoices = invoices.filter(i=>i.status==="overdue"||i.status==="pending"||i.status==="partial");
+  const debtTotal = debtInvoices.reduce((s,i)=>s+(i.totalAmount-(i.paidAmount||0)),0);
 
   return (
     <>
