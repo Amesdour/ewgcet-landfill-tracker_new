@@ -683,8 +683,7 @@ export default function App() {
   const [wasteTypes,  setWasteTypes]  = useState([]);
   const [online,      setOnline]      = useState(true);
   const [clock,       setClock]       = useState(new Date());
-  const [theme,       setTheme]       = useState("light");
-  const [loading,     setLoading]     = useState(true);
+  const [theme,       setTheme]       = useState(() => { try { return localStorage.getItem('theme') || 'light'; } catch { return 'light'; } });  const [loading,     setLoading]     = useState(true);
   const [invoices,    setInvoices]    = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [companyTrucks, setCompanyTrucks] = useState([]);
@@ -889,8 +888,7 @@ export default function App() {
               </button>
               {alerts>0&&<span className="chip chip-err">⚠ {alerts}</span>}
               <button className="chip chip-dim" style={{cursor:"pointer"}}
-                onClick={()=>setTheme(t=>t==="dark"?"light":"dark")}
-                title={theme==="dark"?"Passer en mode clair":"Passer en mode sombre"}>
+onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.setItem('theme', next); return next; })}                title={theme==="dark"?"Passer en mode clair":"Passer en mode sombre"}>
                 {theme==="dark"?"☀️":"🌙"}
               </button>
             </div>
