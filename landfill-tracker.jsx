@@ -3899,6 +3899,11 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         <td>
                           {inv&&inv.status==="paid"&&(cl.vatSubject?clC*1.19:clC)<=(inv.paidAmount||0)
                             ?<span className="mn fw7" style={{color:"var(--muted)"}}>0 DA</span>
+                            :inv&&inv.status==="partial"
+                              ?<div>
+                                <span className="mn fw7" style={{color:"var(--warn)"}}>{fmt(inv.totalAmount-(inv.paidAmount||0))}</span>
+                                <div style={{fontSize:9,color:"var(--muted)",marginTop:1}}>reste / {fmt(inv.totalAmount)}</div>
+                              </div>
                             :clC>0 ? (
                               <div>
                                 <span className="mn fw7">{fmt(cl.vatSubject ? clC*1.19 : clC)}</span>
