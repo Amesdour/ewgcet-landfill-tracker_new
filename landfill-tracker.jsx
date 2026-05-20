@@ -3743,10 +3743,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
         if (ttc > (existing.paidAmount||0)) {
           // New charges added after payment — remaining balance now due
           await updateInvoice({...existing, totalAmount:ttc, status:"partial"});
-        } else {
-          // Amount unchanged or lower — keep fully paid
-          await updateInvoice({...existing, totalAmount:ttc});
         }
+        // If ttc <= paidAmount: invoice is fully covered — do nothing, never touch it
       } else if (existing.status === "partial") {
         // Partial payment recorded — update amount, recalculate status, keep paidAmount/paidAt
         const newStatus = (existing.paidAmount||0) >= ttc ? "paid" : "partial";
@@ -4303,7 +4301,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
           <div className="print-hide" style={{padding:"16px 20px",borderTop:"1px solid var(--bdr)",display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
             {/* Always-visible: generate / update button */}
-            {totalCost>0&&(
+            {totalCost>0&&!(currentInv?.status==="paid"&&(c.vatSubject?totalCost*1.19:totalCost)<=(currentInv.paidAmount||0))&&(
               <button className="btn bp bsm" onClick={()=>generateInvoice(c,totalCost)}>
                 🧾 {currentInv?"Mettre à jour la facture":"Générer la facture"}
               </button>
