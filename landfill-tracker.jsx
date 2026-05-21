@@ -1614,7 +1614,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
           <div className="field"><label>Type de Déchets</label>
             <select className="fi" value={form.wasteType} onChange={e=>set("wasteType",e.target.value)}>
-              {validWasteTypes.map(w=><option key={w.id} value={w.id}>{w.label} — {fmt(w.price)}/t</option>)}
+              {validWasteTypes.map(w=><option key={w.id} value={w.id}>{w.label} — {fmt(opType==="collect"?(isCollectRotation?(w.collectRotationPrice??0):(w.collectPrice??0)):w.price)}{isCollectRotation?"/rot.":"/t"}</option>)}
             </select>
           </div>
 
