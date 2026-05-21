@@ -1235,7 +1235,9 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const collectRotationPriceOk   = !isCollectRotation || (wt?.collectRotationPrice??0) > 0;
   const canSubmit = opType==="collect"
     ? (form.truck && form.clientId && (isCollectRotation || gross>tare) && form.wasteType && collectRotationPriceOk)
-    : (form.truck && form.clientId && gross>tare && form.wasteType);
+    : isRotationClient
+      ? (form.truck && form.clientId && form.wasteType)
+      : (form.truck && form.clientId && gross>tare && form.wasteType);
 
   // Collect-mode pricing
   const collectUnitPrice     = isCollectRotation ? (wt?.collectRotationPrice??0) : (wt?.collectPrice??0);
@@ -1604,17 +1606,27 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
           <hr className="dvdr" style={{margin:"2px 0"}}/>
 
-          <div className="fg fg3">
-            <div className="field"><label>Poids Brut (tonnes)</label>
-              <input className="fi" type="number" step="0.1" min="0" placeholder="0.0" value={form.gross} onChange={e=>set("gross",e.target.value)}/>
+          {isRotationClient ? (
+            <div className="alrt ao" style={{marginBottom:0,padding:"10px 14px"}}>
+              <span style={{fontSize:16}}>🔄</span>
+              <div>
+                <strong>Client Convention Rotation — saisie de tonnage non applicable</strong>
+                <div style={{fontSize:11,marginTop:2,color:"var(--muted)"}}>Ce client est facturé à la rotation. Chaque décharge enregistre <strong>1 rotation</strong>, indépendamment du poids. Les champs poids brut / tare / net ne sont pas requis.</div>
+              </div>
             </div>
-            <div className="field"><label>Tare (tonnes)</label>
-              <input className="fi" type="number" step="0.1" min="0" placeholder="0.0" value={form.tare} onChange={e=>set("tare",e.target.value)}/>
+          ) : (
+            <div className="fg fg3">
+              <div className="field"><label>Poids Brut (tonnes)</label>
+                <input className="fi" type="number" step="0.1" min="0" placeholder="0.0" value={form.gross} onChange={e=>set("gross",e.target.value)}/>
+              </div>
+              <div className="field"><label>Tare (tonnes)</label>
+                <input className="fi" type="number" step="0.1" min="0" placeholder="0.0" value={form.tare} onChange={e=>set("tare",e.target.value)}/>
+              </div>
+              <div className="field"><label>Poids Net = Brut − Tare</label>
+                <div className="wb"><span className="wv">{fmtN(net)}</span><span className="wu">tonnes</span></div>
+              </div>
             </div>
-            <div className="field"><label>Poids Net = Brut − Tare</label>
-              <div className="wb"><span className="wv">{fmtN(net)}</span><span className="wu">tonnes</span></div>
-            </div>
-          </div>
+          )}
 
           <div className="field"><label>Type de Déchets</label>
             <select className="fi" value={form.wasteType} onChange={e=>set("wasteType",e.target.value)}>
