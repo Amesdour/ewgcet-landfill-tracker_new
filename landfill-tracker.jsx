@@ -1241,9 +1241,12 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
     if (opType==="collect") {
       unitPrice  = collectUnitPrice;
       finalTotal = collectTotal;
-    } else if (effectiveMethod==="rotation") {
+   } else if (effectiveMethod==="rotation") {
       unitPrice  = wt?.rotationPrice ?? 0;
       finalTotal = wt?.rotationPrice ?? 0;
+    } else if (opType==="collect") {
+      unitPrice  = collectUnitPrice;
+      finalTotal = collectTotal;
     } else {
       unitPrice  = wt?.price ?? 0;
       finalTotal = total;
