@@ -1252,7 +1252,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
   const finalise = method => {
     const effectiveMethod = opType==="collect"
-      ? (isCollectRotation ? "rotation" : "convention")
+      ? (collectMode==="rotation"?"rotation":collectMode==="prepaid"?"prepaid":collectMode==="cash"?"cash":"convention")
       : method;
     let unitPrice, finalTotal;
     if (opType==="collect") {
@@ -1422,13 +1422,11 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
               🎫 Bonus Prépayé
             </button>
           )}
-          {collectCashClients.length>0&&(
-            <button className={`seg-btn${collectMode==="cash"?" active":""}`}
-              onClick={()=>{setCollectMode("cash");set("clientId","");}}
-              style={collectMode==="cash"?{background:"var(--err)",borderColor:"var(--err)",color:"#fff"}:{}}>
-              💵 Cash
-            </button>
-          )}
+          <button className={`seg-btn${collectMode==="cash"?" active":""}`}
+            onClick={()=>{setCollectMode("cash");set("clientId","");}}
+            style={collectMode==="cash"?{background:"var(--err)",borderColor:"var(--err)",color:"#fff"}:{}}>
+            💵 Cash
+          </button>
         </div>
       </div>
       )}
@@ -1506,6 +1504,11 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                 <>
                   <label>
                     {collectMode==="rotation"?"Client Collecte — Rotation":collectMode==="prepaid"?"Client Collecte — Prépayé":collectMode==="cash"?"Client Collecte — Cash":"Client Collecte — Convention Tonnes"}
+                    {collectMode==="cash"&&(
+                      <span style={{marginLeft:8,cursor:"pointer",color:"var(--g)",fontSize:9}} onClick={()=>setNewCashModal(true)}>
+                        + Nouveau client cash
+                      </span>
+                    )}
                   </label>
                   {(() => {
                     const selTruck = activeCompanyTrucks.find(t=>t.plate===form.truck);
@@ -1813,16 +1816,28 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           )}
           <button className="btn bp bfw"
             style={{fontSize:15,padding:12,opacity:limitBlocked?.45:1,cursor:limitBlocked?"not-allowed":"pointer",
-              ...(opType==="collect"?{background:"var(--purple)",borderColor:"var(--purple)"}:
-                  isConvWithRotation&&convSubMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)"}:{})}}
+              ...(opType==="collect"
+                ? collectMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)"}
+                  :collectMode==="prepaid"?{background:"var(--g)",borderColor:"var(--g)"}
+                  :collectMode==="cash"?{background:"var(--err)",borderColor:"var(--err)"}
+                  :{background:"var(--purple)",borderColor:"var(--purple)"}
+                : isConvWithRotation&&convSubMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)"}:{})}}
             disabled={!canSubmit||limitBlocked}
             onClick={()=>{
-              if (opType==="collect") { finalise(""); return; }
+              if (opType==="collect") {
+                if (collectMode==="cash") { setPayModal(true); return; }
+                finalise(""); return;
+              }
               if (mode==="cash") { setPayModal(true); return; }
               finalise(isConvWithRotation&&convSubMode==="rotation"?"rotation":mode);
             }}>
             {limitBlocked?"🚫 Entrée bloquée — Limite atteinte"
-              :opType==="collect"?(isCollectRotation?"🚛 Enregistrer Collecte (Rotation) & Ouvrir Barrière →":"🚛 Enregistrer Collecte (Tonnage) & Ouvrir Barrière →")
+              :opType==="collect"?(
+                collectMode==="rotation"?"🔄 Enregistrer Collecte (Rotation) & Ouvrir Barrière →"
+                :collectMode==="prepaid"?"🎫 Consommer Bonus Collecte & Ouvrir Barrière →"
+                :collectMode==="cash"?"💵 Procéder au Paiement Cash (Collecte) →"
+                :"📋 Enregistrer Collecte (Tonnage) & Ouvrir Barrière →"
+              )
               :mode==="cash"?"💵 Procéder au Paiement Cash →"
               :mode==="prepaid"?"🎫 Consommer Bonus & Ouvrir Barrière →"
               :mode==="rotation"?"🔄 Enregistrer Rotation & Ouvrir Barrière →"
