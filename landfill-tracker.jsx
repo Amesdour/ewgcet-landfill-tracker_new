@@ -1247,6 +1247,9 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
     } else if (opType==="collect") {
       unitPrice  = collectUnitPrice;
       finalTotal = collectTotal;
+  } else if (opType==="collect") {
+      unitPrice  = collectUnitPrice;
+      finalTotal = collectTotal;
     } else {
       unitPrice  = wt?.price ?? 0;
       finalTotal = total;
