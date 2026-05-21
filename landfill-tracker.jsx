@@ -3768,9 +3768,13 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const globalRows = billed.map(cl=>{
     const clEntries = discharges.filter(d=>d.clientId===cl.id&&d.ts.startsWith(month)&&d.status!=="cancelled");
     const clNet  = clEntries.reduce((s,d)=>s+d.net,0);
-    const clCost = clEntries.reduce((s,d)=>s+d.total,0);
+    const rawCost = clEntries.reduce((s,d)=>s+d.total,0);
+    // For credit-enabled clients the invoiceable amount is only the excess over the credit limit
+    const clCost = cl.creditEnabled && cl.creditLimit>0
+      ? Math.max(0, cl.consumed - cl.creditLimit)
+      : rawCost;
     const existInv = invoices.find(i=>i.clientId===cl.id&&i.month===month);
-    return {cl, entries:clEntries, net:clNet, cost:clCost, inv:existInv};
+    return {cl, entries:clEntries, net:clNet, cost:clCost, rawCost, inv:existInv};
   });
   const grandNet  = globalRows.filter(r=>r.cl.type!=="rotation").reduce((s,r)=>s+r.net,0);
   const grandCost = globalRows.reduce((s,r)=>{
