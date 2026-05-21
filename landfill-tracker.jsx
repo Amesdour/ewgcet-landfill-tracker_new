@@ -1251,15 +1251,9 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
     if (opType==="collect") {
       unitPrice  = collectUnitPrice;
       finalTotal = collectTotal;
-   } else if (effectiveMethod==="rotation") {
+    } else if (effectiveMethod==="rotation") {
       unitPrice  = wt?.rotationPrice ?? 0;
       finalTotal = wt?.rotationPrice ?? 0;
-    } else if (opType==="collect") {
-      unitPrice  = collectUnitPrice;
-      finalTotal = collectTotal;
-  } else if (opType==="collect") {
-      unitPrice  = collectUnitPrice;
-      finalTotal = collectTotal;
     } else {
       unitPrice  = wt?.price ?? 0;
       finalTotal = total;
@@ -1681,15 +1675,16 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                 )}
               </div>
             )
-          ):(mode==="rotation"||(isConvWithRotation&&convSubMode==="rotation"))?(
-            net>0&&(
+          ):mode==="rotation"?(
+            form.clientId&&wt&&(
               <div className="cost-box" style={{borderColor:"var(--orange)"}}>
-                <div className="cl"><span className="clb">Poids enregistré</span><span className="clv">{fmtN(net)} t</span></div>
+                <div className="cl"><span className="clb">Type de déchets</span><span className="clv">{wt.label}</span></div>
+                <div className="cl"><span className="clb">Tarif rotation (admin)</span><span className="clv" style={{fontFamily:"var(--mono)",color:"var(--orange)"}}>{fmt(wt.rotationPrice??0)} / rot.</span></div>
                 <div className="cl ct" style={{borderColor:"var(--orange)"}}>
-                  <span style={{fontSize:13,fontWeight:700,color:"var(--orange)"}}>Rotations comptabilisées</span>
-                  <span className="ctv" style={{color:"var(--orange)",fontFamily:"var(--mono)"}}>+1 rotation</span>
+                  <span style={{fontSize:13,fontWeight:700,color:"var(--orange)"}}>Montant facturé</span>
+                  <span className="ctv" style={{color:"var(--orange)",fontFamily:"var(--mono)"}}>{fmt(wt.rotationPrice??0)}</span>
                 </div>
-                {mode==="rotation"&&client&&client.weightLimitYear>0&&(
+                {client&&client.weightLimitYear>0&&(
                   <div className="cl" style={{marginTop:6}}>
                     <span className="clb">Après cette rotation</span>
                     <span className="clv" style={{color:wouldExceedRotations?"var(--err)":"var(--g)",fontFamily:"var(--mono)"}}>
@@ -1697,7 +1692,18 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                     </span>
                   </div>
                 )}
-                {isConvWithRotation&&convSubMode==="rotation"&&client&&client.rotationLimit>0&&(
+              </div>
+            )
+          ):(isConvWithRotation&&convSubMode==="rotation")?(
+            net>0&&wt&&(
+              <div className="cost-box" style={{borderColor:"var(--orange)"}}>
+                <div className="cl"><span className="clb">Poids enregistré</span><span className="clv">{fmtN(net)} t</span></div>
+                <div className="cl"><span className="clb">Tarif rotation (admin)</span><span className="clv" style={{fontFamily:"var(--mono)",color:"var(--orange)"}}>{fmt(wt.rotationPrice??0)} / rot.</span></div>
+                <div className="cl ct" style={{borderColor:"var(--orange)"}}>
+                  <span style={{fontSize:13,fontWeight:700,color:"var(--orange)"}}>Montant facturé</span>
+                  <span className="ctv" style={{color:"var(--orange)",fontFamily:"var(--mono)"}}>{fmt(wt.rotationPrice??0)}</span>
+                </div>
+                {client&&client.rotationLimit>0&&(
                   <div className="cl" style={{marginTop:6}}>
                     <span className="clb">Après cette rotation</span>
                     <span className="clv" style={{color:wouldExceedConvRot?"var(--err)":"var(--g)",fontFamily:"var(--mono)"}}>
