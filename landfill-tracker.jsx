@@ -1844,6 +1844,11 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
   const [siteF,   setSiteF]   = useState(opSiteId||"all");
   const [dateFrom,setDateFrom] = useState("");
   const [dateTo,  setDateTo]   = useState("");
+  const [clientF, setClientF] = useState("all");
+  const [wasteF,  setWasteF]  = useState("all");
+  const [opTypeF, setOpTypeF] = useState("all");
+  const [modeF,   setModeF]   = useState("all");
+  const [statusF, setStatusF] = useState("all");
   const [selD,    setSelD]     = useState(null); // selected flagged discharge
   const [action,  setAction]  = useState("extend"); // "extend" | "settle"
   const [newLimit,setNewLimit] = useState("");
@@ -1899,7 +1904,12 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
     const msf = opSiteId ? d.siteId===opSiteId : (siteF==="all"||d.siteId===siteF);
     const dts = d.ts.slice(0,10);
     const mdf = (!dateFrom || dts >= dateFrom) && (!dateTo || dts <= dateTo);
-    return mf&&ms&&msf&&mdf;
+    const mcl = clientF==="all"||d.clientId===clientF;
+    const mwt = wasteF==="all"||d.wasteType===wasteF;
+    const mot = opTypeF==="all"||d.opType===opTypeF;
+    const mmd = modeF==="all"||d.payMethod===modeF;
+    const mst = statusF==="all"||d.status===statusF;
+    return mf&&ms&&msf&&mdf&&mcl&&mwt&&mot&&mmd&&mst;
   });
   const totalFiltered = filtered.reduce((s,d)=>s+d.total,0);
   const tonsFiltered  = filtered.filter(d=>d.payMethod!=="rotation").reduce((s,d)=>s+d.net,0);
@@ -1965,6 +1975,47 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
             📥 Exporter CSV
           </button>
         </div>
+      </div>
+
+      {/* ── Second filter row ── */}
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        <select className="fi" style={{width:180}} value={clientF} onChange={e=>setClientF(e.target.value)}>
+          <option value="all">👤 Tous les clients</option>
+          {[...new Map(discharges.map(d=>[d.clientId,d.clientName])).entries()]
+            .sort((a,b)=>a[1].localeCompare(b[1]))
+            .map(([id,name])=><option key={id} value={id}>{name}</option>)}
+        </select>
+        <select className="fi" style={{width:175}} value={wasteF} onChange={e=>setWasteF(e.target.value)}>
+          <option value="all">♻️ Type de déchet</option>
+          {wasteTypes.map(w=><option key={w.id} value={w.id}>{w.label}</option>)}
+        </select>
+        <select className="fi" style={{width:160}} value={opTypeF} onChange={e=>setOpTypeF(e.target.value)}>
+          <option value="all">⚙️ Opération</option>
+          <option value="treatment">Traitement</option>
+          <option value="rotation">Rotation</option>
+          <option value="collect">Collecte</option>
+        </select>
+        <select className="fi" style={{width:155}} value={modeF} onChange={e=>setModeF(e.target.value)}>
+          <option value="all">💳 Mode paiement</option>
+          <option value="cash">Espèces</option>
+          <option value="convention">Convention</option>
+          <option value="credit">Crédit</option>
+          <option value="prepaid">Prépayé</option>
+          <option value="rotation">Rotation</option>
+        </select>
+        <select className="fi" style={{width:140}} value={statusF} onChange={e=>setStatusF(e.target.value)}>
+          <option value="all">📋 Statut</option>
+          <option value="ok">OK</option>
+          <option value="paid">Payé</option>
+          <option value="settled">Réglé</option>
+          <option value="flagged">⚠ Alerte</option>
+          <option value="cancelled">Annulé</option>
+        </select>
+        {(clientF!=="all"||wasteF!=="all"||opTypeF!=="all"||modeF!=="all"||statusF!=="all")&&(
+          <button className="btn bg bsm" onClick={()=>{setClientF("all");setWasteF("all");setOpTypeF("all");setModeF("all");setStatusF("all");}}>
+            ✕ Reset filtres
+          </button>
+        )}
       </div>
 
       {flaggedCount>0&&filter!=="flagged"&&(
