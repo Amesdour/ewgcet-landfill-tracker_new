@@ -1223,9 +1223,10 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const weightPct   = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
   const rotationPct = isRotationClient && client.weightLimitYear>0 ? Math.round((usedRotations/client.weightLimitYear)*100) : 0;
   const limitBlocked = !isAdmin && wouldExceed;
-  const isCollectRotation = opType==="collect" && client?.collectBillingMode==="rotation";
+  const isCollectRotation        = opType==="collect" && client?.collectBillingMode==="rotation";
+  const collectRotationPriceOk   = !isCollectRotation || (wt?.collectRotationPrice??0) > 0;
   const canSubmit = opType==="collect"
-    ? (form.truck && form.clientId && (isCollectRotation || gross>tare) && form.wasteType)
+    ? (form.truck && form.clientId && (isCollectRotation || gross>tare) && form.wasteType && collectRotationPriceOk)
     : (form.truck && form.clientId && gross>tare && form.wasteType);
 
   // Collect-mode pricing
@@ -1619,19 +1620,35 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                 {isCollectRotation?(
                   <>
                     <div className="cl"><span className="clb">Poids enregistré</span><span className="clv">{fmtN(net)} t</span></div>
-                    <div className="cl ct" style={{borderColor:"var(--purple)"}}>
-                      <span style={{fontSize:13,fontWeight:700,color:"var(--purple)"}}>Prix par passage</span>
-                      <span className="ctv" style={{color:"var(--purple)",fontFamily:"var(--mono)"}}>{fmt(wt?.collectRotationPrice??0)}</span>
-                    </div>
+                    {(wt?.collectRotationPrice??0)===0?(
+                      <div className="alrt ae" style={{padding:"6px 10px",marginTop:4}}>
+                        <span>⚠️</span>
+                        <span style={{fontSize:11}}>
+                          <strong>Prix de rotation non configuré</strong> pour ce type de déchet ({wt?.label||"—"}).<br/>
+                          Allez dans <em>Paramètres → Types de déchets</em> et renseignez le champ <strong>Collecte / Rotation (DA/rot.)</strong>.
+                        </span>
+                      </div>
+                    ):(
+                      <div className="cl ct" style={{borderColor:"var(--purple)"}}>
+                        <span style={{fontSize:13,fontWeight:700,color:"var(--purple)"}}>Prix fixe par passage</span>
+                        <span className="ctv" style={{color:"var(--purple)",fontFamily:"var(--mono)"}}>{fmt(wt?.collectRotationPrice??0)}</span>
+                      </div>
+                    )}
                   </>
                 ):(
                   net>0&&(
                     <>
                       <div className="cl"><span className="clb">Poids net</span><span className="clv">{fmtN(net)} t</span></div>
-                      <div className="cl"><span className="clb">Tarif collecte ({wt?.label})</span><span className="clv">{fmt(wt?.collectPrice??0)} / t</span></div>
+                      <div className="cl">
+                        <span className="clb">Tarif collecte ({wt?.label})</span>
+                        <span className="clv" style={{color:"var(--err)",fontWeight:700}}>{fmt(wt?.collectPrice??0)} <span style={{fontSize:10,fontWeight:400}}>DA/t × {fmtN(net)} t</span></span>
+                      </div>
                       <div className="cl ct" style={{borderColor:"var(--purple)"}}>
-                        <span style={{fontSize:13,fontWeight:700,color:"var(--purple)"}}>Coût Total</span>
+                        <span style={{fontSize:13,fontWeight:700,color:"var(--purple)"}}>Coût Collecte</span>
                         <span className="ctv" style={{color:"var(--purple)"}}>{fmt(collectTotal)}</span>
+                      </div>
+                      <div style={{fontSize:10,color:"var(--muted)",padding:"0 4px",marginTop:2}}>
+                        ℹ️ Mode tonnage — facturation au poids. Pour un tarif fixe par passage, configurez le client en mode <strong>Rotation</strong>.
                       </div>
                     </>
                   )
