@@ -1608,6 +1608,14 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                 <div style={{fontSize:11,marginTop:2,color:"var(--muted)"}}>Ce client est facturé à la rotation. Chaque décharge enregistre <strong>1 rotation</strong>, indépendamment du poids. Les champs poids brut / tare / net ne sont pas requis.</div>
               </div>
             </div>
+          ) : isCollectRotation ? (
+            <div className="alrt ao" style={{marginBottom:0,padding:"10px 14px"}}>
+              <span style={{fontSize:16}}>🚛</span>
+              <div>
+                <strong>Collecte — Facturation à la rotation</strong>
+                <div style={{fontSize:11,marginTop:2,color:"var(--muted)"}}>Ce client est facturé au <strong>passage fixe</strong>. Chaque collecte enregistre <strong>1 rotation</strong> au tarif configuré. Aucun pesage requis.</div>
+              </div>
+            </div>
           ) : (
             <div className="fg fg3">
               <div className="field"><label>Poids Brut (tonnes)</label>
@@ -1646,7 +1654,6 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                 </div>
                 {isCollectRotation?(
                   <>
-                    <div className="cl"><span className="clb">Poids enregistré</span><span className="clv">{fmtN(net)} t</span></div>
                     {(wt?.collectRotationPrice??0)===0?(
                       <div className="alrt ae" style={{padding:"6px 10px",marginTop:4}}>
                         <span>⚠️</span>
