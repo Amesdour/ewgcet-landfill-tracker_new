@@ -4226,17 +4226,26 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                   ?<tr><td colSpan={5} style={{textAlign:"center",color:"var(--muted)",padding:30}}>Aucun dépôt pour cette période</td></tr>
                   :(()=>{
                     let coverLeft = currentInv ? (currentInv.paidAmount||0) : 0;
+                    // paidAmount is TTC; item.total is HT. Compute each item's proportional
+                    // TTC share so coverage comparison is in the same unit.
+                    const totalHT = lineItems.reduce((s,li)=>s+li.total,0);
+                    const invTTC  = currentInv?.totalAmount
+                      || (c.vatSubject ? Math.round(totalHT*1.19*100)/100 : totalHT);
                     return lineItems.map((item,i)=>{
+                      const itemTTC = totalHT > 0
+                        ? Math.round((item.total / totalHT) * invTTC * 100) / 100
+                        : (c.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total);
                       let payStatus = 'unpaid';
                       let partialPaid = 0;
-                      if (coverLeft >= item.total) {
-                        payStatus = 'paid'; coverLeft -= item.total;
+                      if (coverLeft >= itemTTC) {
+                        payStatus = 'paid'; coverLeft -= itemTTC;
                       } else if (coverLeft > 0) {
                         payStatus = 'partial'; partialPaid = coverLeft; coverLeft = 0;
                       }
                       const isPaid    = payStatus==='paid';
                       const isPartial = payStatus==='partial';
                       const isUnpaid  = payStatus==='unpaid';
+                      const resteItem = Math.round((itemTTC - partialPaid)*100)/100;
                       return (
                         <tr key={i} style={{
                           background: isPaid ? 'rgba(46,201,92,.06)' : isPartial ? 'rgba(234,179,8,.06)' : (currentInv&&currentInv.paidAmount>0) ? 'rgba(239,68,68,.04)' : undefined,
@@ -4266,8 +4275,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                               :isPartial
                                 ?<div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:1}}>
                                   <span>{fmt(item.total)}</span>
-                                  <span style={{fontSize:9,color:'var(--g)'}}>dont {fmt(partialPaid)} réglé</span>
-                                  <span style={{fontSize:9,color:'var(--err)',fontWeight:800}}>reste {fmt(item.total-partialPaid)}</span>
+                                  <span style={{fontSize:9,color:'var(--g)'}}>dont {fmt(partialPaid)} réglé{c.vatSubject?" (TTC)":""}</span>
+                                  <span style={{fontSize:9,color:'var(--err)',fontWeight:800}}>reste {fmt(resteItem)}{c.vatSubject?" TTC":""}</span>
                                 </div>
                                 :<span style={{color:currentInv&&currentInv.paidAmount>0?'var(--err)':undefined}}>{fmt(item.total)}</span>}
                           </td>
