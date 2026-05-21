@@ -1098,7 +1098,11 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
                           :<span className="badge b-info">{c.payFrequency==="monthly"?"⚖️ Tonnage/mois":"⚖️ Tonnage/an"}</span>}
                     </td>
                     <td><span className="mn">{c.status==="approved"?(c.creditEnabled?fmt(c.creditLimit):c.weightLimitYear?(isRotation?c.weightLimitYear+" rot.":(fmtN(c.weightLimitYear)+" t")):"—"):"—"}</span></td>
-                    <td><span className="mn">{c.status==="approved"?(c.creditEnabled?fmt(c.consumed):isRotation?(usedRot+" rot."):(fmtN(usedW)+" t")):"—"}</span></td>
+                    <td>{c.status==="approved"?(c.creditEnabled?(
+                      c.consumed>c.creditLimit
+                        ?<span className="mn" style={{color:"var(--err)",fontWeight:700}}>⚠ {fmt(c.consumed-c.creditLimit)} <span style={{fontSize:9,fontWeight:400,color:"var(--err)"}}>dette</span></span>
+                        :<span className="mn">{fmt(c.consumed)}</span>
+                    ):isRotation?<span className="mn">{usedRot+" rot."}</span>:<span className="mn">{fmtN(usedW)+" t"}</span>):<span className="mn">—</span>}</td>
                     <td style={{minWidth:120}}>
                       {c.status==="approved"&&(c.creditEnabled?c.creditLimit:c.weightLimitYear)>0?(
                         <div className="fx aic g2">
@@ -2436,8 +2440,12 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     <>
                       <div className="cbt mt2"><div className="cbf" style={{width:`${Math.min(pct,100)}%`,background:col}}/></div>
                       <div className="tsm tmu mt1" style={{fontSize:10}}>
-                        {cl.type==="prepaid"?`Solde: ${fmt(Math.max(0,cl.creditLimit-cl.consumed))}`:`${pct}%`}
-                        {" · "}{fmt(cl.consumed)}
+                        {cl.type==="prepaid"
+                          ?`Solde: ${fmt(Math.max(0,cl.creditLimit-cl.consumed))}`
+                          :cl.creditEnabled&&cl.consumed>cl.creditLimit
+                            ?<span style={{color:"var(--err)",fontWeight:700}}>⚠ Dette: {fmt(cl.consumed-cl.creditLimit)}</span>
+                            :`${pct}%`}
+                        {" · "}{cl.creditEnabled&&cl.consumed>cl.creditLimit?fmt(cl.consumed-cl.creditLimit):fmt(cl.consumed)}
                       </div>
                     </>
                   )}
@@ -4227,9 +4235,14 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                       </span>
                     </span>
                     <span style={{color:pct>=100?"var(--err)":"var(--g)"}}>
-                      Restant : <span style={{fontFamily:"var(--mono)",fontWeight:700}}>
-                        {c.creditEnabled?fmt(Math.max(0,limit-usedPeriod)):isRotation?(Math.max(0,limit-usedPeriod)+" rot."):fmtN(Math.max(0,limit-usedPeriod))+" t"}
-                      </span>
+                      {c.creditEnabled&&usedPeriod>limit
+                        ?<>Dette : <span style={{fontFamily:"var(--mono)",fontWeight:700,color:"var(--err)"}}>{fmt(usedPeriod-limit)}</span></>
+                        :isRotation
+                          ?<>Restant : <span style={{fontFamily:"var(--mono)",fontWeight:700}}>{Math.max(0,limit-usedPeriod)+" rot."}</span></>
+                          :c.creditEnabled
+                            ?<>Restant : <span style={{fontFamily:"var(--mono)",fontWeight:700}}>{fmt(Math.max(0,limit-usedPeriod))}</span></>
+                            :<>Restant : <span style={{fontFamily:"var(--mono)",fontWeight:700}}>{fmtN(Math.max(0,limit-usedPeriod))+" t"}</span></>
+                      }
                     </span>
                   </div>
                   {pct>=100&&(
