@@ -1600,7 +1600,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
           <hr className="dvdr" style={{margin:"2px 0"}}/>
 
-          {isRotationClient ? (
+          {(isRotationClient && opType !== "collect") ? (
             <div className="alrt ao" style={{marginBottom:0,padding:"10px 14px"}}>
               <span style={{fontSize:16}}>🔄</span>
               <div>
