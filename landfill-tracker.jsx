@@ -812,11 +812,21 @@ export default function App() {
   };
   const addInvoice = async inv => {
     await fetch('/api/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(inv)});
-    setInvoices(p=>{const ex=p.find(x=>x.id===inv.id); return ex?p.map(x=>x.id===inv.id?inv:x):[...p,inv];});
+    setInvoices(p=>{
+      const ex=p.find(x=>x.id===inv.id);
+      // Never overwrite a paid or partial invoice — payment data must never be erased
+      if(ex && (ex.status==="paid"||ex.status==="partial")) return p;
+      return ex?p.map(x=>x.id===inv.id?inv:x):[...p,inv];
+    });
   };
   const updateInvoice = async inv => {
     await fetch(`/api/invoices/${inv.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(inv)});
-    setInvoices(p=>p.map(x=>x.id===inv.id?inv:x));
+    setInvoices(p=>p.map(x=>{
+      if(x.id!==inv.id) return x;
+      // Never let an update silently erase payment data
+      if((x.status==="paid"||x.status==="partial") && inv.status==="pending") return x;
+      return inv;
+    }));
   };
 
   const flagged = discharges.filter(d=>d.status==="flagged").length;
@@ -3760,7 +3770,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
   const generateAllInvoices = async () => {
     for (const row of globalRows) {
-      if (row.entries.length > 0 && !(row.inv && row.inv.status === "paid")) {
+      // Skip paid and partial invoices — never touch them in bulk generation
+      if (row.entries.length > 0 && !(row.inv && (row.inv.status === "paid" || row.inv.status === "partial"))) {
         await generateInvoice(row.cl, row.cost);
       }
     }
