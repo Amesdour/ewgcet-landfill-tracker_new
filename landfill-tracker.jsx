@@ -1132,6 +1132,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
   const [mode,         setMode]         = useState("convention"); // "convention" | "rotation" | "prepaid" | "cash"
   const [opType,       setOpType]       = useState("treatment");  // "treatment" | "collect"
+  const [collectMode,  setCollectMode]  = useState("tonnage");   // "tonnage" | "rotation" | "prepaid" | "cash"
   const [step,         setStep]         = useState(1);
   const [form,         setForm]         = useState({siteId:defaultSite, truck:"", clientId:"", wasteType:"", gross:"", tare:""});
   const [payModal,     setPayModal]     = useState(false);
@@ -1178,6 +1179,10 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
     (c.serviceType==="treat_and_collect"||c.serviceType==="both") &&
     (!(c.assignedSites?.length>0) || c.assignedSites.includes(form.siteId))
   );
+  const collectTonnageClients  = treatAndCollectClients.filter(c=>c.collectBillingMode!=="rotation"&&c.type!=="prepaid"&&c.type!=="daily");
+  const collectRotationClients = treatAndCollectClients.filter(c=>c.collectBillingMode==="rotation");
+  const collectPrepaidClients  = treatAndCollectClients.filter(c=>c.type==="prepaid");
+  const collectCashClients     = treatAndCollectClients.filter(c=>c.type==="daily");
   const activeCompanyTrucks = (companyTrucks||[]).filter(t=>t.status==="active");
 
   const onTruck = plate => {
@@ -1231,10 +1236,12 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const weightPct   = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
   const rotationPct = isRotationClient && client.weightLimitYear>0 ? Math.round((usedRotations/client.weightLimitYear)*100) : 0;
   const limitBlocked = !isAdmin && wouldExceed;
-  const isCollectRotation        = opType==="collect" && client?.collectBillingMode==="rotation";
+  const isCollectRotation        = opType==="collect" && collectMode==="rotation";
   const collectRotationPriceOk   = !isCollectRotation || (wt?.collectRotationPrice??0) > 0;
   const canSubmit = opType==="collect"
-    ? (form.truck && form.clientId && (isCollectRotation || gross>tare) && form.wasteType && collectRotationPriceOk)
+    ? collectMode==="rotation"
+      ? (form.truck && form.clientId && form.wasteType && collectRotationPriceOk)
+      : (form.truck && form.clientId && gross>tare && form.wasteType)
     : isRotationClient
       ? (form.truck && form.clientId && form.wasteType)
       : (form.truck && form.clientId && gross>tare && form.wasteType);
@@ -1277,7 +1284,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
   const reset = () => {
     setForm({siteId:defaultSite, truck:"", clientId:"", wasteType:validWasteTypes[0]?.id||"", gross:"", tare:""});
-    setStep(1); setLastEntry(null); setHint(null); setMode("convention"); setConvSubMode("tonnage"); setOpType("treatment");
+    setStep(1); setLastEntry(null); setHint(null); setMode("convention"); setConvSubMode("tonnage"); setOpType("treatment"); setCollectMode("tonnage");
   };
 
   const handleAddCashClient = () => {
@@ -1359,7 +1366,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             🏭 Traitement
           </button>
           <button className={`seg-btn${opType==="collect"?" active":""}`}
-            onClick={()=>{setOpType("collect");set("clientId","");setHint(null);set("truck","");}}
+            onClick={()=>{setOpType("collect");set("clientId","");setHint(null);set("truck","");setCollectMode("tonnage");}}
             style={opType==="collect"?{background:"var(--purple)",borderColor:"var(--purple)",color:"#fff"}:{}}>
             🚛 Collecte et Traitement
           </button>
@@ -1387,6 +1394,41 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           <button className={`seg-btn${mode==="cash"?" active":""}`} onClick={()=>{setMode("cash");set("clientId","");setHint(null);}}>
             💵 Cash
           </button>
+        </div>
+      </div>
+      )}
+
+      {/* Sub-type toggle (collect mode only) */}
+      {opType==="collect"&&(
+      <div className="gate-mode">
+        <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>Type de facturation</div>
+        <div className="seg">
+          <button className={`seg-btn${collectMode==="tonnage"?" active":""}`}
+            onClick={()=>{setCollectMode("tonnage");set("clientId","");}}
+            style={collectMode==="tonnage"?{background:"var(--purple)",borderColor:"var(--purple)",color:"#fff"}:{}}>
+            📋 Convention Tonnes
+          </button>
+          {collectRotationClients.length>0&&(
+            <button className={`seg-btn${collectMode==="rotation"?" active":""}`}
+              onClick={()=>{setCollectMode("rotation");set("clientId","");}}
+              style={collectMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)",color:"#fff"}:{}}>
+              🔄 Rotations
+            </button>
+          )}
+          {collectPrepaidClients.length>0&&(
+            <button className={`seg-btn${collectMode==="prepaid"?" active":""}`}
+              onClick={()=>{setCollectMode("prepaid");set("clientId","");}}
+              style={collectMode==="prepaid"?{background:"var(--g)",borderColor:"var(--g)",color:"#fff"}:{}}>
+              🎫 Bonus Prépayé
+            </button>
+          )}
+          {collectCashClients.length>0&&(
+            <button className={`seg-btn${collectMode==="cash"?" active":""}`}
+              onClick={()=>{setCollectMode("cash");set("clientId","");}}
+              style={collectMode==="cash"?{background:"var(--err)",borderColor:"var(--err)",color:"#fff"}:{}}>
+              💵 Cash
+            </button>
+          )}
         </div>
       </div>
       )}
@@ -1462,7 +1504,9 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             <div className="field">
               {opType==="collect"?(
                 <>
-                  <label>Client (Collecte et Traitement)</label>
+                  <label>
+                    {collectMode==="rotation"?"Client Collecte — Rotation":collectMode==="prepaid"?"Client Collecte — Prépayé":collectMode==="cash"?"Client Collecte — Cash":"Client Collecte — Convention Tonnes"}
+                  </label>
                   {(() => {
                     const selTruck = activeCompanyTrucks.find(t=>t.plate===form.truck);
                     if (selTruck && selTruck.tare && !form.tare) { setTimeout(()=>set("tare",String(selTruck.tare)),0); }
@@ -1470,15 +1514,16 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                   })()}
                   <select className="fi" value={form.clientId} onChange={e=>set("clientId",e.target.value)}>
                     <option value="">-- Sélectionner --</option>
-                    {treatAndCollectClients.map(c=>(
-                      <option key={c.id} value={c.id}>
-                        {c.name} [{c.collectBillingMode==="rotation"?"Rotation":"Tonnage"}]
-                      </option>
+                    {(collectMode==="rotation"?collectRotationClients:collectMode==="prepaid"?collectPrepaidClients:collectMode==="cash"?collectCashClients:collectTonnageClients).map(c=>(
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
-                  {treatAndCollectClients.length===0&&(
+                  {(collectMode==="rotation"?collectRotationClients:collectMode==="prepaid"?collectPrepaidClients:collectMode==="cash"?collectCashClients:collectTonnageClients).length===0&&(
                     <div className="alrt ai" style={{marginTop:4,padding:"4px 8px",fontSize:10}}>
-                      <span>ℹ️</span><span>Aucun client Collecte et Traitement pour ce site</span>
+                      <span>ℹ️</span>
+                      <span>
+                        {collectMode==="rotation"?"Aucun client Rotation pour ce site":collectMode==="prepaid"?"Aucun client Prépayé pour ce site":collectMode==="cash"?"Aucun client Cash pour ce site":"Aucun client Collecte et Traitement pour ce site"}
+                      </span>
                     </div>
                   )}
                 </>
@@ -1503,11 +1548,16 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             </div>
           </div>
           {/* Collect mode: billing info badge */}
-          {opType==="collect"&&client&&(
+          {opType==="collect"&&(
             <div className="alrt ai" style={{padding:"6px 12px"}}>
-              <span>🚛</span>
+              <span>{collectMode==="rotation"?"🔄":collectMode==="prepaid"?"🎫":collectMode==="cash"?"💵":"📋"}</span>
               <span style={{fontSize:11}}>
-                Mode de facturation : <strong>{client.collectBillingMode==="rotation"?"Par rotation (prix fixe par passage)":"Au tonnage (prix/tonne)"}</strong>
+                Mode de facturation : <strong>
+                  {collectMode==="rotation"?"Par rotation — prix fixe par passage":
+                   collectMode==="prepaid"?"Bonus prépayé — déduction du solde":
+                   collectMode==="cash"?"Cash — paiement immédiat":
+                   "Convention tonnage — facturation au poids"}
+                </strong>
               </span>
             </div>
           )}
