@@ -1849,6 +1849,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
   const [opTypeF, setOpTypeF] = useState("all");
   const [modeF,   setModeF]   = useState("all");
   const [statusF, setStatusF] = useState("all");
+  const [truckF,  setTruckF]  = useState("all");
   const [selD,    setSelD]     = useState(null); // selected flagged discharge
   const [action,  setAction]  = useState("extend"); // "extend" | "settle"
   const [newLimit,setNewLimit] = useState("");
@@ -1909,7 +1910,8 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
     const mot = opTypeF==="all"||d.opType===opTypeF;
     const mmd = modeF==="all"||d.payMethod===modeF;
     const mst = statusF==="all"||d.status===statusF;
-    return mf&&ms&&msf&&mdf&&mcl&&mwt&&mot&&mmd&&mst;
+    const mtr = truckF==="all"||d.truck===truckF;
+    return mf&&ms&&msf&&mdf&&mcl&&mwt&&mot&&mmd&&mst&&mtr;
   });
   const totalFiltered = filtered.reduce((s,d)=>s+d.total,0);
   const tonsFiltered  = filtered.filter(d=>d.payMethod!=="rotation").reduce((s,d)=>s+d.net,0);
@@ -2011,8 +2013,13 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
           <option value="flagged">⚠ Alerte</option>
           <option value="cancelled">Annulé</option>
         </select>
-        {(clientF!=="all"||wasteF!=="all"||opTypeF!=="all"||modeF!=="all"||statusF!=="all")&&(
-          <button className="btn bg bsm" onClick={()=>{setClientF("all");setWasteF("all");setOpTypeF("all");setModeF("all");setStatusF("all");}}>
+        <select className="fi" style={{width:145}} value={truckF} onChange={e=>setTruckF(e.target.value)}>
+          <option value="all">🚛 Camion</option>
+          {[...new Set(discharges.map(d=>d.truck).filter(Boolean))].sort()
+            .map(t=><option key={t} value={t}>{t}</option>)}
+        </select>
+        {(clientF!=="all"||wasteF!=="all"||opTypeF!=="all"||modeF!=="all"||statusF!=="all"||truckF!=="all")&&(
+          <button className="btn bg bsm" onClick={()=>{setClientF("all");setWasteF("all");setOpTypeF("all");setModeF("all");setStatusF("all");setTruckF("all");}}>
             ✕ Reset filtres
           </button>
         )}
