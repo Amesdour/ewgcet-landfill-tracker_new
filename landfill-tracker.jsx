@@ -2541,10 +2541,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       const pct = c.weightLimitYear>0 ? Math.round((usedPeriod/c.weightLimitYear)*100) : 0;
                       const col = pct>80?"var(--err)":pct>60?"var(--warn)":"var(--g)";
                       const periodLbl = isMonthly ? now.toLocaleString("fr-DZ",{month:"long",year:"numeric"}) : String(now.getFullYear());
+                      const isOverCredit = c.creditEnabled && c.consumed > c.creditLimit;
                       const rows = c.creditEnabled ? [
-                        ["Limite Crédit (DA)", fmt(c.creditLimit),            "var(--muted)"],
-                        ["Consommé",           fmt(c.consumed),               creditColor(creditPct(c))],
-                        ["Disponible",         fmt(c.creditLimit-c.consumed), c.consumed>c.creditLimit?"var(--err)":"var(--g)"],
+                        ["Limite Crédit (DA)", fmt(c.creditLimit),                                       "var(--muted)"],
+                        ["Consommé",           fmt(c.consumed),                                          creditColor(creditPct(c))],
+                        [isOverCredit?"Dette":"Disponible", fmt(Math.abs(c.creditLimit-c.consumed)), isOverCredit?"var(--err)":"var(--g)"],
                       ] : isRotation ? [
                         [isMonthly?"Quota Mensuel (rot.)":"Quota Annuel (rot.)", c.weightLimitYear+" rot.", "var(--muted)"],
                         [isMonthly?"Rotations ce mois":"Rotations cette année",  usedPeriod+" rot.",        creditColor(pct)],
