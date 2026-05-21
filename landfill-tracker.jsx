@@ -907,7 +907,7 @@ onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.
             {page==="dashboard"  && <PageDashboard discharges={discharges} clients={clients} sites={sites} wasteTypes={wasteTypes} setPage={setPage}/>}
             {page==="gate"       && <PageGate addDischarge={addDischarge} addClient={addClient} clients={clients} sites={sites} wasteTypes={wasteTypes} discharges={discharges} authUser={authUser} isAdmin={isAdmin} company={company} companyTrucks={companyTrucks}/>}
             {page==="discharges" && <PageDischarges discharges={discharges} setDischarges={setDischarges} sites={sites} wasteTypes={wasteTypes} users={users} clients={clients} updateClient={updateClient} updateDischarge={updateDischarge} isAdmin={isAdmin} authUser={authUser} company={company}/>}
-            {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites}/>}
+            {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites} company={company}/>}
             {page==="operators"  && <PageOperators users={users} sites={sites} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} authUser={authUser}/>}
             {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} company={company}/>}
             {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany} companyTrucks={companyTrucks} addCompanyTruck={addCompanyTruck} updateCompanyTruck={updateCompanyTruck} deleteCompanyTruck={deleteCompanyTruck}/>}
@@ -2267,7 +2267,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
 /* ═══════════════════════════════════════════════════════════════════════════
    CLIENTS
 ═══════════════════════════════════════════════════════════════════════════ */
-function PageClients({clients,discharges,updateClient,addClient,deleteClient,isAdmin,docTypes,sites}) {
+function PageClients({clients,discharges,updateClient,addClient,deleteClient,isAdmin,docTypes,sites,company}) {
   const [tab,   setTab]   = useState("convention");
   const [sel,   setSel]   = useState(null);
   const [modal, setModal] = useState(false);
@@ -2664,6 +2664,20 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                             ✗ Révoquer
                           </button>
                         )}
+                        <button className="btn bsm" style={{fontSize:10,background:"#1d6fa4",color:"#fff",borderColor:"#1d6fa4"}} onClick={()=>{
+                          const html = generateEmptyBillHTML(c, company);
+                          const blob = new Blob(['\ufeff', html], {type:'application/msword'});
+                          const url  = URL.createObjectURL(blob);
+                          const a    = document.createElement('a');
+                          a.href     = url;
+                          a.download = `MODELE-FACTURE-${c.id}-${c.name.replace(/\s+/g,'-')}.doc`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                        }}>
+                          📄 Modèle vierge (.doc)
+                        </button>
                       </div>
                     )}
                     {c.status==="rejected"&&(
@@ -3730,6 +3744,172 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 
 </div></body></html>`;
 }
+function generateEmptyBillHTML(c, company) {
+  const TVA = c.vatSubject ? 19 : 0;
+  const date = new Date().toLocaleDateString('fr-DZ');
+  const year = new Date().getFullYear();
+  const co = f => {
+    const arr = Array.isArray(company) ? company : [];
+    return arr.find(x=>x.id===f)?.value || '';
+  };
+  const BLANK_ROWS = Array.from({length:6}, (_,i) => `
+    <tr style="height:32px">
+      <td style="text-align:center;color:#aaa">${i+1}</td>
+      <td></td>
+      <td style="text-align:right"></td>
+      <td style="text-align:right"></td>
+      <td style="text-align:center"></td>
+      <td style="text-align:right"></td>
+    </tr>`).join('');
+  return `<!DOCTYPE html>
+<html xmlns:o='urn:schemas-microsoft-com:office:office'
+      xmlns:w='urn:schemas-microsoft-com:office:word'
+      xmlns='http://www.w3.org/TR/REC-html40' lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Modèle Facture — ${c.name}</title>
+<!--[if gte mso 9]><xml>
+<w:WordDocument>
+  <w:View>Print</w:View>
+  <w:Zoom>100</w:Zoom>
+  <w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml><![endif]-->
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#000}
+  table{border-collapse:collapse;width:100%}
+  th,td{border:1px solid #000;padding:6px 10px}
+  th{background:#f0f0f0;font-weight:bold;text-align:center;font-size:13px}
+  .nb td,.nb th{border:none;padding:3px 5px}
+  .sep{border-top:2.5px solid #000;margin:6px 0}
+  .sep2{border-top:1px solid #000;margin:5px 0}
+  .r{text-align:right}.c{text-align:center}.b{font-weight:bold}
+  @page WordSection1{size:21.0cm 29.7cm;margin:1.5cm 1.8cm;mso-page-orientation:portrait}
+  @page{size:21.0cm 29.7cm;margin:1.5cm 1.8cm}
+  div.WordSection1{page:WordSection1}
+  @media print{body{padding:0}}
+</style>
+</head>
+<body>
+<div class="WordSection1">
+
+<div style="text-align:center;font-size:15px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-bottom:8px;color:#000">
+  الجمهورية الجزائرية الديموقراطية الشعبية
+</div>
+
+<table class="nb" style="width:100%;margin-bottom:6px">
+  <tr>
+    <td style="border:none;vertical-align:top;width:70%">
+      <div style="font-size:12px;line-height:2;color:#000">
+        <div style="font-size:13.5px;font-weight:bold;margin-bottom:4px">
+          Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL
+        </div>
+        <div>Cité Administrative, 01ème Étage, Ayouf Ouest — Jijel</div>
+        <div>IF&nbsp;: 000918044299126 &nbsp;·&nbsp; RC&nbsp;: 18/000442991H09</div>
+        <div>Tél&nbsp;: 034 47 37 62 &nbsp;·&nbsp; Fax&nbsp;: 034 47 37 62</div>
+        <div>BNQ&nbsp;: BADR Jijel — 00300676300261300093</div>
+      </div>
+    </td>
+    <td style="border:none;text-align:right;vertical-align:middle;width:30%">
+      <img src="/logo.png" alt="EPWGCET" style="width:90px;height:90px;object-fit:contain"/>
+    </td>
+  </tr>
+</table>
+
+<div class="sep"></div>
+
+<div style="display:flex;justify-content:space-between;padding:6px 2px;font-weight:bold;font-size:13.5px">
+  <span>FACTURE CLIENT : N°____________/${year}</span>
+  <span>JIJEL, LE : ${date}</span>
+</div>
+
+<div class="sep"></div>
+
+<div style="margin:10px 2px 14px;font-size:12.5px;line-height:1.9">
+  <div style="font-weight:bold;font-size:13px;margin-bottom:3px">FACTURÉ À :</div>
+  <div>${c.id} — ${c.name}</div>
+  ${c.nif    ? `<div>M.F.&nbsp;: ${c.nif}</div>` : ''}
+  ${c.rc     ? `<div>R.C.&nbsp;: ${c.rc}</div>`  : ''}
+  ${c.address? `<div>${c.address}</div>`           : ''}
+  <div style="margin-top:4px;font-size:11.5px;color:#555">
+    Régime TVA&nbsp;: ${TVA > 0 ? `Assujetti — ${TVA}%` : 'Non assujetti (exonéré)'}
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:36px">N°</th>
+      <th style="text-align:left;padding-left:10px">DÉSIGNATION</th>
+      <th style="width:100px">QUANTITÉ</th>
+      <th style="width:110px">PRIX U. (DA)</th>
+      <th style="width:64px">% TVA</th>
+      <th style="width:110px">MONTANT HT</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${BLANK_ROWS}
+    <tr style="background:#f5f5f5">
+      <td colspan="2" class="b" style="font-size:13px">TOTAL GÉNÉRAL</td>
+      <td class="c" style="color:#999;font-size:11px">—</td>
+      <td></td><td></td>
+      <td class="r b"></td>
+    </tr>
+  </tbody>
+</table>
+
+<div style="margin-top:10px;border:1px solid #000;padding:7px 12px;font-size:12px">
+  <strong>Arrêtée la présente facture à la somme de :</strong><br>
+  <span style="font-weight:bold;text-transform:uppercase;letter-spacing:.02em">_______________________________________________________________________________</span>
+</div>
+
+<div style="display:flex;gap:16px;margin-top:12px;align-items:flex-start">
+  <table style="width:46%">
+    <thead>
+      <tr><th>TVA %</th><th>BASE HT</th><th>MONTANT TVA</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="c">${TVA > 0 ? TVA+',00 %' : 'Exonéré'}</td>
+        <td class="r"></td>
+        <td class="r"></td>
+      </tr>
+      <tr class="b">
+        <td class="c b">TOTAL</td>
+        <td class="r b"></td>
+        <td class="r b"></td>
+      </tr>
+    </tbody>
+  </table>
+  <table style="width:52%;margin-left:auto">
+    <tbody>
+      <tr><td style="width:58%">Montant H.T.</td><td class="r"></td></tr>
+      <tr><td>T.V.A. (${TVA}%)</td><td class="r"></td></tr>
+      <tr><td>Montant T.T.C.</td><td class="r"></td></tr>
+      <tr style="background:#e8e8e8">
+        <td class="b" style="font-size:14px">NET À PAYER</td>
+        <td class="r b" style="font-size:15px"></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div style="margin-top:48px;display:flex;justify-content:flex-start;padding-left:8%">
+  <div style="text-align:center;min-width:200px">
+    <div style="font-weight:bold;font-size:13px;margin-bottom:60px;text-transform:uppercase">Le Directeur</div>
+    <div style="border-top:1px solid #000;padding-top:5px;font-size:11px;color:#555">Signature &amp; Cachet</div>
+  </div>
+</div>
+
+<div style="margin-top:28px;padding-top:7px;border-top:1px solid #bbb;font-size:10px;color:#666;text-align:center">
+  Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL — Cité Administrative, Ayouf Ouest — Tél&nbsp;: 034 47 37 62
+</div>
+
+</div></body></html>`;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    INVOICE / RELEVÉ MENSUEL
 ═══════════════════════════════════════════════════════════════════════════ */
