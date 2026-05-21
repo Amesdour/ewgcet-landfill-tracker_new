@@ -1624,7 +1624,14 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
 
           <div className="field"><label>Type de Déchets</label>
             <select className="fi" value={form.wasteType} onChange={e=>set("wasteType",e.target.value)}>
-              {validWasteTypes.map(w=><option key={w.id} value={w.id}>{w.label} — {fmt(opType==="collect"?(isCollectRotation?(w.collectRotationPrice??0):(w.collectPrice??0)):w.price)}{isCollectRotation?"/rot.":"/t"}</option>)}
+              {validWasteTypes.map(w=>{
+                const isRotMode = mode==="rotation"||(isConvWithRotation&&convSubMode==="rotation");
+                const tarif = opType==="collect"
+                  ? (isCollectRotation?(w.collectRotationPrice??0):(w.collectPrice??0))
+                  : isRotMode ? (w.rotationPrice??0) : w.price;
+                const unit = (opType==="collect"&&isCollectRotation)||isRotMode ? "/rot." : "/t";
+                return <option key={w.id} value={w.id}>{w.label} — {fmt(tarif)}{unit}</option>;
+              })}
             </select>
           </div>
 
@@ -2091,10 +2098,8 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
                       :<span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:9,whiteSpace:"nowrap"}}>🏭 Traitement</span>
                     }</td>
                     <td><span className="mn">{fmtN(d.net)}</span></td>
-                    <td><span className="mn tmu">{d.payMethod==="rotation"?"—":fmt(d.unitPrice)}</span></td>
-                    <td>{d.payMethod==="rotation"
-                      ?<span className="mn fw7" style={{color:"var(--orange)"}}>1 rot.</span>
-                      :<span className="mn tg fw7">{fmt(d.total)}</span>}</td>
+                    <td><span className="mn tmu">{fmt(d.unitPrice)}{d.payMethod==="rotation"?<span style={{fontSize:9,marginLeft:2}}>/rot.</span>:<span style={{fontSize:9,marginLeft:2}}>/t</span>}</span></td>
+                    <td><span className="mn tg fw7">{fmt(d.total)}</span></td>
                     <td>{d.payMethod==="cash"?<span className="badge b-cash">💵 Cash</span>:d.payMethod==="rotation"?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>:<span className="badge b-info">📋 Conv.</span>}</td>
                     <td><StatusBadge s={d.status}/></td>
                     <td><span className="mn tmu" style={{fontSize:10}}>{op?.name.split(" ")[0]||"—"}</span></td>
