@@ -4454,23 +4454,35 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 {lineItems.length===0
                   ?<tr><td colSpan={5} style={{textAlign:"center",color:"var(--muted)",padding:30}}>Aucun dépôt pour cette période</td></tr>
                   :(()=>{
-                    let coverLeft = currentInv ? (currentInv.paidAmount||0) : 0;
-                    // paidAmount is TTC; item.total is HT. Compute each item's proportional
-                    // TTC share so coverage comparison is in the same unit.
+                    // paidAmount is TTC; item.total is HT.
                     const totalHT = lineItems.reduce((s,li)=>s+li.total,0);
                     const invTTC  = currentInv?.totalAmount
                       || (c.vatSubject ? Math.round(totalHT*1.19*100)/100 : totalHT);
-                    return lineItems.map((item,i)=>{
-                      const itemTTC = totalHT > 0
+                    // Pre-compute each item's TTC share
+                    const itemTTCs = lineItems.map(item =>
+                      totalHT > 0
                         ? Math.round((item.total / totalHT) * invTTC * 100) / 100
-                        : (c.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total);
-                      let payStatus = 'unpaid';
-                      let partialPaid = 0;
-                      if (coverLeft >= itemTTC) {
-                        payStatus = 'paid'; coverLeft -= itemTTC;
+                        : (c.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total)
+                    );
+                    // Assign coverage filling smallest items first so that items which
+                    // were already paid stay covered when a large existing row grows
+                    // due to a newly-added discharge (e.g. same type merged into row 1).
+                    const payStatuses  = new Array(lineItems.length).fill('unpaid');
+                    const partialPaids = new Array(lineItems.length).fill(0);
+                    const sortedIdx = lineItems.map((_,i)=>i).sort((a,b)=>itemTTCs[a]-itemTTCs[b]);
+                    let coverLeft = currentInv ? (currentInv.paidAmount||0) : 0;
+                    for (const idx of sortedIdx) {
+                      const itc = itemTTCs[idx];
+                      if (coverLeft >= itc) {
+                        payStatuses[idx] = 'paid'; coverLeft -= itc;
                       } else if (coverLeft > 0) {
-                        payStatus = 'partial'; partialPaid = coverLeft; coverLeft = 0;
+                        payStatuses[idx] = 'partial'; partialPaids[idx] = coverLeft; coverLeft = 0;
                       }
+                    }
+                    return lineItems.map((item,i)=>{
+                      const itemTTC   = itemTTCs[i];
+                      const payStatus = payStatuses[i];
+                      const partialPaid = partialPaids[i];
                       const isPaid    = payStatus==='paid';
                       const isPartial = payStatus==='partial';
                       const isUnpaid  = payStatus==='unpaid';
