@@ -3734,10 +3734,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   });
   const grandNet  = globalRows.filter(r=>r.cl.type!=="rotation").reduce((s,r)=>s+r.net,0);
   const grandCost = globalRows.reduce((s,r)=>{
-    if (!r.inv) return s + r.cost;
-    if (r.inv.status==="paid") return s;
-    if (r.inv.status==="partial") return s + (r.inv.totalAmount - (r.inv.paidAmount||0));
-    return s + r.cost;
+    if (r.inv?.status==="paid") return s;
+    if (r.inv?.status==="partial") return s + (r.inv.totalAmount - (r.inv.paidAmount||0));
+    // Pending or overdue invoice already has TTC stored in totalAmount
+    if (r.inv?.status==="pending" || r.inv?.status==="overdue") return s + (r.inv.totalAmount||0);
+    // No invoice yet — estimate TTC from discharge totals
+    return s + (r.cl.vatSubject ? Math.round(r.cost * 1.19 * 100) / 100 : r.cost);
   },0);
   const grandDeps = globalRows.reduce((s,r)=>s+r.entries.length,0);
 
@@ -3915,10 +3917,15 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                                 <span className="mn fw7" style={{color:"var(--warn)"}}>{fmt(inv.totalAmount-(inv.paidAmount||0))}</span>
                                 <div style={{fontSize:9,color:"var(--muted)",marginTop:1}}>reste / {fmt(inv.totalAmount)}</div>
                               </div>
+                            :inv&&(inv.status==="pending"||inv.status==="overdue")
+                              ?<div>
+                                <span className="mn fw7">{fmt(inv.totalAmount)}</span>
+                                {cl.vatSubject && <span className="mn tmu" style={{fontSize:9,marginLeft:4}}>TTC</span>}
+                              </div>
                             :clC>0 ? (
                               <div>
-                                <span className="mn fw7">{fmt(cl.vatSubject ? clC*1.19 : clC)}</span>
-                                {cl.vatSubject && <span className="mn tmu" style={{fontSize:9,marginLeft:4}}>TTC</span>}
+                                <span className="mn fw7">{fmt(cl.vatSubject ? Math.round(clC*1.19*100)/100 : clC)}</span>
+                                {cl.vatSubject && <span className="mn tmu" style={{fontSize:9,marginLeft:4}}>TTC (est.)</span>}
                               </div>
                             ) : <span className="mn tmu">—</span>}
                         </td>
