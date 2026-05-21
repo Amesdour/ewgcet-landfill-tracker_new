@@ -991,12 +991,16 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
           </div>
           <div className="tw">
             <table>
-              <thead><tr><th>Camion</th><th>Client</th><th>Net(t)</th><th>Total</th><th>Statut</th></tr></thead>
+              <thead><tr><th>Camion</th><th>Client</th><th>Opération</th><th>Net(t)</th><th>Total</th><th>Statut</th></tr></thead>
               <tbody>
                 {discharges.slice(0,6).map(d=>(
                   <tr key={d.id}>
                     <td><span className="mn">{d.truck}</span></td>
-                    <td style={{maxWidth:130}} className="truncate">{d.clientName}</td>
+                    <td style={{maxWidth:110}} className="truncate">{d.clientName}</td>
+                    <td>{d.opType==="collect"
+                      ?<span className="badge" style={{background:"rgba(139,92,246,.12)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:9,whiteSpace:"nowrap"}}>🚛 Collecte</span>
+                      :<span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:9,whiteSpace:"nowrap"}}>🏭 Traitement</span>
+                    }</td>
                     <td><span className="mn">{fmtN(d.net)}</span></td>
                     <td><span className="mn tg">{fmt(d.total)}</span></td>
                     <td><StatusBadge s={d.status}/></td>
@@ -1975,13 +1979,13 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
             <thead>
               <tr>
                 <th>ID</th><th>Date/Heure</th><th>Site</th><th>Camion</th><th>Client</th>
-                <th>Type</th><th>Net(t)</th><th>Tarif</th><th>Total</th><th>Mode</th><th>Statut</th><th>Op.</th><th>Action</th>
+                <th>Type</th><th>Opération</th><th>Net(t)</th><th>Tarif</th><th>Total</th><th>Mode</th><th>Statut</th><th>Op.</th><th>Action</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length===0?(
                 <tr>
-                  <td colSpan={13} style={{textAlign:"center",padding:40}}>
+                  <td colSpan={14} style={{textAlign:"center",padding:40}}>
                     <div style={{fontSize:32,marginBottom:8}}>📭</div>
                     <div style={{color:"var(--muted)"}}>Aucune entrée</div>
                     <div style={{color:"var(--dim)",fontSize:11,marginTop:4}}>Les déchargements enregistrés apparaîtront ici</div>
@@ -2002,6 +2006,10 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
                       {d.clientName}
                     </td>
                     <td><span className="badge b-purple">{wt?.label.split(" ")[0]}</span></td>
+                    <td>{d.opType==="collect"
+                      ?<span className="badge" style={{background:"rgba(139,92,246,.12)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:9,whiteSpace:"nowrap"}}>🚛 Collecte</span>
+                      :<span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:9,whiteSpace:"nowrap"}}>🏭 Traitement</span>
+                    }</td>
                     <td><span className="mn">{fmtN(d.net)}</span></td>
                     <td><span className="mn tmu">{d.payMethod==="rotation"?"—":fmt(d.unitPrice)}</span></td>
                     <td>{d.payMethod==="rotation"
