@@ -1637,7 +1637,14 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                       <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11}}>
                         {fmt(client.consumed)} / {fmt(client.creditLimit)} DA
                       </span>
-                      {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Solde prépayé insuffisant !</div>}
+                      {(()=>{
+                        const pp = creditPct(client);
+                        const rem = Math.max(0, client.creditLimit - client.consumed);
+                        if (wouldExceedCredit || pp>=100) return <div style={{color:"var(--err)",fontSize:11,marginTop:3,fontWeight:700}}>🔴 Solde épuisé — décharge impossible !</div>;
+                        if (pp>=90) return <div style={{color:"var(--err)",fontSize:11,marginTop:3,fontWeight:700}}>🔴 Solde critique : {fmt(rem)} DA restants ({100-pp}%)</div>;
+                        if (pp>=70) return <div style={{color:"var(--warn)",fontSize:11,marginTop:3,fontWeight:600}}>🟠 Solde bas : {fmt(rem)} DA restants ({100-pp}%)</div>;
+                        return null;
+                      })()}
                     </>
                     :mode==="rotation"
                     ?<><strong>Client Convention Rotation ({client.payFrequency==="monthly"?"mensuelle":"annuelle"}) :</strong> Chaque décharge = 1 rotation.
@@ -2712,11 +2719,13 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       <div className="cbt mt2"><div className="cbf" style={{width:`${Math.min(pct,100)}%`,background:col}}/></div>
                       <div className="tsm tmu mt1" style={{fontSize:10}}>
                         {cl.type==="prepaid"
-                          ?`Solde: ${fmt(Math.max(0,cl.creditLimit-cl.consumed))}`
+                          ?<span style={{color:col,fontWeight:pct>=70?700:400}}>
+                            {pct>=100?"🔴 Solde épuisé":pct>=90?"🔴 Solde critique: "+fmt(Math.max(0,cl.creditLimit-cl.consumed)):pct>=70?"🟠 Solde bas: "+fmt(Math.max(0,cl.creditLimit-cl.consumed)):"Solde: "+fmt(Math.max(0,cl.creditLimit-cl.consumed))}
+                          </span>
                           :cl.creditEnabled&&cl.consumed>cl.creditLimit
                             ?<span style={{color:"var(--err)",fontWeight:700}}>⚠ Dette: {fmt(cl.consumed-cl.creditLimit)}</span>
                             :`${pct}%`}
-                        {" · "}{cl.creditEnabled&&cl.consumed>cl.creditLimit?fmt(cl.consumed-cl.creditLimit):fmt(cl.consumed)}
+                        {" · "}{cl.type==="prepaid"?`${pct}% consommé`:cl.creditEnabled&&cl.consumed>cl.creditLimit?fmt(cl.consumed-cl.creditLimit):fmt(cl.consumed)}
                       </div>
                     </>
                   )}
@@ -2791,20 +2800,47 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   </div>
                 </div>
 
-                {c.type==="prepaid"&&(
-                  <div className="fg fg3 mb3">
-                    {[
-                      ["Solde Total (DA)",  fmt(c.creditLimit),                                   "var(--muted)"],
-                      ["Consommé",          fmt(c.consumed),                                       creditColor(creditPct(c))],
-                      ["Solde Disponible",  fmt(Math.max(0,c.creditLimit-c.consumed)),             c.consumed>c.creditLimit?"var(--err)":"var(--g)"],
-                    ].map(([l,v,col])=>(
-                      <div key={l} className="card-sm" style={{borderTop:`2px solid ${col}`}}>
-                        <div style={{fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>{l}</div>
-                        <div style={{fontFamily:"var(--head)",fontSize:16,fontWeight:800,color:col,marginTop:4}}>{v}</div>
+                {c.type==="prepaid"&&(()=>{
+                  const pp = creditPct(c);
+                  const remaining = Math.max(0, c.creditLimit - c.consumed);
+                  const isLow      = pp >= 70 && pp < 90;
+                  const isCritical = pp >= 90 && pp < 100;
+                  const isDepleted = pp >= 100;
+                  return (
+                    <>
+                      {isDepleted&&(
+                        <div className="alrt ae mb3" style={{padding:"10px 14px"}}>
+                          <span style={{fontSize:16}}>🔴</span>
+                          <div><strong>Solde épuisé !</strong> Ce client a consommé la totalité de son dépôt prépayé. Aucune nouvelle décharge n'est possible jusqu'au rechargement du solde.</div>
+                        </div>
+                      )}
+                      {isCritical&&(
+                        <div className="alrt ae mb3" style={{padding:"10px 14px"}}>
+                          <span style={{fontSize:16}}>🔴</span>
+                          <div><strong>Solde critique !</strong> Il reste seulement <strong>{fmt(remaining)} DA</strong> ({100-pp}% du dépôt). Contacter le client pour un rechargement urgent.</div>
+                        </div>
+                      )}
+                      {isLow&&(
+                        <div className="alrt aw mb3" style={{padding:"10px 14px"}}>
+                          <span style={{fontSize:16}}>🟠</span>
+                          <div><strong>Solde bas :</strong> Il reste <strong>{fmt(remaining)} DA</strong> ({100-pp}% du dépôt initial). Pensez à prévenir le client pour un rechargement.</div>
+                        </div>
+                      )}
+                      <div className="fg fg3 mb3">
+                        {[
+                          ["Solde Total (DA)",  fmt(c.creditLimit),    "var(--muted)"],
+                          ["Consommé",          fmt(c.consumed),       creditColor(pp)],
+                          ["Solde Disponible",  fmt(remaining),        isDepleted?"var(--err)":isCritical?"var(--err)":isLow?"var(--warn)":"var(--g)"],
+                        ].map(([l,v,col])=>(
+                          <div key={l} className="card-sm" style={{borderTop:`2px solid ${col}`}}>
+                            <div style={{fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>{l}</div>
+                            <div style={{fontFamily:"var(--head)",fontSize:16,fontWeight:800,color:col,marginTop:4}}>{v}</div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </>
+                  );
+                })()}
 
                 {(c.type==="convention"||c.type==="rotation")&&c.status==="approved"&&(
                   <div className="fg fg3 mb3">
