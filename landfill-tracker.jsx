@@ -461,11 +461,12 @@ const creditColor = p => p>=90 ? "var(--err)" : p>=70 ? "var(--warn)" : "var(--g
 
 function statusBadgeProps(s) {
   return {
-    settled:["b-ok",   "✓ Réglé"],
-    paid:   ["b-cash", "✅ Payé"],
-    unpaid: ["b-warn", "⏳ Non payé"],
-    flagged:["b-err",  "⚠ Limite"],
-    pending:["b-warn", "⏳ Attente"],
+    paid:      ["b-cash",  "✅ Payé"],
+    settled:   ["b-warn",  "⏳ Non payé"],
+    ok:        ["b-warn",  "⏳ Non payé"],
+    flagged:   ["b-err",   "⚠ Limite"],
+    cancelled: ["b-muted", "Annulé"],
+    pending:   ["b-warn",  "⏳ Attente"],
   }[s] || ["b-info", s];
 }
 
@@ -2052,15 +2053,6 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
    DISCHARGES HISTORY
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients,invoices,updateClient,updateDischarge,isAdmin,authUser,company}) {
-  const getDisplayStatus = (d) => {
-    if (d.status === "cancelled") return "cancelled";
-    if (d.status === "flagged")   return "flagged";
-    if (d.payMethod === "cash")   return "paid";
-    // Convention / credit / prepaid: derive from the invoice for that month
-    const inv = invoices.find(i => i.clientId === d.clientId && i.month === d.ts.slice(0,7));
-    if (inv?.status === "paid") return "paid";
-    return "unpaid";
-  };
   const opSiteId = (!isAdmin && authUser?.siteId && authUser.siteId!=="all") ? authUser.siteId : null;
   const [filter,  setFilter]  = useState("all");
   const [search,  setSearch]  = useState("");
@@ -2299,7 +2291,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
                     <td><span className="mn tmu">{fmt(d.unitPrice)}{d.payMethod==="rotation"?<span style={{fontSize:9,marginLeft:2}}>/rot.</span>:<span style={{fontSize:9,marginLeft:2}}>/t</span>}</span></td>
                     <td><span className="mn tg fw7">{fmt(d.total)}</span></td>
                     <td>{d.payMethod==="cash"?<span className="badge b-cash">💵 Cash</span>:d.payMethod==="rotation"?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>:<span className="badge b-info">📋 Conv.</span>}</td>
-                    <td><StatusBadge s={getDisplayStatus(d)}/></td>
+                    <td><StatusBadge s={d.status}/></td>
                     <td><span className="mn tmu" style={{fontSize:10}}>{op?.name.split(" ")[0]||"—"}</span></td>
                     <td>
                       <div className="fx aic g2">
