@@ -4457,6 +4457,25 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         <td>
                           {cl.type==="rotation"
                             ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>
+                            :cl.type==="prepaid"
+                            ?(()=>{
+                              const pp=creditPct(cl);
+                              const rem=Math.max(0,cl.creditLimit-cl.consumed);
+                              const col=creditColor(pp);
+                              return (
+                                <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                                  <span className="badge" style={{background:"rgba(59,130,246,.12)",color:"#1d4ed8",border:"1px solid rgba(59,130,246,.3)"}}>🎫 Prépayé</span>
+                                  <div style={{minWidth:90}}>
+                                    <div className="cbt" style={{height:4,marginBottom:3}}>
+                                      <div className="cbf" style={{width:`${Math.min(pp,100)}%`,background:col,borderRadius:4}}/>
+                                    </div>
+                                    <div style={{fontSize:9,fontFamily:"var(--mono)",color:col,fontWeight:pp>=70?700:400}}>
+                                      {pp>=100?"🔴 Épuisé":pp>=90?"🔴 "+fmt(rem)+" DA":pp>=70?"🟠 "+fmt(rem)+" DA":"✅ "+fmt(rem)+" DA"}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()
                             :<span className={`badge ${cl.type==="credit"?"":cl.clientType==="state"?"b-purple":"b-info"}`}
                               style={cl.type==="credit"?{background:"rgba(139,92,246,.15)",color:"#7c3aed",border:"1px solid rgba(139,92,246,.3)"}:{}}>
                               {cl.type==="credit"?"💳 Crédit":cl.clientType==="state"?"🏛 État":"🏢 Privé"}
@@ -4704,6 +4723,45 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               })()}
             </div>
           </div>
+
+          {/* ── Prepaid balance summary ── */}
+          {c.type==="prepaid"&&(()=>{
+            const pp=creditPct(c);
+            const remaining=Math.max(0,c.creditLimit-c.consumed);
+            const isLow     =pp>=70&&pp<90;
+            const isCritical=pp>=90&&pp<100;
+            const isDepleted=pp>=100;
+            const col=creditColor(pp);
+            return (
+              <div style={{padding:"0 20px 16px"}}>
+                {isDepleted&&<div className="alrt ae mb3" style={{padding:"10px 14px"}}><span style={{fontSize:15}}>🔴</span><div><strong>Solde épuisé !</strong> La totalité du dépôt prépayé a été consommée. Aucune nouvelle décharge n'est possible.</div></div>}
+                {isCritical&&<div className="alrt ae mb3" style={{padding:"10px 14px"}}><span style={{fontSize:15}}>🔴</span><div><strong>Solde critique !</strong> Reste <strong>{fmt(remaining)} DA</strong> ({100-pp}% du dépôt). Prévoir un rechargement urgent.</div></div>}
+                {isLow&&<div className="alrt aw mb3" style={{padding:"10px 14px"}}><span style={{fontSize:15}}>🟠</span><div><strong>Solde bas :</strong> Reste <strong>{fmt(remaining)} DA</strong> ({100-pp}% du dépôt initial). Penser à prévenir le client.</div></div>}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+                  {[
+                    ["Dépôt initial",   fmt(c.creditLimit), "var(--muted)"],
+                    ["Consommé",        fmt(c.consumed),    col],
+                    ["Solde disponible",fmt(remaining),     isDepleted?"var(--err)":isCritical?"var(--err)":isLow?"var(--warn)":"var(--g)"],
+                  ].map(([l,v,c2])=>(
+                    <div key={l} className="card-sm" style={{borderTop:`2px solid ${c2}`}}>
+                      <div style={{fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>{l}</div>
+                      <div style={{fontFamily:"var(--head)",fontSize:15,fontWeight:800,color:c2,marginTop:4}}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{marginTop:10}}>
+                  <div className="cbt" style={{height:8,borderRadius:4}}>
+                    <div className="cbf" style={{width:`${Math.min(pp,100)}%`,background:col,borderRadius:4,transition:"width .5s"}}/>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:10,marginTop:4,fontFamily:"var(--mono)",color:"var(--muted)"}}>
+                    <span>0 DA</span>
+                    <span style={{color:col,fontWeight:700}}>{pp}% consommé</span>
+                    <span>{fmt(c.creditLimit)}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── Limit / quota progress ── */}
           {(c.creditEnabled || c.weightLimitYear>0) && (()=>{
