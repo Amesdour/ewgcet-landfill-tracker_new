@@ -4455,31 +4455,60 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                       <tr key={cl.id}>
                         <td style={{fontWeight:700}}>{cl.name}</td>
                         <td>
-                          {cl.type==="rotation"
-                            ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>
-                            :cl.type==="prepaid"
-                            ?(()=>{
-                              const pp=creditPct(cl);
-                              const rem=Math.max(0,cl.creditLimit-cl.consumed);
-                              const col=creditColor(pp);
-                              return (
-                                <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                                  <span className="badge" style={{background:"rgba(59,130,246,.12)",color:"#1d4ed8",border:"1px solid rgba(59,130,246,.3)"}}>🎫 Prépayé</span>
-                                  <div style={{minWidth:90}}>
+                          {(()=>{
+                            // Compute quota for any client with a limit
+                            const hasLimit = cl.creditEnabled || cl.weightLimitYear>0;
+                            const isRot    = cl.type==="rotation";
+                            const isPre    = cl.type==="prepaid";
+                            let miniBar = null;
+                            if (isPre || hasLimit || isRot) {
+                              let usedQ, limitQ, unitLabel, remLabel;
+                              if (isPre) {
+                                usedQ=cl.consumed; limitQ=cl.creditLimit; unitLabel="DA";
+                                remLabel=v=>fmt(v)+" DA";
+                              } else if (cl.creditEnabled) {
+                                usedQ=cl.consumed; limitQ=cl.creditLimit; unitLabel="DA";
+                                remLabel=v=>fmt(v)+" DA";
+                              } else {
+                                const isMonthly = cl.payFrequency==="monthly";
+                                const pfx = isMonthly
+                                  ? `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`
+                                  : now.getFullYear().toString();
+                                const pDs = discharges.filter(d=>d.clientId===cl.id&&d.ts.startsWith(pfx)&&d.status!=="cancelled");
+                                usedQ  = isRot ? pDs.length : pDs.reduce((s,d)=>s+d.net,0);
+                                limitQ = cl.weightLimitYear;
+                                unitLabel = isRot?"rot.":"t";
+                                remLabel  = isRot ? v=>v+" rot." : v=>fmtN(v)+" t";
+                              }
+                              if (limitQ>0) {
+                                const pp  = Math.min(Math.round((usedQ/limitQ)*100),100);
+                                const col = pp>=100?"var(--err)":pp>=90?"var(--err)":pp>=70?"var(--warn)":"var(--g)";
+                                const rem = Math.max(0,limitQ-usedQ);
+                                miniBar = (
+                                  <div style={{minWidth:90,marginTop:4}}>
                                     <div className="cbt" style={{height:4,marginBottom:3}}>
-                                      <div className="cbf" style={{width:`${Math.min(pp,100)}%`,background:col,borderRadius:4}}/>
+                                      <div className="cbf" style={{width:`${pp}%`,background:col,borderRadius:4}}/>
                                     </div>
                                     <div style={{fontSize:9,fontFamily:"var(--mono)",color:col,fontWeight:pp>=70?700:400}}>
-                                      {pp>=100?"🔴 Épuisé":pp>=90?"🔴 "+fmt(rem)+" DA":pp>=70?"🟠 "+fmt(rem)+" DA":"✅ "+fmt(rem)+" DA"}
+                                      {pp>=100?"🔴 Limite atteinte"
+                                        :pp>=90?"🔴 "+remLabel(rem)+" restant"
+                                        :pp>=70?"🟠 "+remLabel(rem)+" restant"
+                                        :"✅ "+remLabel(rem)+" restant"}
                                     </div>
                                   </div>
-                                </div>
-                              );
-                            })()
-                            :<span className={`badge ${cl.type==="credit"?"":cl.clientType==="state"?"b-purple":"b-info"}`}
-                              style={cl.type==="credit"?{background:"rgba(139,92,246,.15)",color:"#7c3aed",border:"1px solid rgba(139,92,246,.3)"}:{}}>
-                              {cl.type==="credit"?"💳 Crédit":cl.clientType==="state"?"🏛 État":"🏢 Privé"}
-                            </span>}
+                                );
+                              }
+                            }
+                            const badge = isRot
+                              ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>
+                              :cl.type==="prepaid"
+                              ?<span className="badge" style={{background:"rgba(59,130,246,.12)",color:"#1d4ed8",border:"1px solid rgba(59,130,246,.3)"}}>🎫 Prépayé</span>
+                              :<span className={`badge ${cl.type==="credit"?"":cl.clientType==="state"?"b-purple":"b-info"}`}
+                                style={cl.type==="credit"?{background:"rgba(139,92,246,.15)",color:"#7c3aed",border:"1px solid rgba(139,92,246,.3)"}:{}}>
+                                {cl.type==="credit"?"💳 Crédit":cl.clientType==="state"?"🏛 État":"🏢 Privé"}
+                              </span>;
+                            return <div style={{display:"flex",flexDirection:"column",gap:2}}>{badge}{miniBar}</div>;
+                          })()}
                         </td>
                         <td>
                           {clE.length===0
@@ -4822,6 +4851,28 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                       }
                     </span>
                   </div>
+                  {pct>=90&&pct<100&&(
+                    <div className="alrt ae" style={{marginTop:8,marginBottom:0,padding:"6px 10px",fontSize:11}}>
+                      <span>🔴</span>
+                      <span><strong>Quota critique ({pct}%) :</strong> Reste seulement{" "}
+                        {c.creditEnabled?<strong>{fmt(Math.max(0,limit-usedPeriod))} DA</strong>
+                          :isRotation?<strong>{Math.max(0,limit-usedPeriod)} rotation(s)</strong>
+                          :<strong>{fmtN(Math.max(0,limit-usedPeriod))} t</strong>}.
+                        {" "}Prévoir un renouvellement urgent.
+                      </span>
+                    </div>
+                  )}
+                  {pct>=70&&pct<90&&(
+                    <div className="alrt aw" style={{marginTop:8,marginBottom:0,padding:"6px 10px",fontSize:11}}>
+                      <span>🟠</span>
+                      <span><strong>Quota bas ({pct}%) :</strong> Reste{" "}
+                        {c.creditEnabled?<strong>{fmt(Math.max(0,limit-usedPeriod))} DA</strong>
+                          :isRotation?<strong>{Math.max(0,limit-usedPeriod)} rotation(s)</strong>
+                          :<strong>{fmtN(Math.max(0,limit-usedPeriod))} t</strong>}.
+                        {" "}Penser à prévenir le client.
+                      </span>
+                    </div>
+                  )}
                   {pct>=100&&(
                     <div className="alrt ae" style={{marginTop:8,marginBottom:0,padding:"6px 10px",fontSize:11}}>
                       <span>🚫</span><span><strong>Limite atteinte</strong> — Aucun nouveau dépôt autorisé pour les opérateurs.</span>
