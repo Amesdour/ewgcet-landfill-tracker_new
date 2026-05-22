@@ -3847,7 +3847,7 @@ function amountToWords(amount) {
 }
 
 function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes) {
-  const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+  const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
   const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
   const TVA = c.vatSubject ? 19 : 0;
   // Group by opType + wasteType + billingMode so Traitement and Collecte et Traitement appear as separate lines
