@@ -1572,65 +1572,97 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
             </div>
           )}
           {client&&(
-            <div className={`alrt ${mode==="cash"?"aw":wouldExceed?"ae":"ao"}`} style={{marginBottom:0}}>
-              <span>{mode==="cash"?"💵":mode==="prepaid"?"🎫":mode==="rotation"?"🔄":client.creditEnabled?"💳":isConvWithRotation&&convSubMode==="rotation"?"🔄":"📋"}</span>
-              <div style={{flex:1}}>
-                {mode==="cash"
-                  ?<><strong>Client Cash :</strong> Paiement en espèces requis. La barrière restera fermée jusqu'à confirmation.</>
-                  :mode==="prepaid"
-                  ?<><strong>Client Bonus Prépayé :</strong> Solde consommé à chaque décharge.
-                    <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11}}>
-                      {fmt(client.consumed)} / {fmt(client.creditLimit)} DA
-                    </span>
-                    {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Solde prépayé insuffisant !</div>}
-                  </>
-                  :mode==="rotation"
-                  ?<><strong>Client Convention Rotation ({client.payFrequency==="monthly"?"mensuelle":"annuelle"}) :</strong> Chaque décharge = 1 rotation.
-                    {client.weightLimitYear>0&&(
-                      <div style={{marginTop:4}}>
-                        <div className="cbt" style={{height:4,marginBottom:3}}>
-                          <div className="cbf" style={{width:`${Math.min(rotationPct,100)}%`,background:wouldExceedRotations?"var(--err)":rotationPct>80?"var(--warn)":"var(--g)"}}/>
+            opType==="collect"?(
+              <div className={`alrt ${collectMode==="cash"?"aw":wouldExceed?"ae":"ao"}`} style={{marginBottom:0}}>
+                <span>{isCollectRotation?"🔄":collectMode==="cash"?"💵":collectMode==="prepaid"?"🎫":"📋"}</span>
+                <div style={{flex:1}}>
+                  {collectMode==="cash"
+                    ?<><strong>Client Cash (Collecte) :</strong> Paiement en espèces requis à la livraison.</>
+                    :isCollectRotation
+                    ?<><strong>Client Collecte — Rotation :</strong> 1 rotation enregistrée par passage. Aucun pesage requis.</>
+                    :collectMode==="prepaid"
+                    ?<><strong>Client Prépayé (Collecte) :</strong> Décharge imputée au solde prépayé.
+                      <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11}}>
+                        {fmt(client.consumed)} / {fmt(client.creditLimit)} DA
+                      </span>
+                      {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Solde prépayé insuffisant !</div>}
+                    </>
+                    :<><strong>Client Collecte — Tonnage ({client.payFrequency==="monthly"?"/mois":"/an"}) :</strong> Facturation au poids net.
+                      {client.weightLimitYear>0&&(
+                        <div style={{marginTop:4}}>
+                          <div className="cbt" style={{height:4,marginBottom:3}}>
+                            <div className="cbf" style={{width:`${Math.min(weightPct,100)}%`,background:wouldExceedWeight?"var(--err)":weightPct>80?"var(--warn)":"var(--purple)"}}/>
+                          </div>
+                          <span style={{fontFamily:"var(--mono)",fontSize:11}}>
+                            {fmtN(usedThisYear)} / {fmtN(client.weightLimitYear)} t — {weightPct}% utilisé
+                          </span>
+                          {wouldExceedWeight&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota dépassé !</span>}
                         </div>
-                        <span style={{fontFamily:"var(--mono)",fontSize:11}}>
-                          {usedRotations} / {client.weightLimitYear} rotations — {rotationPct}% utilisé
-                        </span>
-                        {wouldExceedRotations&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota de rotations dépassé !</span>}
-                      </div>
-                    )}
-                  </>
-                  :client.creditEnabled
-                  ?<><strong>Client Crédit (DA) :</strong> Décharge imputée au compte crédit.
-                    <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11}}>
-                      {fmt(client.consumed)} / {fmt(client.creditLimit)} DA
-                    </span>
-                    {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Limite de crédit dépassée ({creditPct(client)}% utilisé) !</div>}
-                  </>
-                  :<><strong>Client Convention Tonnes{isConvWithRotation&&convSubMode==="rotation"?" — Mode Rotation":""} ({client.payFrequency==="monthly"?"/mois":"/an"}) :</strong>{" "}
-                    {isConvWithRotation&&convSubMode==="rotation"?"Chaque décharge = 1 rotation sur le quota autorisé.":"Décharge créditée au quota de tonnage."}
-                    {isConvWithRotation&&convSubMode==="rotation"?(
-                      <div style={{marginTop:4}}>
-                        <div className="cbt" style={{height:4,marginBottom:3}}>
-                          <div className="cbf" style={{width:`${Math.min(rotationConvPct,100)}%`,background:wouldExceedConvRot?"var(--err)":rotationConvPct>80?"var(--warn)":"var(--orange)"}}/>
-                        </div>
-                        <span style={{fontFamily:"var(--mono)",fontSize:11}}>
-                          {usedConvRotations} / {client.rotationLimit} rotations — {rotationConvPct}% utilisé
-                        </span>
-                        {wouldExceedConvRot&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota de rotations dépassé !</span>}
-                      </div>
-                    ):client.weightLimitYear>0&&(
-                      <div style={{marginTop:4}}>
-                        <div className="cbt" style={{height:4,marginBottom:3}}>
-                          <div className="cbf" style={{width:`${Math.min(weightPct,100)}%`,background:wouldExceedWeight?"var(--err)":weightPct>80?"var(--warn)":"var(--g)"}}/>
-                        </div>
-                        <span style={{fontFamily:"var(--mono)",fontSize:11}}>
-                          {fmtN(usedThisYear)} / {fmtN(client.weightLimitYear)} t — {weightPct}% utilisé
-                        </span>
-                        {wouldExceedWeight&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota dépassé !</span>}
-                      </div>
-                    )}
-                  </>}
+                      )}
+                    </>}
+                </div>
               </div>
-            </div>
+            ):(
+              <div className={`alrt ${mode==="cash"?"aw":wouldExceed?"ae":"ao"}`} style={{marginBottom:0}}>
+                <span>{mode==="cash"?"💵":mode==="prepaid"?"🎫":mode==="rotation"?"🔄":client.creditEnabled?"💳":isConvWithRotation&&convSubMode==="rotation"?"🔄":"📋"}</span>
+                <div style={{flex:1}}>
+                  {mode==="cash"
+                    ?<><strong>Client Cash :</strong> Paiement en espèces requis. La barrière restera fermée jusqu'à confirmation.</>
+                    :mode==="prepaid"
+                    ?<><strong>Client Bonus Prépayé :</strong> Solde consommé à chaque décharge.
+                      <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11}}>
+                        {fmt(client.consumed)} / {fmt(client.creditLimit)} DA
+                      </span>
+                      {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Solde prépayé insuffisant !</div>}
+                    </>
+                    :mode==="rotation"
+                    ?<><strong>Client Convention Rotation ({client.payFrequency==="monthly"?"mensuelle":"annuelle"}) :</strong> Chaque décharge = 1 rotation.
+                      {client.weightLimitYear>0&&(
+                        <div style={{marginTop:4}}>
+                          <div className="cbt" style={{height:4,marginBottom:3}}>
+                            <div className="cbf" style={{width:`${Math.min(rotationPct,100)}%`,background:wouldExceedRotations?"var(--err)":rotationPct>80?"var(--warn)":"var(--g)"}}/>
+                          </div>
+                          <span style={{fontFamily:"var(--mono)",fontSize:11}}>
+                            {usedRotations} / {client.weightLimitYear} rotations — {rotationPct}% utilisé
+                          </span>
+                          {wouldExceedRotations&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota de rotations dépassé !</span>}
+                        </div>
+                      )}
+                    </>
+                    :client.creditEnabled
+                    ?<><strong>Client Crédit (DA) :</strong> Décharge imputée au compte crédit.
+                      <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11}}>
+                        {fmt(client.consumed)} / {fmt(client.creditLimit)} DA
+                      </span>
+                      {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Limite de crédit dépassée ({creditPct(client)}% utilisé) !</div>}
+                    </>
+                    :<><strong>Client Convention Tonnes{isConvWithRotation&&convSubMode==="rotation"?" — Mode Rotation":""} ({client.payFrequency==="monthly"?"/mois":"/an"}) :</strong>{" "}
+                      {isConvWithRotation&&convSubMode==="rotation"?"Chaque décharge = 1 rotation sur le quota autorisé.":"Décharge créditée au quota de tonnage."}
+                      {isConvWithRotation&&convSubMode==="rotation"?(
+                        <div style={{marginTop:4}}>
+                          <div className="cbt" style={{height:4,marginBottom:3}}>
+                            <div className="cbf" style={{width:`${Math.min(rotationConvPct,100)}%`,background:wouldExceedConvRot?"var(--err)":rotationConvPct>80?"var(--warn)":"var(--orange)"}}/>
+                          </div>
+                          <span style={{fontFamily:"var(--mono)",fontSize:11}}>
+                            {usedConvRotations} / {client.rotationLimit} rotations — {rotationConvPct}% utilisé
+                          </span>
+                          {wouldExceedConvRot&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota de rotations dépassé !</span>}
+                        </div>
+                      ):client.weightLimitYear>0&&(
+                        <div style={{marginTop:4}}>
+                          <div className="cbt" style={{height:4,marginBottom:3}}>
+                            <div className="cbf" style={{width:`${Math.min(weightPct,100)}%`,background:wouldExceedWeight?"var(--err)":weightPct>80?"var(--warn)":"var(--g)"}}/>
+                          </div>
+                          <span style={{fontFamily:"var(--mono)",fontSize:11}}>
+                            {fmtN(usedThisYear)} / {fmtN(client.weightLimitYear)} t — {weightPct}% utilisé
+                          </span>
+                          {wouldExceedWeight&&<span style={{color:"var(--err)",marginLeft:8,fontSize:11}}>⚠ Quota dépassé !</span>}
+                        </div>
+                      )}
+                    </>}
+                </div>
+              </div>
+            )
           )}
 
           {/* Billing sub-mode toggle for convention clients with a rotation quota */}
