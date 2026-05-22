@@ -909,7 +909,7 @@ onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.
             {page==="discharges" && <PageDischarges discharges={discharges} setDischarges={setDischarges} sites={sites} wasteTypes={wasteTypes} users={users} clients={clients} updateClient={updateClient} updateDischarge={updateDischarge} isAdmin={isAdmin} authUser={authUser} company={company}/>}
             {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites} company={company}/>}
             {page==="operators"  && <PageOperators users={users} sites={sites} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} authUser={authUser}/>}
-            {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} company={company}/>}
+            {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} updateDischarge={updateDischarge} company={company}/>}
             {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany} companyTrucks={companyTrucks} addCompanyTruck={addCompanyTruck} updateCompanyTruck={updateCompanyTruck} deleteCompanyTruck={deleteCompanyTruck}/>}
             {page==="schema"     && <PageSchema/>}
           </div>
@@ -4182,7 +4182,7 @@ function generateEmptyBillHTML(c, company) {
 /* ═══════════════════════════════════════════════════════════════════════════
    INVOICE / RELEVÉ MENSUEL
 ═══════════════════════════════════════════════════════════════════════════ */
-function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,updateInvoice,company}) {
+function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,updateInvoice,updateDischarge,company}) {
   const now = new Date();
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
   const [view,  setView]  = useState("global"); // "global" | "client" | "debts"
@@ -4293,6 +4293,18 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       status: isFull ? "paid" : "partial",
       paidAt: isFull ? new Date().toISOString().slice(0,10) : null,
     });
+    // When fully paid, mark every discharge for that client+month as "paid"
+    if (isFull) {
+      const toMark = discharges.filter(d =>
+        d.clientId === inv.clientId &&
+        d.ts.startsWith(inv.month) &&
+        d.status !== "cancelled" &&
+        d.status !== "paid"
+      );
+      for (const d of toMark) {
+        await updateDischarge({...d, status: "paid"});
+      }
+    }
     setPayInvModal(null);
     setPayConfirm(false);
     // Auto-download the PDF receipt when payment is complete
