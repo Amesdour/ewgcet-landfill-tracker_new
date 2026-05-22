@@ -1066,12 +1066,12 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
       </div>
 
       <div className="panel">
-        <div className="ph"><span className="pt">Clients Convention Tonnes — Quotas & Crédit</span></div>
+        <div className="ph"><span className="pt">Clients Compte — Quotas, Crédit & Prépayé</span></div>
         <div className="tw">
           <table>
             <thead><tr><th>Client</th><th>Type</th><th>Mode</th><th>Limite</th><th>Utilisé</th><th>Progression</th><th>Statut</th></tr></thead>
             <tbody>
-              {clients.filter(c=>c.type==="convention"||c.type==="rotation"||c.type==="credit").map(c=>{
+              {clients.filter(c=>c.type==="convention"||c.type==="rotation"||c.type==="credit"||c.type==="prepaid").map(c=>{
                 const yr = new Date().getFullYear().toString();
                 const monthPfx = `${yr}-${String(new Date().getMonth()+1).padStart(2,"0")}`;
                 const isMonthly = c.payFrequency==="monthly";
@@ -1080,33 +1080,45 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
                 const usedW   = periodDs.reduce((s,d)=>s+d.net,0);
                 const usedRot = periodDs.length;
                 const isRotation = c.type==="rotation";
-                const pct = c.creditEnabled
-                  ? creditPct(c)
-                  : c.weightLimitYear>0 ? Math.round(((isRotation?usedRot:usedW)/c.weightLimitYear)*100) : 0;
+                const isPrepaid  = c.type==="prepaid";
+                const prepaidPct = isPrepaid&&c.creditLimit>0 ? Math.round((c.consumed/c.creditLimit)*100) : 0;
+                const pct = isPrepaid
+                  ? prepaidPct
+                  : c.creditEnabled
+                    ? creditPct(c)
+                    : c.weightLimitYear>0 ? Math.round(((isRotation?usedRot:usedW)/c.weightLimitYear)*100) : 0;
                 const col = creditColor(pct);
                 return (
                   <tr key={c.id}>
                     <td style={{fontWeight:600}}>{c.name}</td>
                     <td>
-                      {isRotation
-                        ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>
-                        :<span className={`badge ${c.clientType==="state"?"b-purple":"b-info"}`}>{c.clientType==="state"?"🏛 État":"🏢 Privé"}</span>}
+                      {isPrepaid
+                        ?<span className="badge" style={{background:"rgba(59,130,246,.12)",color:"#1d4ed8",border:"1px solid rgba(59,130,246,.3)"}}>🎫 Prépayé</span>
+                        :isRotation
+                          ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>
+                          :<span className={`badge ${c.clientType==="state"?"b-purple":"b-info"}`}>{c.clientType==="state"?"🏛 État":"🏢 Privé"}</span>}
                     </td>
                     <td>
-                      {c.creditEnabled
-                        ?<span className="badge" style={{background:"rgba(139,92,246,.15)",color:"#7c3aed",border:"1px solid rgba(139,92,246,.3)"}}>💳 Crédit DA</span>
-                        :isRotation
-                          ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>{c.payFrequency==="monthly"?"🔄 Rotations/mois":"🔄 Rotations/an"}</span>
-                          :<span className="badge b-info">{c.payFrequency==="monthly"?"⚖️ Tonnage/mois":"⚖️ Tonnage/an"}</span>}
+                      {isPrepaid
+                        ?<span className="badge" style={{background:"rgba(59,130,246,.12)",color:"#1d4ed8",border:"1px solid rgba(59,130,246,.3)"}}>🎫 Solde Prépayé</span>
+                        :c.creditEnabled
+                          ?<span className="badge" style={{background:"rgba(139,92,246,.15)",color:"#7c3aed",border:"1px solid rgba(139,92,246,.3)"}}>💳 Crédit DA</span>
+                          :isRotation
+                            ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>{c.payFrequency==="monthly"?"🔄 Rotations/mois":"🔄 Rotations/an"}</span>
+                            :<span className="badge b-info">{c.payFrequency==="monthly"?"⚖️ Tonnage/mois":"⚖️ Tonnage/an"}</span>}
                     </td>
-                    <td><span className="mn">{c.status==="approved"?(c.creditEnabled?fmt(c.creditLimit):c.weightLimitYear?(isRotation?c.weightLimitYear+" rot.":(fmtN(c.weightLimitYear)+" t")):"—"):"—"}</span></td>
-                    <td>{c.status==="approved"?(c.creditEnabled?(
+                    <td><span className="mn">{c.status==="approved"?(isPrepaid?fmt(c.creditLimit):c.creditEnabled?fmt(c.creditLimit):c.weightLimitYear?(isRotation?c.weightLimitYear+" rot.":(fmtN(c.weightLimitYear)+" t")):"—"):"—"}</span></td>
+                    <td>{c.status==="approved"?(isPrepaid?(
+                      c.consumed>c.creditLimit
+                        ?<span className="mn" style={{color:"var(--err)",fontWeight:700}}>⚠ {fmt(c.consumed-c.creditLimit)} <span style={{fontSize:9,fontWeight:400,color:"var(--err)"}}>dépassement</span></span>
+                        :<span className="mn">{fmt(c.consumed)}</span>
+                    ):c.creditEnabled?(
                       c.consumed>c.creditLimit
                         ?<span className="mn" style={{color:"var(--err)",fontWeight:700}}>⚠ {fmt(c.consumed-c.creditLimit)} <span style={{fontSize:9,fontWeight:400,color:"var(--err)"}}>dette</span></span>
                         :<span className="mn">{fmt(c.consumed)}</span>
                     ):isRotation?<span className="mn">{usedRot+" rot."}</span>:<span className="mn">{fmtN(usedW)+" t"}</span>):<span className="mn">—</span>}</td>
                     <td style={{minWidth:120}}>
-                      {c.status==="approved"&&(c.creditEnabled?c.creditLimit:c.weightLimitYear)>0?(
+                      {c.status==="approved"&&(isPrepaid?c.creditLimit:(c.creditEnabled?c.creditLimit:c.weightLimitYear))>0?(
                         <div className="fx aic g2">
                           <div className="cbt" style={{flex:1}}><div className="cbf" style={{width:`${Math.min(pct,100)}%`,background:col}}/></div>
                           <span className="mn tsm" style={{color:col}}>{pct}%</span>
