@@ -448,8 +448,8 @@ textarea.fi{resize:vertical;min-height:80px}
 /* ═══════════════════════════════════════════════════════════════════════════
    HELPERS
 ═══════════════════════════════════════════════════════════════════════════ */
-const fmt    = n => new Intl.NumberFormat("fr-DZ").format(Math.round(n)) + " DA";
-const fmtN   = n => new Intl.NumberFormat("fr-DZ",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+const fmt    = n => new Intl.NumberFormat("fr-DZ",{minimumFractionDigits:3,maximumFractionDigits:3}).format(n) + " DA";
+const fmtN   = n => new Intl.NumberFormat("fr-DZ",{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
 const fmtTs  = ts => new Date(ts).toLocaleString("fr-DZ",{dateStyle:"short",timeStyle:"short"});
 const uid    = () => "D" + Date.now().toString(36).toUpperCase();
 const uidC   = () => "C" + Date.now().toString(36).toUpperCase();
