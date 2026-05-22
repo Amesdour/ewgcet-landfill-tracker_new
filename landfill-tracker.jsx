@@ -1221,9 +1221,16 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const usedRotations = isRotationClient
     ? discharges.filter(d=>d.clientId===client.id&&d.ts.startsWith(periodPrefix)&&d.status!=="cancelled").length
     : 0;
-  const wouldExceedCredit    = client?.creditEnabled && client.creditLimit>0 && (client.consumed+total)>client.creditLimit;
+  // Use collect pricing in collect mode for accurate limit checks
+  const effectiveTotalForLimit = opType==="collect"
+    ? ((collectMode==="rotation"||client?.collectBillingMode==="rotation")?(wt?.collectRotationPrice??0):net*(wt?.collectPrice??0))
+    : total;
+  const wouldExceedCredit    = client?.creditEnabled && client.creditLimit>0 && (client.consumed+effectiveTotalForLimit)>client.creditLimit;
   const wouldExceedWeight    = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 && (usedThisYear+net)>client.weightLimitYear;
   const wouldExceedRotations = isRotationClient && client.weightLimitYear>0 && (usedRotations+1)>client.weightLimitYear;
+  // Prepaid clients (type="prepaid", creditEnabled=false) — enforce prepaid balance
+  const wouldExceedPrepaid    = isPrepaid && !client.creditEnabled && client.creditLimit>0 && (client.consumed+effectiveTotalForLimit)>client.creditLimit;
+  const alreadyAtPrepaidLimit = isPrepaid && !client.creditEnabled && client.creditLimit>0 && client.consumed>=client.creditLimit;
   // Convention clients with an admin-set rotation quota
   const isConvWithRotation      = mode==="convention" && client && client.type==="convention" && (client.rotationLimit||0)>0;
   const usedConvRotations       = isConvWithRotation
@@ -1236,7 +1243,16 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const alreadyAtCreditLimit  = client?.creditEnabled && client.creditLimit>0 && client.consumed>=client.creditLimit;
   const alreadyAtWeightLimit  = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 && usedThisYear>=client.weightLimitYear;
   const alreadyAtConvRotLimit = isConvWithRotation && client.rotationLimit>0 && usedConvRotations>=client.rotationLimit;
-  const wouldExceed = wouldExceedCredit || effectiveWouldExceedW || wouldExceedRotations || wouldExceedConvRot || alreadyAtCreditLimit || alreadyAtWeightLimit || alreadyAtConvRotLimit;
+  const wouldExceed = wouldExceedCredit || effectiveWouldExceedW || wouldExceedRotations || wouldExceedConvRot
+    || alreadyAtCreditLimit || alreadyAtWeightLimit || alreadyAtConvRotLimit
+    || wouldExceedPrepaid || alreadyAtPrepaidLimit;
+  // Remaining amounts — drive partial-entry guidance in the form
+  const remainingWeight  = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0
+    ? Math.max(0, client.weightLimitYear - usedThisYear) : null;
+  const remainingBalance = client?.creditEnabled && client.creditLimit>0
+    ? Math.max(0, client.creditLimit - client.consumed)
+    : isPrepaid && client?.creditLimit>0
+    ? Math.max(0, client.creditLimit - client.consumed) : null;
   const weightPct   = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
   const rotationPct = isRotationClient && client.weightLimitYear>0 ? Math.round((usedRotations/client.weightLimitYear)*100) : 0;
   const limitBlocked = !isAdmin && wouldExceed;
@@ -1716,6 +1732,28 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
               <div className="field"><label>Poids Net = Brut − Tare</label>
                 <div className="wb"><span className="wv">{fmtN(net)}</span><span className="wu">tonnes</span></div>
               </div>
+              {remainingWeight!==null&&(
+                <div className="field">
+                  <label style={{color:net>remainingWeight||remainingWeight===0?"var(--err)":remainingWeight<=(client.weightLimitYear*0.15)?"var(--warn)":"var(--muted)"}}>
+                    Quota restant
+                  </label>
+                  <div className="wb">
+                    <span className="wv" style={{color:net>remainingWeight||remainingWeight===0?"var(--err)":remainingWeight<=(client.weightLimitYear*0.15)?"var(--warn)":"inherit"}}>
+                      {fmtN(remainingWeight)}
+                    </span>
+                    <span className="wu">t max</span>
+                  </div>
+                  {net>remainingWeight&&net>0&&<div style={{color:"var(--err)",fontSize:10,marginTop:2}}>
+                    ⚠ Dépasse de {fmtN(net-remainingWeight)} t — max autorisé : {fmtN(remainingWeight)} t net
+                  </div>}
+                </div>
+              )}
+            </div>
+          )}
+          {remainingBalance!==null&&net>0&&!isRotationClient&&!isCollectRotation&&(
+            <div style={{fontSize:11,padding:"4px 10px",marginTop:-4,color:effectiveTotalForLimit>remainingBalance?"var(--err)":remainingBalance<=(client.creditLimit*0.1)?"var(--warn)":"var(--muted)"}}>
+              Solde restant : <strong>{fmt(remainingBalance)} DA</strong>
+              {effectiveTotalForLimit>remainingBalance&&<span style={{color:"var(--err)",marginLeft:6}}>— montant requis {fmt(effectiveTotalForLimit)} DA dépasse le solde</span>}
             </div>
           )}
 
@@ -1842,11 +1880,19 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
               <span>🚫</span>
               <div>
                 <strong>ENTRÉE BLOQUÉE —</strong>{" "}
-                {wouldExceedCredit
-                  ?"Le plafond de crédit DA de ce client est atteint. Contactez l'administrateur."
-                  :wouldExceedRotations
-                  ?"Le quota de rotations de ce client est atteint. Contactez l'administrateur."
-                  :"Le quota de tonnage de ce client est atteint. Contactez l'administrateur."}
+                {alreadyAtCreditLimit||alreadyAtPrepaidLimit
+                  ? "Le solde de ce client est épuisé (0 DA restant). Contactez l'administrateur."
+                  : alreadyAtWeightLimit
+                  ? "Le quota de tonnage de ce client est épuisé (0 t restant). Contactez l'administrateur."
+                  : alreadyAtConvRotLimit
+                  ? "Le quota de rotations convention de ce client est épuisé. Contactez l'administrateur."
+                  : wouldExceedRotations
+                  ? "Le quota de rotations de ce client est atteint. Contactez l'administrateur."
+                  : (wouldExceedCredit||wouldExceedPrepaid)&&remainingBalance!==null
+                  ? `Solde insuffisant — il reste ${fmt(remainingBalance)} DA, mais ce décharge requiert ${fmt(effectiveTotalForLimit)} DA.`
+                  : remainingWeight!==null
+                  ? `Quota dépassé — il reste ${fmtN(remainingWeight)} t, mais le poids net actuel est ${fmtN(net)} t.`
+                  : "La limite de ce client est atteinte. Contactez l'administrateur."}
               </div>
             </div>
           )}
