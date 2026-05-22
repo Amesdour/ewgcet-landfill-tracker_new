@@ -3920,7 +3920,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   @page WordSection1{size:21.0cm 29.7cm;margin:1.5cm 1.8cm;mso-page-orientation:portrait}
   @page{size:21.0cm 29.7cm;margin:1.5cm 1.8cm}
   div.WordSection1{page:WordSection1}
-  @media print{body{padding:0}}
+  @media print{body{padding:0} .WordSection1{padding-bottom:32px}}
 </style>
 </head>
 <body>
@@ -4044,9 +4044,9 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   </div>
 </div>
 
-<!-- ── FOOTER ── -->
-<div style="margin-top:28px;padding-top:7px;border-top:1px solid #bbb;font-size:10px;color:#666;text-align:center">
-  ${co('name')} — ${co('address')} — Tél&nbsp;: ${co('phone')} — ${co('email')}
+<!-- ── FOOTER (fixed — repeats on every printed page) ── -->
+<div style="position:fixed;bottom:0;left:0;right:0;border-top:1.5px solid #000;padding:5px 1.8cm;font-size:9.5px;color:#333;text-align:center;background:#fff;font-family:Arial,Helvetica,sans-serif">
+  Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL &nbsp;—&nbsp; Cité Administrative 3ème étage, Jijel 18000 &nbsp;—&nbsp; Tél&nbsp;: 030 49 05 94 &nbsp;—&nbsp; contact@epwgcet-jijel.dz
 </div>
 
 </div></body></html>`;
@@ -4096,7 +4096,7 @@ function generateEmptyBillHTML(c, company) {
   @page WordSection1{size:21.0cm 29.7cm;margin:1.5cm 1.8cm;mso-page-orientation:portrait}
   @page{size:21.0cm 29.7cm;margin:1.5cm 1.8cm}
   div.WordSection1{page:WordSection1}
-  @media print{body{padding:0}}
+  @media print{body{padding:0} .WordSection1{padding-bottom:32px}}
 </style>
 </head>
 <body>
