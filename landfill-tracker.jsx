@@ -1253,6 +1253,8 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
     ? Math.max(0, client.creditLimit - client.consumed)
     : isPrepaid && client?.creditLimit>0
     ? Math.max(0, client.creditLimit - client.consumed) : null;
+  const remainingRotations    = isRotationClient && client.weightLimitYear>0 ? Math.max(0, client.weightLimitYear - usedRotations) : null;
+  const remainingConvRotations = isConvWithRotation && client.rotationLimit>0 ? Math.max(0, client.rotationLimit - usedConvRotations) : null;
   const weightPct   = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
   const rotationPct = isRotationClient && client.weightLimitYear>0 ? Math.round((usedRotations/client.weightLimitYear)*100) : 0;
   const limitBlocked = !isAdmin && wouldExceed;
@@ -1708,17 +1710,33 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
           {(isRotationClient && opType !== "collect") ? (
             <div className="alrt ao" style={{marginBottom:0,padding:"10px 14px"}}>
               <span style={{fontSize:16}}>🔄</span>
-              <div>
+              <div style={{flex:1}}>
                 <strong>Client Convention Rotation — saisie de tonnage non applicable</strong>
                 <div style={{fontSize:11,marginTop:2,color:"var(--muted)"}}>Ce client est facturé à la rotation. Chaque décharge enregistre <strong>1 rotation</strong>, indépendamment du poids. Les champs poids brut / tare / net ne sont pas requis.</div>
+                {remainingRotations!==null&&(
+                  <div style={{marginTop:6,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+                    <span style={{fontSize:12,fontWeight:600,color:remainingRotations===0?"var(--err)":remainingRotations<=Math.ceil(client.weightLimitYear*0.15)?"var(--warn)":"var(--g)"}}>
+                      Rotations restantes : {remainingRotations} / {client.weightLimitYear}
+                    </span>
+                    {remainingRotations===0&&<span style={{fontSize:11,color:"var(--err)"}}>— quota épuisé</span>}
+                    {remainingRotations>0&&remainingRotations<=Math.ceil(client.weightLimitYear*0.15)&&<span style={{fontSize:11,color:"var(--warn)"}}>— quasi-épuisé</span>}
+                  </div>
+                )}
               </div>
             </div>
           ) : isCollectRotation ? (
             <div className="alrt ao" style={{marginBottom:0,padding:"10px 14px"}}>
               <span style={{fontSize:16}}>🚛</span>
-              <div>
+              <div style={{flex:1}}>
                 <strong>Collecte — Facturation à la rotation</strong>
                 <div style={{fontSize:11,marginTop:2,color:"var(--muted)"}}>Ce client est facturé au <strong>passage fixe</strong>. Chaque collecte enregistre <strong>1 rotation</strong> au tarif configuré. Aucun pesage requis.</div>
+                {remainingBalance!==null&&(
+                  <div style={{marginTop:6,fontSize:12,fontWeight:600,color:remainingBalance===0?"var(--err)":remainingBalance<=(client.creditLimit*0.1)?"var(--warn)":"var(--g)"}}>
+                    Solde restant : {fmt(remainingBalance)} DA
+                    {remainingBalance===0&&<span style={{fontWeight:400,marginLeft:6,color:"var(--err)"}}>— solde épuisé</span>}
+                    {remainingBalance>0&&remainingBalance<=(client.creditLimit*0.1)&&<span style={{fontWeight:400,marginLeft:6,color:"var(--warn)"}}>— quasi-épuisé</span>}
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -1748,9 +1766,25 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
                   </div>}
                 </div>
               )}
+              {remainingConvRotations!==null&&convSubMode==="rotation"&&(
+                <div className="field">
+                  <label style={{color:remainingConvRotations===0?"var(--err)":remainingConvRotations<=Math.ceil(client.rotationLimit*0.15)?"var(--warn)":"var(--muted)"}}>
+                    Rotations restantes
+                  </label>
+                  <div className="wb">
+                    <span className="wv" style={{color:remainingConvRotations===0?"var(--err)":remainingConvRotations<=Math.ceil(client.rotationLimit*0.15)?"var(--warn)":"inherit"}}>
+                      {remainingConvRotations}
+                    </span>
+                    <span className="wu">/ {client.rotationLimit}</span>
+                  </div>
+                  {remainingConvRotations===0&&<div style={{color:"var(--err)",fontSize:10,marginTop:2}}>
+                    ⚠ Quota de rotations épuisé
+                  </div>}
+                </div>
+              )}
             </div>
           )}
-          {remainingBalance!==null&&net>0&&!isRotationClient&&!isCollectRotation&&(
+          {remainingBalance!==null&&net>0&&!isCollectRotation&&(
             <div style={{fontSize:11,padding:"4px 10px",marginTop:-4,color:effectiveTotalForLimit>remainingBalance?"var(--err)":remainingBalance<=(client.creditLimit*0.1)?"var(--warn)":"var(--muted)"}}>
               Solde restant : <strong>{fmt(remainingBalance)} DA</strong>
               {effectiveTotalForLimit>remainingBalance&&<span style={{color:"var(--err)",marginLeft:6}}>— montant requis {fmt(effectiveTotalForLimit)} DA dépasse le solde</span>}
