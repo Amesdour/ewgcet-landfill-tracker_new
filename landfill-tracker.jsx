@@ -4255,8 +4255,14 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
         const newStatus = (existing.paidAmount||0) >= ttc ? "paid" : "partial";
         await updateInvoice({...existing, totalAmount:ttc, status:newStatus});
       } else {
-        // Unpaid — safe to update amount and keep pending
-        await updateInvoice({...existing, totalAmount:ttc, status:"pending", paidAmount:0, paidAt:null});
+        // pending/overdue — preserve any payment already recorded, never wipe history
+        const prevPaid = existing.paidAmount || 0;
+        if (prevPaid > 0) {
+          const newStatus = prevPaid >= ttc ? "paid" : "partial";
+          await updateInvoice({...existing, totalAmount:ttc, status:newStatus});
+        } else {
+          await updateInvoice({...existing, totalAmount:ttc, status:"pending", paidAmount:0, paidAt:null});
+        }
       }
     } else {
       await addInvoice({id, clientId:cl.id, month, totalAmount:ttc, status:"pending", note:""});
