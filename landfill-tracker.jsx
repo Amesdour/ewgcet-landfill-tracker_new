@@ -1232,7 +1232,11 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const rotationConvPct         = isConvWithRotation ? Math.round((usedConvRotations/(client.rotationLimit||1))*100) : 0;
   const wouldExceedConvRot      = isConvWithRotation && convSubMode==="rotation" && client.rotationLimit>0 && (usedConvRotations+1)>client.rotationLimit;
   const effectiveWouldExceedW   = wouldExceedWeight && !(isConvWithRotation && convSubMode==="rotation");
-  const wouldExceed = wouldExceedCredit || effectiveWouldExceedW || wouldExceedRotations || wouldExceedConvRot;
+  // Already-at-limit checks: block immediately when client is selected, before weight is entered
+  const alreadyAtCreditLimit  = client?.creditEnabled && client.creditLimit>0 && client.consumed>=client.creditLimit;
+  const alreadyAtWeightLimit  = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 && usedThisYear>=client.weightLimitYear;
+  const alreadyAtConvRotLimit = isConvWithRotation && client.rotationLimit>0 && usedConvRotations>=client.rotationLimit;
+  const wouldExceed = wouldExceedCredit || effectiveWouldExceedW || wouldExceedRotations || wouldExceedConvRot || alreadyAtCreditLimit || alreadyAtWeightLimit || alreadyAtConvRotLimit;
   const weightPct   = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
   const rotationPct = isRotationClient && client.weightLimitYear>0 ? Math.round((usedRotations/client.weightLimitYear)*100) : 0;
   const limitBlocked = !isAdmin && wouldExceed;
