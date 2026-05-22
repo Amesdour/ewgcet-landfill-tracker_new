@@ -2176,7 +2176,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
           <button className="btn bg bsm" style={{alignSelf:"flex-end"}} onClick={()=>{setDateFrom("");setDateTo("");}}>✕ Reset</button>
         )}
         <div className="fx aic g2" style={{alignSelf:"flex-end"}}>
-          {[["all","Tous"],["paid","Cash"],["settled","Convention"],["flagged",`⚠ Alertes${flaggedCount>0?` (${flaggedCount})`:""}`]].map(([f,l])=>(
+          {[["all","Tous"],["cash","💵 Cash"],["convention","📋 Convention"],["flagged",`⚠ Alertes${flaggedCount>0?` (${flaggedCount})`:""}`]].map(([f,l])=>(
             <button key={f} className={`btn bsm ${filter===f?f==="flagged"?"bw":"bp":"bg"}`} onClick={()=>setFilter(f)}>{l}</button>
           ))}
         </div>
