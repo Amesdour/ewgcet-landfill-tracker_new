@@ -1295,7 +1295,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
       truck:form.truck.toUpperCase(), wasteType:form.wasteType, gross, tare, net,
       unitPrice,
       total: finalTotal,
-      status:wouldExceed?"flagged":effectiveMethod==="cash"?"paid":"settled",
+      status:wouldExceed?"flagged":(effectiveMethod==="cash"||effectiveMethod==="prepaid")?"paid":"settled",
       payMethod:effectiveMethod, opId:authUser.id,
       opType:opType,
     };
@@ -4245,6 +4245,16 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     const ttc = cl.vatSubject ? Math.round(costHT * 1.19 * 100) / 100 : costHT;
     const id = `FAC-${month.replace("-","")}-${cl.id}`;
     const existing = invoices.find(i=>i.id===id) || invoices.find(i=>i.clientId===cl.id&&i.month===month);
+    // Prepaid clients have already deposited their balance — invoice is always fully paid
+    if (cl.type === "prepaid") {
+      const today = new Date().toISOString().slice(0,10);
+      if (existing) {
+        await updateInvoice({...existing, totalAmount:ttc, paidAmount:ttc, status:"paid", paidAt: existing.paidAt || today});
+      } else {
+        await addInvoice({id, clientId:cl.id, month, totalAmount:ttc, paidAmount:ttc, status:"paid", paidAt:today, note:""});
+      }
+      return;
+    }
     if (existing) {
       if (existing.status === "paid") {
         if (ttc > (existing.paidAmount||0)) {
