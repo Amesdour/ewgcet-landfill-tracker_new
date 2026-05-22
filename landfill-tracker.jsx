@@ -1236,10 +1236,10 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const weightPct   = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
   const rotationPct = isRotationClient && client.weightLimitYear>0 ? Math.round((usedRotations/client.weightLimitYear)*100) : 0;
   const limitBlocked = !isAdmin && wouldExceed;
-  const isCollectRotation        = opType==="collect" && collectMode==="rotation";
+  const isCollectRotation        = opType==="collect" && (collectMode==="rotation" || client?.collectBillingMode==="rotation");
   const collectRotationPriceOk   = !isCollectRotation || (wt?.collectRotationPrice??0) > 0;
   const canSubmit = opType==="collect"
-    ? collectMode==="rotation"
+    ? isCollectRotation
       ? (form.truck && form.clientId && form.wasteType && collectRotationPriceOk)
       : (form.truck && form.clientId && gross>tare && form.wasteType)
     : isRotationClient
