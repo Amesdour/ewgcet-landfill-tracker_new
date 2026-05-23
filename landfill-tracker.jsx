@@ -911,7 +911,7 @@ onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.
             {page==="dashboard"  && <PageDashboard discharges={discharges} clients={clients} sites={sites} wasteTypes={wasteTypes} setPage={setPage}/>}
             {page==="gate"       && <PageGate addDischarge={addDischarge} addClient={addClient} clients={clients} sites={sites} wasteTypes={wasteTypes} discharges={discharges} authUser={authUser} isAdmin={isAdmin} company={company} companyTrucks={companyTrucks}/>}
             {page==="discharges" && <PageDischarges discharges={discharges} setDischarges={setDischarges} sites={sites} wasteTypes={wasteTypes} users={users} clients={clients} invoices={invoices} updateClient={updateClient} updateDischarge={updateDischarge} isAdmin={isAdmin} authUser={authUser} company={company}/>}
-            {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites} company={company}/>}
+            {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites} company={company} wasteTypes={wasteTypes}/>}
             {page==="operators"  && <PageOperators users={users} sites={sites} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} authUser={authUser}/>}
             {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} updateDischarge={updateDischarge} company={company}/>}
             {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany} companyTrucks={companyTrucks} addCompanyTruck={addCompanyTruck} updateCompanyTruck={updateCompanyTruck} deleteCompanyTruck={deleteCompanyTruck}/>}
@@ -2558,7 +2558,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
 /* ═══════════════════════════════════════════════════════════════════════════
    CLIENTS
 ═══════════════════════════════════════════════════════════════════════════ */
-function PageClients({clients,discharges,updateClient,addClient,deleteClient,isAdmin,docTypes,sites,company}) {
+function PageClients({clients,discharges,updateClient,addClient,deleteClient,isAdmin,docTypes,sites,company,wasteTypes}) {
   const [tab,   setTab]   = useState("convention");
   const [sel,   setSel]   = useState(null);
   const [modal, setModal] = useState(false);
@@ -2605,11 +2605,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       payFrequency:addForm.payFrequency||"monthly", payInstrument:addForm.payInstrument||"cheque",
       phone:addForm.phone, address:addForm.address, nif:addForm.nif, rc:addForm.rc,
       docs:[], note:addForm.note, vatSubject:addForm.vatSubject||false,
-      assignedSites:addForm.assignedSites||[],
+      assignedSites:addForm.assignedSites||[], allowedWasteTypes:addForm.allowedWasteTypes||[],
     };
     addClient(nc);
     setModal(false);
-    setAddForm({name:"",clientType:"private",payFrequency:"monthly",payInstrument:"cheque",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false,assignedSites:[]});
+    setAddForm({name:"",clientType:"private",payFrequency:"monthly",payInstrument:"cheque",phone:"",address:"",nif:"",rc:"",note:"",vatSubject:false,assignedSites:[],allowedWasteTypes:[]});
   };
 
   const doAddRotationClient = () => {
@@ -2620,11 +2620,11 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       payFrequency:addRotForm.payFrequency||"monthly", payInstrument:"cheque",
       phone:addRotForm.phone, address:addRotForm.address, nif:addRotForm.nif, rc:addRotForm.rc,
       docs:[], note:addRotForm.note, vatSubject:addRotForm.vatSubject||false,
-      assignedSites:addRotForm.assignedSites||[],
+      assignedSites:addRotForm.assignedSites||[], allowedWasteTypes:addRotForm.allowedWasteTypes||[],
     };
     addClient(nc);
     setModal(false);
-    setAddRotForm({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false,assignedSites:[]});
+    setAddRotForm({name:"",clientType:"private",phone:"",address:"",nif:"",rc:"",payFrequency:"monthly",note:"",vatSubject:false,assignedSites:[],allowedWasteTypes:[]});
   };
 
   const doPrepaidAdd = () => {
@@ -2634,7 +2634,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       creditLimit:parseFloat(prepaidForm.balance)||0, consumed:0,
       phone:prepaidForm.phone, address:prepaidForm.address, nif:"", rc:"", docs:[], note:prepaidForm.note,
       vatSubject:prepaidForm.vatSubject||false,
-      assignedSites:prepaidForm.assignedSites||[],
+      assignedSites:prepaidForm.assignedSites||[], allowedWasteTypes:prepaidForm.allowedWasteTypes||[],
     };
     addClient(nc);
     setModal(false);
@@ -2820,6 +2820,27 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       }
                     </div>
                   </div>
+                </div>
+
+                {/* Authorized waste types */}
+                <div style={{marginBottom:14}}>
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>♻️ Types de déchets autorisés
+                    {isAdmin&&<span style={{fontWeight:400,fontSize:10,color:"var(--muted)",marginLeft:8}}>définis par l'admin</span>}
+                  </div>
+                  {(c.allowedWasteTypes||[]).length>0
+                    ? <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                        {(c.allowedWasteTypes||[]).map(id=>{
+                          const wt=(wasteTypes||[]).find(w=>w.id===id);
+                          return wt?<span key={id} className="badge b-info" style={{fontSize:11,padding:"3px 10px"}}>♻️ {wt.label}</span>:null;
+                        })}
+                      </div>
+                    : <div className="alrt aw" style={{padding:"8px 12px",fontSize:11}}>
+                        <span>⚠️</span>
+                        <div>Aucun type de déchet autorisé défini pour ce client.
+                          {isAdmin&&<button className="btn bg bsm" style={{fontSize:10,marginLeft:8}} onClick={()=>{setEditClientForm({...c});setModal("edit_client");}}>Définir maintenant</button>}
+                        </div>
+                      </div>
+                  }
                 </div>
 
                 {c.type==="prepaid"&&(()=>{
@@ -3279,6 +3300,21 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     </div>
                   ))}
                 </div>
+                <div className="field">
+                  <label>♻️ Types de déchets autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
+                    {(wasteTypes||[]).map(w=>{
+                      const checked=(addForm.allowedWasteTypes||[]).includes(w.id);
+                      return(
+                        <label key={w.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"7px 10px",borderRadius:6,border:`1px solid ${checked?"var(--g)":"var(--bdr)"}`,background:checked?"rgba(46,201,92,.07)":"transparent",fontSize:12,transition:"all .15s"}}>
+                          <input type="checkbox" checked={checked} style={{accentColor:"var(--g)",width:14,height:14}}
+                            onChange={e=>setAddForm(f=>({...f,allowedWasteTypes:e.target.checked?[...(f.allowedWasteTypes||[]),w.id]:(f.allowedWasteTypes||[]).filter(x=>x!==w.id)}))}/>
+                          <span style={{fontWeight:600,flex:1}}>♻️ {w.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
             <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>Annuler</button><button className="btn bp" disabled={!addForm.name} onClick={doAddClient}>✓ Créer le dossier</button></div>
@@ -3368,6 +3404,21 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     </div>
                   ))}
                 </div>
+                <div className="field">
+                  <label>♻️ Types de déchets autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
+                    {(wasteTypes||[]).map(w=>{
+                      const checked=(addRotForm.allowedWasteTypes||[]).includes(w.id);
+                      return(
+                        <label key={w.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"7px 10px",borderRadius:6,border:`1px solid ${checked?"var(--g)":"var(--bdr)"}`,background:checked?"rgba(46,201,92,.07)":"transparent",fontSize:12,transition:"all .15s"}}>
+                          <input type="checkbox" checked={checked} style={{accentColor:"var(--g)",width:14,height:14}}
+                            onChange={e=>setAddRotForm(f=>({...f,allowedWasteTypes:e.target.checked?[...(f.allowedWasteTypes||[]),w.id]:(f.allowedWasteTypes||[]).filter(x=>x!==w.id)}))}/>
+                          <span style={{fontWeight:600,flex:1}}>♻️ {w.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
             <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>Annuler</button><button className="btn bp" style={{background:"var(--orange)",borderColor:"var(--orange)"}} disabled={!addRotForm.name} onClick={doAddRotationClient}>✓ Créer le dossier rotations</button></div>
@@ -3439,6 +3490,21 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       <span style={{color:"var(--warn)"}}>⬜</span> {d}
                     </div>
                   ))}
+                </div>
+                <div className="field">
+                  <label>♻️ Types de déchets autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
+                    {(wasteTypes||[]).map(w=>{
+                      const checked=(prepaidForm.allowedWasteTypes||[]).includes(w.id);
+                      return(
+                        <label key={w.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"7px 10px",borderRadius:6,border:`1px solid ${checked?"var(--g)":"var(--bdr)"}`,background:checked?"rgba(46,201,92,.07)":"transparent",fontSize:12,transition:"all .15s"}}>
+                          <input type="checkbox" checked={checked} style={{accentColor:"var(--g)",width:14,height:14}}
+                            onChange={e=>setPrepaidForm(f=>({...f,allowedWasteTypes:e.target.checked?[...(f.allowedWasteTypes||[]),w.id]:(f.allowedWasteTypes||[]).filter(x=>x!==w.id)}))}/>
+                          <span style={{fontWeight:600,flex:1}}>♻️ {w.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             </div>
@@ -3594,6 +3660,22 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                         </div>
                       </div>
                     )}
+                    <div className="field">
+                      <label>♻️ Types de déchets autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                      <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
+                        {(wasteTypes||[]).length===0&&<span style={{fontSize:11,color:"var(--muted)"}}>Aucun type de déchet configuré.</span>}
+                        {(wasteTypes||[]).map(w=>{
+                          const checked=(editClientForm.allowedWasteTypes||[]).includes(w.id);
+                          return(
+                            <label key={w.id} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"7px 10px",borderRadius:6,border:`1px solid ${checked?"var(--g)":"var(--bdr)"}`,background:checked?"rgba(46,201,92,.07)":"transparent",fontSize:12,transition:"all .15s"}}>
+                              <input type="checkbox" checked={checked} style={{accentColor:"var(--g)",width:14,height:14}}
+                                onChange={e=>setEditClientForm(f=>({...f,allowedWasteTypes:e.target.checked?[...(f.allowedWasteTypes||[]),w.id]:(f.allowedWasteTypes||[]).filter(x=>x!==w.id)}))}/>
+                              <span style={{fontWeight:600,flex:1}}>♻️ {w.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </>
                 )}
               </div>
