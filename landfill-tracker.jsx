@@ -757,7 +757,7 @@ export default function App() {
   const addDischarge = async d => {
     await fetch('/api/discharges',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
     setDischarges(p=>[d,...p]);
-    if (d.payMethod==="convention"||d.payMethod==="credit") {
+    if (d.payMethod==="convention"||d.payMethod==="credit"||d.payMethod==="prepaid") {
       setClients(p=>p.map(c=>c.id===d.clientId?{...c,consumed:c.consumed+d.total}:c));
     }
   };
