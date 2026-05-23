@@ -3958,7 +3958,7 @@ function amountToWords(amount) {
   return s;
 }
 
-function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes) {
+function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes, opts = {}) {
   const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
   const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
   const TVA = c.vatSubject ? 19 : 0;
@@ -4069,15 +4069,16 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 
 <!-- ── INVOICE REFERENCE LINE ── -->
 <div style="display:flex;justify-content:space-between;padding:6px 2px;font-weight:bold;font-size:13.5px">
-  <span>FACTURE CLIENT : ${invNum}</span>
+  <span>${opts.isDebt ? 'AVIS DE DÉBIT — SOLDE RESTANT DÛ' : 'FACTURE CLIENT'} : ${invNum}</span>
   <span>JIJEL, LE : ${date}</span>
 </div>
+${opts.isDebt ? '<div style="margin:4px 2px 0;font-size:11px;color:#c00;font-weight:bold;letter-spacing:.03em">⚠ Ce document concerne uniquement les prestations non encore réglées.</div>' : ''}
 
 <div class="sep"></div>
 
 <!-- ── CLIENT BLOCK (left-aligned) ── -->
 <div style="margin:10px 2px 14px;font-size:12.5px;line-height:1.9">
-  <div style="font-weight:bold;font-size:13px;margin-bottom:3px">FACTURÉ À :</div>
+  <div style="font-weight:bold;font-size:13px;margin-bottom:3px">${opts.isDebt ? 'AVIS DE DÉBIT ADRESSÉ À :' : 'FACTURÉ À :'}</div>
   <div>${c.id} — ${c.name}</div>
   ${c.nif    ? `<div>M.F.&nbsp;: ${c.nif}</div>` : ''}
   ${c.rc     ? `<div>R.C.&nbsp;: ${c.rc}</div>`  : ''}
@@ -4112,7 +4113,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 
 <!-- ── AMOUNT IN WORDS ── -->
 <div style="margin-top:10px;border:1px solid #000;padding:7px 12px;font-size:12px">
-  <strong>Arrêtée la présente facture à la somme de :</strong><br>
+  <strong>${opts.isDebt ? 'Arrêté le présent avis de débit à la somme de :' : 'Arrêtée la présente facture à la somme de :'}</strong><br>
   <span style="font-weight:bold;text-transform:uppercase;letter-spacing:.02em">${amountToWords(totalTTC)}</span>
 </div>
 
@@ -4529,6 +4530,29 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
+
+  // Debt-only bill: entries not yet individually paid (status !== "paid")
+  const debtEntries = entries.filter(d => d.status !== "paid" && d.status !== "cancelled");
+  const debtNum     = `${invNum}-SOLDE`;
+  const hasDebtBill = currentInv && (currentInv.paidAmount||0) > 0 && currentInv.status !== "paid" && debtEntries.length > 0;
+
+  const downloadDebtPDF = () => {
+    if (!c || debtEntries.length === 0) return;
+    const html = generateOfficialBillHTML(c, debtEntries, company, month, debtNum, wasteTypes, {isDebt:true});
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(), 600); }
+  };
+  const downloadDebtWord = () => {
+    if (!c || debtEntries.length === 0) return;
+    const html = generateOfficialBillHTML(c, debtEntries, company, month, debtNum, wasteTypes, {isDebt:true});
+    const blob = new Blob(['\ufeff', html], {type:'application/msword'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `${debtNum}.doc`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  };
+
   // All overdue/pending invoices
   const debtInvoices = invoices.filter(i=>i.status==="overdue"||i.status==="pending"||i.status==="partial");
   const debtTotal = debtInvoices.reduce((s,i)=>s+(i.totalAmount-(i.paidAmount||0)),0);
@@ -4796,11 +4820,32 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         </td>
                         <td><InvoiceStatusBadge s={inv.status}/></td>
                         <td>
-                          <div className="fx aic g2">
+                          <div className="fx aic g2" style={{flexWrap:"wrap",gap:4}}>
                             <button className="btn bsm" style={{fontSize:10,background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(inv)}>💳 Payer</button>
                             {inv.status==="pending"&&(
                               <button className="btn be bsm" style={{fontSize:10}} onClick={()=>markOverdue(inv)}>🔴 Impayée</button>
                             )}
+                            {(()=>{
+                              const icl  = clients.find(x=>x.id===inv.clientId);
+                              const iEnt = discharges.filter(d=>d.clientId===inv.clientId&&d.ts.startsWith(inv.month)&&d.status!=="cancelled");
+                              if (!icl || iEnt.length===0) return null;
+                              const isDebtDoc = (inv.paidAmount||0) > 0 && inv.status !== "paid";
+                              const iEnt2 = isDebtDoc ? iEnt.filter(d=>d.status!=="paid") : iEnt;
+                              if (iEnt2.length===0) return null;
+                              const iNum = isDebtDoc ? `${inv.id}-SOLDE` : inv.id;
+                              const iOpts = isDebtDoc ? {isDebt:true} : {};
+                              return (
+                                <button className="btn bg bsm" style={{fontSize:10}}
+                                  title={isDebtDoc?"Télécharger l'avis de débit":"Télécharger la facture PDF"}
+                                  onClick={()=>{
+                                    const html=generateOfficialBillHTML(icl,iEnt2,company,inv.month,iNum,wasteTypes,iOpts);
+                                    const win=window.open('','_blank');
+                                    if(win){win.document.write(html);win.document.close();setTimeout(()=>win.print(),600);}
+                                  }}>
+                                  {isDebtDoc?"📄 Avis Débit":"📥 PDF"}
+                                </button>
+                              );
+                            })()}
                           </div>
                         </td>
                       </tr>
@@ -5192,11 +5237,29 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 )}
                 <div style={{display:"flex",gap:8,marginLeft:"auto",alignItems:"center"}}>
                   <button className="btn bg bsm" onClick={downloadOfficialPDF} disabled={entries.length===0}
-                    title="Télécharger la facture officielle en PDF">📥 PDF</button>
+                    title="Télécharger la facture officielle complète en PDF">📥 PDF</button>
                   <button className="btn bi bsm" onClick={downloadOfficialWord} disabled={entries.length===0}
                     title="Télécharger en format Word (.doc)">📄 Word</button>
                 </div>
               </>
+            )}
+            {/* Debt bill — shown only when part of the invoice is already paid but a balance remains */}
+            {hasDebtBill&&(
+              <div style={{width:"100%",marginTop:4,padding:"10px 14px",background:"rgba(239,68,68,.05)",border:"1px solid rgba(239,68,68,.25)",borderRadius:8,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:12,color:"var(--err)"}}>📄 Avis de Débit — Solde Restant Dû</div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>
+                    Télécharger uniquement les {debtEntries.length} prestation(s) non encore réglée(s) — Réf : {debtNum}
+                  </div>
+                </div>
+                <button className="btn bsm" style={{background:"var(--err)",color:"#fff",borderColor:"var(--err)"}}
+                  onClick={downloadDebtPDF} disabled={debtEntries.length===0}>
+                  📥 PDF Avis de Débit
+                </button>
+                <button className="btn bg bsm" onClick={downloadDebtWord} disabled={debtEntries.length===0}>
+                  📄 Word
+                </button>
+              </div>
             )}
             <div style={{fontSize:11,color:"var(--muted)",width:"100%",marginTop:4}}>Réf: {invNum}</div>
           </div>
