@@ -4354,7 +4354,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       const billingMode = d.payMethod==="rotation" ? "rotation" : "tonnage";
       const wt          = wasteTypes.find(w=>w.id===d.wasteType);
       const key         = `${opT}|${d.wasteType}|${billingMode}|${d.unitPrice}`;
-      if (!acc[key]) acc[key] = { opType:opT, wtLabel:wt?.label||d.wasteType, billingMode, unitPrice:d.unitPrice||0, qty:0, count:0, total:0 };
+      if (!acc[key]) acc[key] = { opType:opT, wasteTypeId:d.wasteType, wtLabel:wt?.label||d.wasteType, billingMode, unitPrice:d.unitPrice||0, qty:0, count:0, total:0 };
       acc[key].count += 1;
       acc[key].qty   += billingMode==="rotation" ? 1 : (d.net||0);
       acc[key].total += d.total||0;
@@ -4531,8 +4531,43 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     URL.revokeObjectURL(url);
   };
 
-  // Debt-only bill: entries not yet individually paid (status !== "paid")
-  const debtEntries = entries.filter(d => d.status !== "paid" && d.status !== "cancelled");
+  // Debt-only bill: derive which line items are unpaid using the SAME coverage algorithm as the table
+  // (smallest-first coverage by paidAmount), then build synthetic discharge-like objects for those items.
+  // This ensures the debt bill matches exactly what the table shows as "PARTIEL" / "À PAYER".
+  const _debtTotalHT  = lineItems.reduce((s,li)=>s+li.total, 0);
+  const _debtInvTTC   = currentInv?.totalAmount || (c?.vatSubject ? Math.round(_debtTotalHT*1.19*100)/100 : _debtTotalHT);
+  const _debtItemTTCs = lineItems.map(item =>
+    _debtTotalHT > 0
+      ? Math.round((item.total / _debtTotalHT) * _debtInvTTC * 100) / 100
+      : (c?.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total)
+  );
+  const _debtLiStatus   = new Array(lineItems.length).fill('unpaid');
+  const _debtLiPartPaid = new Array(lineItems.length).fill(0);
+  const _debtSorted     = lineItems.map((_,i)=>i).sort((a,b)=>_debtItemTTCs[a]-_debtItemTTCs[b]);
+  let   _debtCoverLeft  = currentInv ? (currentInv.paidAmount||0) : 0;
+  for (const idx of _debtSorted) {
+    const itc = _debtItemTTCs[idx];
+    if (_debtCoverLeft >= itc)       { _debtLiStatus[idx]='paid';    _debtCoverLeft -= itc; }
+    else if (_debtCoverLeft > 0)     { _debtLiStatus[idx]='partial'; _debtLiPartPaid[idx]=_debtCoverLeft; _debtCoverLeft=0; }
+  }
+  // Build synthetic entries: one per unpaid/partial line item, qty/total scaled to the debt portion only
+  const debtEntries = lineItems
+    .map((item,i)=>({ item, ps:_debtLiStatus[i], pp:_debtLiPartPaid[i], itc:_debtItemTTCs[i] }))
+    .filter(x => x.ps !== 'paid')
+    .map(({ item, ps, pp }) => {
+      // partialPaid is TTC; convert to HT reduction
+      const paidHT = pp > 0 ? Math.round(pp / (c?.vatSubject ? 1.19 : 1) * 100) / 100 : 0;
+      const debtHT = Math.max(0, item.total - paidHT);
+      const debtQty= item.total > 0 ? (debtHT / item.total) * item.qty : item.qty;
+      return {
+        opType:    item.opType,
+        payMethod: item.billingMode,   // "rotation" | "tonnage"
+        wasteType: item.wasteTypeId,
+        unitPrice: item.unitPrice,
+        net:       debtQty,
+        total:     debtHT,
+      };
+    });
   const debtNum     = `${invNum}-SOLDE`;
   const hasDebtBill = currentInv && (currentInv.paidAmount||0) > 0 && currentInv.status !== "paid" && debtEntries.length > 0;
 
