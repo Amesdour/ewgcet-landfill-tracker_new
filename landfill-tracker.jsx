@@ -4273,7 +4273,31 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       ? Math.max(0, cl.consumed - cl.creditLimit)
       : rawCost;
     const existInv = invoices.find(i=>i.clientId===cl.id&&i.month===month);
-    return {cl, entries:clEntries, net:clNet, cost:clCost, rawCost, inv:existInv};
+    // Compute limit usage percentage for notification
+    let limitPct = 0, limitData = null;
+    if (cl.type==="prepaid" && cl.creditLimit>0) {
+      const used=cl.consumed, lim=cl.creditLimit;
+      limitPct=Math.min(Math.round((used/lim)*100),100);
+      limitData={used, limit:lim, unit:"DA", rem:Math.max(0,lim-used), fmtUsed:used.toLocaleString("fr-FR")+" DA", fmtLim:lim.toLocaleString("fr-FR")+" DA", fmtRem:Math.max(0,lim-used).toLocaleString("fr-FR")+" DA"};
+    } else if (cl.creditEnabled && cl.creditLimit>0) {
+      const used=cl.consumed, lim=cl.creditLimit;
+      limitPct=Math.min(Math.round((used/lim)*100),100);
+      limitData={used, limit:lim, unit:"DA", rem:Math.max(0,lim-used), fmtUsed:used.toLocaleString("fr-FR")+" DA", fmtLim:lim.toLocaleString("fr-FR")+" DA", fmtRem:Math.max(0,lim-used).toLocaleString("fr-FR")+" DA"};
+    } else if (cl.weightLimitYear>0) {
+      const isRot=cl.type==="rotation";
+      const isMonthly=cl.payFrequency==="monthly";
+      const pfx=isMonthly?`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`:now.getFullYear().toString();
+      const pDs=discharges.filter(d=>d.clientId===cl.id&&d.ts.startsWith(pfx)&&d.status!=="cancelled");
+      const used=isRot?pDs.length:pDs.reduce((s,d)=>s+d.net,0);
+      const lim=cl.weightLimitYear;
+      limitPct=Math.min(Math.round((used/lim)*100),100);
+      const unit=isRot?"rot.":"t";
+      limitData={used, limit:lim, unit, rem:Math.max(0,lim-used),
+        fmtUsed:(isRot?used+" rot.":used.toFixed(2)+" t"),
+        fmtLim:(isRot?lim+" rot.":lim.toFixed(2)+" t"),
+        fmtRem:(isRot?Math.max(0,lim-used)+" rot.":Math.max(0,lim-used).toFixed(2)+" t")};
+    }
+    return {cl, entries:clEntries, net:clNet, cost:clCost, rawCost, inv:existInv, limitPct, limitData};
   });
   const grandNet  = globalRows.filter(r=>r.cl.type!=="rotation").reduce((s,r)=>s+r.net,0);
   const grandCost = globalRows.reduce((s,r)=>{
@@ -4341,6 +4365,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [payInvModal, setPayInvModal] = useState(null);
   const [partialAmt,  setPartialAmt]  = useState("");
   const [payConfirm,  setPayConfirm]  = useState(false);
+  const [notifModal,  setNotifModal]  = useState(null);
+  const [notifCopied, setNotifCopied] = useState(false);
 
   const openPayModal = (inv) => { setPayInvModal(inv); setPartialAmt(String(inv.totalAmount - (inv.paidAmount||0))); setPayConfirm(false); };
 
@@ -4462,7 +4488,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                   </tr>
                 </thead>
                 <tbody>
-                  {globalRows.map(({cl,entries:clE,net:clN,cost:clC,inv})=>{
+                  {globalRows.map(({cl,entries:clE,net:clN,cost:clC,inv,limitPct,limitData})=>{
                     return (
                       <tr key={cl.id}>
                         <td style={{fontWeight:700}}>{cl.name}</td>
@@ -4578,6 +4604,16 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                                   win.document.close();
                                   setTimeout(()=>win.print(),600);
                                 }}>📥 PDF</button>
+                            )}
+                            {limitData&&limitPct>=70&&(
+                              <button className="btn bsm" title="Notifier le client"
+                                style={{fontSize:10,
+                                  background:limitPct>=100?"var(--err)":limitPct>=90?"#f97316":"var(--warn)",
+                                  color:"#fff",
+                                  borderColor:limitPct>=100?"var(--err)":limitPct>=90?"#f97316":"var(--warn)"}}
+                                onClick={()=>{setNotifModal({cl,limitPct,limitData});setNotifCopied(false);}}>
+                                {limitPct>=100?"⚠️ Alerter":"📨 Notifier"}
+                              </button>
                             )}
                           </div>
                         </td>
@@ -5071,6 +5107,88 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       )}
 
       {/* ── PAYMENT MODAL ── */}
+      {notifModal&&(()=>{
+        const {cl,limitPct,limitData}=notifModal;
+        const isUrgent=limitPct>=100;
+        const isHigh=limitPct>=90&&limitPct<100;
+        const accentColor=isUrgent?"var(--err)":isHigh?"#f97316":"var(--warn)";
+        const smsMsg=isUrgent
+          ?`Madame/Monsieur,\n\nNous vous informons que votre limite contractuelle de déchargement (${limitData.fmtLim}) a été atteinte (${limitPct}% utilisé).\n\nMerci de contacter notre service pour régulariser votre situation avant tout nouveau dépôt.\n\nEPWGCET Jijel — ${new Date().toLocaleDateString("fr-FR")}`
+          :`Madame/Monsieur,\n\nVous avez utilisé ${limitPct}% de votre limite contractuelle de déchargement (${limitData.fmtUsed} sur ${limitData.fmtLim}). Il vous reste ${limitData.fmtRem}.\n\nMerci de prendre les dispositions nécessaires.\n\nEPWGCET Jijel — ${new Date().toLocaleDateString("fr-FR")}`;
+        const mailSubject=isUrgent?`Alerte : Limite de déchargement atteinte — ${cl.name}`:`Avis : Limite de déchargement proche — ${cl.name}`;
+        const mailBody=encodeURIComponent(smsMsg);
+        const copyMsg=()=>{navigator.clipboard.writeText(smsMsg);setNotifCopied(true);setTimeout(()=>setNotifCopied(false),2500);};
+        return (
+          <div className="ov">
+            <div className="modal" style={{maxWidth:520}}>
+              <div className="mh">
+                <span className="mh-title">{isUrgent?"⚠️ Alerte limite atteinte":"📨 Notification limite proche"}</span>
+                <button className="btn bg bsm" onClick={()=>setNotifModal(null)}>✕</button>
+              </div>
+              <div className="mb2">
+                {/* Alert banner */}
+                <div style={{background:isUrgent?"rgba(239,68,68,.08)":isHigh?"rgba(249,115,22,.08)":"rgba(234,179,8,.08)",
+                  border:`1px solid ${accentColor}`,borderRadius:10,padding:"12px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:24}}>{isUrgent?"🔴":isHigh?"🟠":"🟡"}</span>
+                  <div>
+                    <div style={{fontWeight:700,color:accentColor,fontSize:13}}>{cl.name}</div>
+                    <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>
+                      {limitData.fmtUsed} utilisé sur {limitData.fmtLim} — <strong style={{color:accentColor}}>{limitPct}%</strong>
+                      {!isUrgent&&<> · Reste : <strong>{limitData.fmtRem}</strong></>}
+                    </div>
+                    {/* Mini progress bar */}
+                    <div style={{height:5,background:"var(--bdr)",borderRadius:4,marginTop:6,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${limitPct}%`,background:accentColor,borderRadius:4,transition:"width .4s"}}/>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Contact info */}
+                <div className="cost-box mb3">
+                  <div className="cl"><span className="clb">📞 Téléphone</span><span className="clv mn">{cl.phone||<em style={{color:"var(--muted)"}}>Non renseigné</em>}</span></div>
+                  {cl.address&&<div className="cl"><span className="clb">📍 Adresse</span><span className="clv mn">{cl.address}</span></div>}
+                </div>
+
+                {/* Message preview */}
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"var(--muted)",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Message à envoyer</div>
+                  <div style={{background:"var(--bg2)",border:"1px solid var(--bdr)",borderRadius:8,padding:"10px 12px",
+                    fontSize:12,lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:"var(--mono)",color:"var(--tx)"}}>
+                    {smsMsg}
+                  </div>
+                </div>
+
+                {/* Action buttons */}
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <button className="btn bg" style={{flex:1,fontSize:11,justifyContent:"center",display:"flex",alignItems:"center",gap:6}}
+                    onClick={copyMsg}>
+                    {notifCopied?"✅ Copié !":"📋 Copier le message"}
+                  </button>
+                  {cl.phone&&(
+                    <a href={`sms:${cl.phone.replace(/\s/g,"")}`}
+                      style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                        padding:"8px 14px",borderRadius:8,border:"1px solid var(--bdr)",
+                        background:"#25d366",color:"#fff",fontSize:11,fontWeight:600,textDecoration:"none",cursor:"pointer"}}>
+                      💬 Envoyer SMS
+                    </a>
+                  )}
+                  <a href={`mailto:?subject=${encodeURIComponent(mailSubject)}&body=${mailBody}`}
+                    style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                      padding:"8px 14px",borderRadius:8,border:"1px solid var(--bdr)",
+                      background:"#4f46e5",color:"#fff",fontSize:11,fontWeight:600,textDecoration:"none",cursor:"pointer"}}>
+                    ✉️ Ouvrir e-mail
+                  </a>
+                </div>
+                {!cl.phone&&<div style={{fontSize:10,color:"var(--muted)",marginTop:8}}>⚠️ Aucun numéro de téléphone enregistré pour ce client.</div>}
+              </div>
+              <div className="mf">
+                <button className="btn bg" onClick={()=>setNotifModal(null)}>Fermer</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {payInvModal&&(
         <div className="ov">
           <div className="modal">
