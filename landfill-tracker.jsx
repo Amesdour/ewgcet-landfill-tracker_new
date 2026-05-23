@@ -1307,8 +1307,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
       truck:form.truck.toUpperCase(), wasteType:form.wasteType, gross, tare, net,
       unitPrice,
       total: finalTotal,
-      status:wouldExceed?"flagged":(effectiveMethod==="cash"||effectiveMethod==="prepaid")?"paid":"settled",
-      payMethod:effectiveMethod, opId:authUser.id,
+status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.creditLimit))?"flagged":(effectiveMethod==="cash"||effectiveMethod==="prepaid")?"paid":"settled",      payMethod:effectiveMethod, opId:authUser.id,
       opType:opType,
     };
     addDischarge(e);
