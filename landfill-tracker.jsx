@@ -499,8 +499,10 @@ function UserStatusBadge({s}) {
 const uidInv = () => "INV-" + Date.now().toString(36).toUpperCase();
 
 const REQUIRED_DOCS_PRIVATE = ["Registre de Commerce (RC)","Numéro d'Identification Fiscale (NIF)","Assurance Responsabilité Civile","Extrait de rôle apuré","Convention signée"];
-const REQUIRED_DOCS_STATE   = ["Arrêté ou délibération d'assemblée","Convention signée","Bon de commande ou réquisition"];
-const REQUIRED_DOCS_CREDIT  = ["Registre de Commerce (RC)","Numéro d'Identification Fiscale (NIF)","Demande d'ouverture de compte crédit","Garantie ou caution"];
+const REQUIRED_DOCS_STATE   = ["Arrêté ou délibération d'assemblée communale","Convention signée","Bon de commande ou réquisition"];
+const REQUIRED_DOCS_CREDIT  = ["Registre de Commerce (RC)","Numéro d'Identification Fiscale (NIF)","Demande d'ouverture de compte crédit","Garantie ou caution bancaire"];
+const REQUIRED_DOCS_PREPAID = ["Copie CNI ou RC (pour entreprise)","Bon de versement / virement bancaire du solde","Demande de préchargement signée"];
+const REQUIRED_DOCS_COLLECT = ["Contrat de collecte et traitement signé","Carte(s) grise(s) des camions de collecte","Autorisation de collecte (arrêté communal ou wilaya)"];
 
 function InvoiceStatusBadge({s}) {
   const map = {
@@ -690,8 +692,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [companyTrucks, setCompanyTrucks] = useState([]);
   const [docTypes,    setDocTypes]    = useState(() => {
-    try { return JSON.parse(localStorage.getItem('ewgcet_docTypes')) || {private:[...REQUIRED_DOCS_PRIVATE],state:[...REQUIRED_DOCS_STATE]}; }
-    catch { return {private:[...REQUIRED_DOCS_PRIVATE],state:[...REQUIRED_DOCS_STATE]}; }
+    try { return JSON.parse(localStorage.getItem('ewgcet_docTypes')) || {private:[...REQUIRED_DOCS_PRIVATE],state:[...REQUIRED_DOCS_STATE],prepaid:[...REQUIRED_DOCS_PREPAID],collect:[...REQUIRED_DOCS_COLLECT]}; }
+    catch { return {private:[...REQUIRED_DOCS_PRIVATE],state:[...REQUIRED_DOCS_STATE],prepaid:[...REQUIRED_DOCS_PREPAID],collect:[...REQUIRED_DOCS_COLLECT]}; }
   });
   const updateDocTypes = types => {
     setDocTypes(types);
@@ -2647,8 +2649,17 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
   };
 
   const requiredDocs = c
-    ? (c.clientType==="state" ? (docTypes?.state||REQUIRED_DOCS_STATE)
-      : (docTypes?.private||REQUIRED_DOCS_PRIVATE))
+    ? (() => {
+        if (c.type==="prepaid") return docTypes?.prepaid||REQUIRED_DOCS_PREPAID;
+        const base = c.clientType==="state"
+          ? (docTypes?.state||REQUIRED_DOCS_STATE)
+          : (docTypes?.private||REQUIRED_DOCS_PRIVATE);
+        if (c.serviceType==="treat_and_collect"||c.serviceType==="both") {
+          const ex = docTypes?.collect||REQUIRED_DOCS_COLLECT;
+          return [...base, ...ex.filter(d=>!base.includes(d))];
+        }
+        return base;
+      })()
     : [];
 
   const toggleDoc = (doc) => {
@@ -2923,8 +2934,8 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   </div>
                 )}
 
-                {/* Documents section for convention / rotation clients */}
-                {(c.type==="convention"||c.type==="rotation")&&(
+                {/* Documents section for convention / rotation / prepaid clients */}
+                {(c.type==="convention"||c.type==="rotation"||c.type==="prepaid")&&(
                   <div>
                     <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>📄 Documents requis
                       {isAdmin&&<span style={{fontWeight:400,fontSize:10,color:"var(--muted)",marginLeft:8}}>Cliquez pour marquer reçu/manquant</span>}
@@ -3420,6 +3431,14 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       ✅ Assujetti à la TVA
                     </button>
                   </div>
+                </div>
+                <div style={{background:"var(--s2)",border:"1px solid var(--bdr)",borderRadius:8,padding:"12px 14px"}}>
+                  <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>📋 Pièces justificatives à fournir :</div>
+                  {(docTypes?.prepaid||REQUIRED_DOCS_PREPAID).map(d=>(
+                    <div key={d} className="fx aic g2" style={{marginBottom:5,fontSize:11,color:"var(--muted)"}}>
+                      <span style={{color:"var(--warn)"}}>⬜</span> {d}
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -5244,7 +5263,7 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
   const [pwMsg, setPwMsg] = useState(null);
   const [profileForm, setProfileForm] = useState({name:authUser.name,email:authUser.email||"",phone:authUser.phone||"",matricule:authUser.matricule||""});
   const [profileMsg, setProfileMsg] = useState(null);
-  const [newDoc, setNewDoc] = useState({private:"",state:""});
+  const [newDoc, setNewDoc] = useState({private:"",state:"",prepaid:"",collect:""});
   const [companyEdit, setCompanyEdit] = useState(company ? [...company] : [...COMPANY_FIELDS_DEFAULT]);
   const [companyMsg, setCompanyMsg] = useState(null);
   const [newCompanyField, setNewCompanyField] = useState({label:"",value:""});
@@ -5667,8 +5686,10 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
             <div className="settings-title">Types de documents</div>
             <div className="settings-sub">Gérer les pièces justificatives requises par catégorie de client</div>
             {[
-              {key:"private", label:"🏭 Clients Privés / Entreprises"},
-              {key:"state",   label:"🏛 Collectivités / Organismes d'État"},
+              {key:"private", label:"🏭 Clients Privés / Entreprises (Convention)"},
+              {key:"state",   label:"🏛 Collectivités / Organismes d'État (Convention)"},
+              {key:"prepaid", label:"🎫 Clients Bonus Prépayé"},
+              {key:"collect", label:"🚛 Service Collecte et Traitement (documents supplémentaires)"},
             ].map(cat=>(
               <div key={cat.key} style={{marginBottom:28}}>
                 <div style={{fontWeight:700,fontSize:13,marginBottom:10,color:"var(--g)"}}>{cat.label}</div>
