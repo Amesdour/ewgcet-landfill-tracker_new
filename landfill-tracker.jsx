@@ -4931,7 +4931,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 Émise le : {new Date().toLocaleDateString("fr-DZ")}<br/>
                 Période : <strong>{new Date(month+"-01").toLocaleString("fr-FR",{month:"long",year:"numeric"})}</strong>
               </div>
-              {(()=>{const inv=currentInv;if(!inv)return null;const liveTotal=c?.vatSubject?Math.round(totalCost*1.19*100)/100:totalCost;const invLive={...inv,totalAmount:Math.max(inv.totalAmount||0,liveTotal)};return <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}><InvoiceStatusBadge s={inv.status}/>{(inv.status==="partial"||(inv.paidAmount>0&&inv.status!=="paid"))&&<PayProgress inv={invLive}/>}</div>;})()}
+              {(()=>{const inv=currentInv;if(!inv)return null;const liveTotal=c?.vatSubject?Math.round(totalCost*1.19*100)/100:totalCost;const invLive={...inv,totalAmount:liveTotal};return <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}><InvoiceStatusBadge s={inv.status}/>{(inv.status==="partial"||(inv.paidAmount>0&&inv.status!=="paid"))&&<PayProgress inv={invLive}/>}</div>;})()}
             </div>
           </div>
 
@@ -4979,13 +4979,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               {(()=>{const inv=currentInv;
                 if (!inv||inv.paidAmount<=0) return null;
                 const liveTotal=c?.vatSubject?Math.round(totalCost*1.19*100)/100:totalCost;
-                const effTotal=Math.max(inv.totalAmount||0,liveTotal);
-                const rem=effTotal-(inv.paidAmount||0);
-                const invLive={...inv,totalAmount:effTotal};
+                const rem=liveTotal-(inv.paidAmount||0);
                 return <>
                   <div className="fx jsb mt1"><span className="tsm" style={{color:"var(--g)"}}>Déjà réglé</span><span className="mn tsm fw7" style={{color:"var(--g)"}}>{fmt(inv.paidAmount)}</span></div>
                   {rem>0&&<div className="fx jsb mt1"><span className="tsm fw7" style={{color:"var(--err)"}}>Reste dû</span><span className="mn fw8" style={{fontFamily:"var(--head)",fontSize:15,color:"var(--err)"}}>{fmt(rem)}</span></div>}
-                  <div style={{marginTop:8}}><PayProgress inv={invLive}/></div>
                 </>;
               })()}
             </div>
