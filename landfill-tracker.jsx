@@ -4685,13 +4685,17 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       status: isFull ? "paid" : "partial",
       paidAt: isFull ? new Date().toISOString().slice(0,10) : null,
     });
-    // Generate and download partial Word bill
+    // Generate partial bill HTML once, use for both PDF and Word
     const ts      = Date.now();
     const partNum = `FAC-PARTIAL-${ts}-${cl.id}`;
     const html    = generatePartialBillHTML(cl, company, partNum, wt.label, qty, isRotation, unitPrice, amountHT, remaining);
-    const blob    = new Blob(['\ufeff', html], {type: 'application/msword'});
-    const url     = URL.createObjectURL(blob);
-    const a       = document.createElement('a');
+    // PDF: open print window
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+    // Word: auto-download .doc
+    const blob = new Blob(['\ufeff', html], {type: 'application/msword'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
     a.href = url; a.download = `${partNum}.doc`;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
