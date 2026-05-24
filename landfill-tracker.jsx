@@ -4538,43 +4538,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     URL.revokeObjectURL(url);
   };
 
-  // Debt-only bill: derive which line items are unpaid using the SAME coverage algorithm as the table
-  // (smallest-first coverage by paidAmount), then build synthetic discharge-like objects for those items.
-  // This ensures the debt bill matches exactly what the table shows as "PARTIEL" / "À PAYER".
-  const _debtTotalHT  = lineItems.reduce((s,li)=>s+li.total, 0);
-  const _debtInvTTC   = currentInv?.totalAmount || (c?.vatSubject ? Math.round(_debtTotalHT*1.19*100)/100 : _debtTotalHT);
-  const _debtItemTTCs = lineItems.map(item =>
-    _debtTotalHT > 0
-      ? Math.round((item.total / _debtTotalHT) * _debtInvTTC * 100) / 100
-      : (c?.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total)
-  );
-  const _debtLiStatus   = new Array(lineItems.length).fill('unpaid');
-  const _debtLiPartPaid = new Array(lineItems.length).fill(0);
-  const _debtSorted     = lineItems.map((_,i)=>i).sort((a,b)=>_debtItemTTCs[a]-_debtItemTTCs[b]);
-  let   _debtCoverLeft  = currentInv ? (currentInv.paidAmount||0) : 0;
-  for (const idx of _debtSorted) {
-    const itc = _debtItemTTCs[idx];
-    if (_debtCoverLeft >= itc)       { _debtLiStatus[idx]='paid';    _debtCoverLeft -= itc; }
-    else if (_debtCoverLeft > 0)     { _debtLiStatus[idx]='partial'; _debtLiPartPaid[idx]=_debtCoverLeft; _debtCoverLeft=0; }
-  }
-  // Build synthetic entries: one per unpaid/partial line item, qty/total scaled to the debt portion only
-  const debtEntries = lineItems
-    .map((item,i)=>({ item, ps:_debtLiStatus[i], pp:_debtLiPartPaid[i], itc:_debtItemTTCs[i] }))
-    .filter(x => x.ps !== 'paid')
-    .map(({ item, ps, pp }) => {
-      // partialPaid is TTC; convert to HT reduction
-      const paidHT = pp > 0 ? Math.round(pp / (c?.vatSubject ? 1.19 : 1) * 100) / 100 : 0;
-      const debtHT = Math.max(0, item.total - paidHT);
-      const debtQty= item.total > 0 ? (debtHT / item.total) * item.qty : item.qty;
-      return {
-        opType:    item.opType,
-        payMethod: item.billingMode,   // "rotation" | "tonnage"
-        wasteType: item.wasteTypeId,
-        unitPrice: item.unitPrice,
-        net:       debtQty,
-        total:     debtHT,
-      };
-    });
+  // Debt-only bill: discharges not yet individually marked as paid.
+  // Using individual discharge status is the only correct approach — the coverage algorithm
+  // would re-distribute the paid amount over new+old combined line items and produce wrong totals.
+  const debtEntries = entries.filter(d => d.status !== "paid" && d.status !== "cancelled");
+  const debtHT      = debtEntries.reduce((s,d) => s + (d.total||0), 0);
+  const debtTTC     = c?.vatSubject ? Math.round(debtHT * 1.19 * 100) / 100 : debtHT;
   const debtNum     = `${invNum}-SOLDE`;
   const hasDebtBill = currentInv && (currentInv.paidAmount||0) > 0 && currentInv.status !== "paid" && debtEntries.length > 0;
 
@@ -4931,7 +4900,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 Émise le : {new Date().toLocaleDateString("fr-DZ")}<br/>
                 Période : <strong>{new Date(month+"-01").toLocaleString("fr-FR",{month:"long",year:"numeric"})}</strong>
               </div>
-              {(()=>{const inv=currentInv;if(!inv)return null;const liveTotal=c?.vatSubject?Math.round(totalCost*1.19*100)/100:totalCost;const invLive={...inv,totalAmount:liveTotal};return <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}><InvoiceStatusBadge s={inv.status}/>{(inv.status==="partial"||(inv.paidAmount>0&&inv.status!=="paid"))&&<PayProgress inv={invLive}/>}</div>;})()}
+              {(()=>{const inv=currentInv;if(!inv)return null;const invLive={...inv,totalAmount:(inv.paidAmount||0)+debtTTC};return <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}><InvoiceStatusBadge s={inv.status}/>{(inv.status==="partial"||(inv.paidAmount>0&&inv.status!=="paid"))&&<PayProgress inv={invLive}/>}</div>;})()}
             </div>
           </div>
 
@@ -4976,15 +4945,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                   </div>
                 )}
               </div>
-              {(()=>{const inv=currentInv;
-                if (!inv||inv.paidAmount<=0) return null;
-                const liveTotal=c?.vatSubject?Math.round(totalCost*1.19*100)/100:totalCost;
-                const rem=liveTotal-(inv.paidAmount||0);
-                return <>
-                  <div className="fx jsb mt1"><span className="tsm" style={{color:"var(--g)"}}>Déjà réglé</span><span className="mn tsm fw7" style={{color:"var(--g)"}}>{fmt(inv.paidAmount)}</span></div>
-                  {rem>0&&<div className="fx jsb mt1"><span className="tsm fw7" style={{color:"var(--err)"}}>Reste dû</span><span className="mn fw8" style={{fontFamily:"var(--head)",fontSize:15,color:"var(--err)"}}>{fmt(rem)}</span></div>}
-                </>;
-              })()}
+              {currentInv&&(currentInv.paidAmount||0)>0&&(
+                <>
+                  <div className="fx jsb mt1"><span className="tsm" style={{color:"var(--g)"}}>Déjà réglé</span><span className="mn tsm fw7" style={{color:"var(--g)"}}>{fmt(currentInv.paidAmount)}</span></div>
+                  {debtTTC>0&&<div className="fx jsb mt1"><span className="tsm fw7" style={{color:"var(--err)"}}>Reste dû</span><span className="mn fw8" style={{fontFamily:"var(--head)",fontSize:15,color:"var(--err)"}}>{fmt(debtTTC)}</span></div>}
+                </>
+              )}
             </div>
           </div>
 
