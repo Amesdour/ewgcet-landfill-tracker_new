@@ -522,15 +522,22 @@ function PayProgress({inv, compact=false}) {
   const pct  = Math.min(100, Math.round((paid/inv.totalAmount)*100));
   const rem  = inv.totalAmount - paid;
   const col  = pct>=100?"var(--g)":pct>=50?"var(--warn)":"var(--err)";
+  if (compact) {
+    return (
+      <div style={{minWidth:90}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",marginBottom:3}}>
+          <span style={{color:col}}>{pct}%</span>
+          {rem>0&&<span style={{color:"var(--warn)",whiteSpace:"nowrap"}}>{fmt(rem)} DA</span>}
+        </div>
+        <div className="pay-bar-track"><div className="pay-bar-fill" style={{width:`${pct}%`,background:col}}/></div>
+      </div>
+    );
+  }
   return (
-    <div style={{minWidth: compact?90:130}}>
-      <div style={{display:"flex",justifyContent:"space-between",fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",marginBottom:3}}>
-        <span style={{color:col}}>{pct}%</span>
-        {rem>0&&<span style={{color:"var(--warn)"}}>{fmt(rem)} restant</span>}
-      </div>
-      <div className="pay-bar-track">
-        <div className="pay-bar-fill" style={{width:`${pct}%`,background:col}}/>
-      </div>
+    <div style={{minWidth:160,textAlign:"right"}}>
+      <div style={{fontSize:9,fontFamily:"var(--mono)",color:col,fontWeight:700,marginBottom:2}}>{pct}% réglé</div>
+      {rem>0&&<div style={{fontSize:10,fontFamily:"var(--mono)",color:"var(--err)",fontWeight:700,whiteSpace:"nowrap",marginBottom:3}}>{fmt(rem)} DA restant</div>}
+      <div className="pay-bar-track"><div className="pay-bar-fill" style={{width:`${pct}%`,background:col}}/></div>
     </div>
   );
 }
