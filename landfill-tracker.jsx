@@ -4925,7 +4925,16 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               </div>
             </div>
             <div style={{textAlign:"right"}}>
-              <div style={{fontFamily:"var(--head)",fontSize:22,fontWeight:800,letterSpacing:".05em"}}>FACTURE</div>
+              <div style={{fontFamily:"var(--head)",fontSize:22,fontWeight:800,letterSpacing:".05em",color:
+                currentInv?.status==="paid"?"var(--g)":
+                currentInv?.status==="overdue"?"var(--err)":
+                currentInv?.status==="partial"?"var(--warn)":
+                "inherit"}}>
+                {currentInv?.status==="paid"?"FACTURE SOLDÉE":
+                 currentInv?.status==="overdue"?"FACTURE IMPAYÉE":
+                 currentInv?.status==="partial"?"FACTURE PARTIELLE":
+                 "FACTURE"}
+              </div>
               <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--muted)",marginTop:2}}>{invNum}</div>
               <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>
                 Émise le : {new Date().toLocaleDateString("fr-DZ")}<br/>
