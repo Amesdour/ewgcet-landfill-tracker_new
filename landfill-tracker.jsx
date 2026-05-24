@@ -5159,11 +5159,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                             {isPaid
                               ?<span style={{color:'var(--g)'}}>{fmt(item.total)}</span>
                               :isPartial
-                                ?<div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:1}}>
-                                  <span>{fmt(item.total)}</span>
-                                  <span style={{fontSize:9,color:'var(--g)'}}>dont {fmt(partialPaid)} réglé{c.vatSubject?" (TTC)":""}</span>
-                                  <span style={{fontSize:9,color:'var(--err)',fontWeight:800}}>reste {fmt(resteItem)}{c.vatSubject?" TTC":""}</span>
-                                </div>
+                                ?<span style={{color:'var(--warn)'}}>{fmt(item.total)}</span>
                                 :<span style={{color:currentInv&&currentInv.paidAmount>0?'var(--err)':undefined}}>{fmt(item.total)}</span>}
                           </td>
                         </tr>
