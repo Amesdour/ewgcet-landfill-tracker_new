@@ -4319,12 +4319,8 @@ function generatePartialBillHTML(c, company, invNum, wtLabel, qty, isRotation, u
       <tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(tvaAmt)}</td></tr>
       <tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>
       <tr style="background:#ede9fe">
-        <td class="b" style="font-size:13px">Montant du présent acompte</td>
-        <td class="r b" style="font-size:14px;color:#7c3aed">${fB(totalTTC)}</td>
-      </tr>
-      <tr style="background:#fee2e2">
-        <td class="b" style="font-size:13px">Solde restant après règlement</td>
-        <td class="r b" style="font-size:14px;color:#dc2626">${fB(remainingTTC)}</td>
+        <td class="b" style="font-size:14px">NET À PAYER</td>
+        <td class="r b" style="font-size:15px;color:#7c3aed">${fB(totalTTC)}</td>
       </tr>
     </tbody>
   </table>
