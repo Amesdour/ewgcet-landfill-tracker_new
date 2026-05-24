@@ -1,0 +1,49 @@
+Add a new "Paiement Partiel par Calcul" feature in the invoice/payment system of landfill-tracker.jsx.
+
+CONTEXT:
+- Clients (convention/rotation) accumulate debt from discharges
+- Admin can record a partial payment based on what the client can pay at a given moment
+- The partial amount is entered by admin, then the system calculates the equivalent quantity (tonnage or rotations) and generates a specific bill for ONLY that partial payment
+
+FEATURE REQUIREMENTS:
+
+1. In PageInvoice → Vue Mensuelle table → Actions column, add a new button "💳 Paiement Partiel" next to existing buttons, only visible when invoice exists and is not fully paid
+
+2. When clicked, open a modal "Enregistrer un Paiement Partiel" with:
+   - Client name display
+   - Total debt display (Montant Dû restant)
+   - Input field: "Montant versé (DA)" — admin enters what client can pay
+   - Waste type selector (MEN, IND, MED, INE) with their unit prices shown
+   - Billing mode toggle: Tonnage / Rotation
+   - AUTO-CALCULATE and display:
+     * If tonnage: Quantité = Montant / unitPrice → show "XX,XXX t"
+     * If rotation: Quantité = Montant / rotationPrice → show "XX rotations"
+   - Show a preview bill summary:
+     * Waste type label
+     * Quantity calculated
+     * Unit price
+     * Amount (entered by admin)
+   - Confirm button: "✓ Valider et Générer la Facture Partielle"
+
+3. On confirm:
+   - Update invoice: paidAmount += entered amount, recalculate status (partial or paid)
+   - Generate and auto-download a Word (.doc) partial bill using generateOfficialBillHTML pattern but with:
+     * Only the partial amount rows
+     * Header mentions "FACTURE PARTIELLE" 
+     * Invoice number format: FAC-PARTIAL-{timestamp}-{clientId}
+     * Shows only the calculated quantity and amount for this payment
+     * Mentions remaining balance after this payment: "Solde restant après règlement: XX DA"
+
+4. The partial bill HTML function should follow exact same style as generateOfficialBillHTML (same header, Arabic title, logo, client block, TVA table, signature) but:
+   - Title shows "FACTURE PARTIELLE / ACOMPTE"
+   - Table shows only 1 line: the calculated waste type + quantity + unit price + amount
+   - Footer shows: "Montant du présent acompte: XX DA" and "Solde restant: XX DA"
+
+IMPORTANT RULES:
+- Never modify existing payment logic for full payments
+- Never touch generateOfficialBillHTML function
+- The partial payment modal reuses wasteTypes array already available in props
+- Unit prices come from wasteTypes state (price for tonnage, rotationPrice for rotation)
+- TVA applies if client.vatSubject === true (19%)
+- The Word file downloads automatically on confirm using same Blob/URL pattern already used in codebase
+- Keep all existing invoice status logic intact

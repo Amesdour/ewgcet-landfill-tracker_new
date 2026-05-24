@@ -4171,6 +4171,179 @@ ${opts.isDebt ? '<div style="margin:4px 2px 0;font-size:11px;color:#c00;font-wei
 
 </div></body></html>`;
 }
+function generatePartialBillHTML(c, company, invNum, wtLabel, qty, isRotation, unitPrice, amountHT, remainingAfter) {
+  const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
+  const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
+  const TVA = c.vatSubject ? 19 : 0;
+  const tvaAmt = amountHT * TVA / 100;
+  const totalTTC = amountHT + tvaAmt;
+  const remainingTTC = remainingAfter;
+  const date = new Date().toLocaleDateString('fr-DZ');
+  const qtyDisplay = isRotation ? `${Math.round(qty)} rotation${Math.round(qty)>1?'s':''}` : `${fQ(qty)} t`;
+  const unitDisplay = isRotation ? 'rot.' : 't';
+  const rowHTML = `
+    <tr>
+      <td style="text-align:center;">1</td>
+      <td><strong>Traitement — ${wtLabel}</strong></td>
+      <td style="text-align:right;">${qtyDisplay}</td>
+      <td style="text-align:right;">${fB(unitPrice)}&nbsp;/&nbsp;${unitDisplay}</td>
+      <td style="text-align:center;">${TVA}%</td>
+      <td style="text-align:right;">${fB(amountHT)}</td>
+    </tr>`;
+  return `<!DOCTYPE html>
+<html xmlns:o='urn:schemas-microsoft-com:office:office'
+      xmlns:w='urn:schemas-microsoft-com:office:word'
+      xmlns='http://www.w3.org/TR/REC-html40' lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Facture Partielle ${invNum}</title>
+<!--[if gte mso 9]><xml>
+<w:WordDocument>
+  <w:View>Print</w:View>
+  <w:Zoom>100</w:Zoom>
+  <w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml><![endif]-->
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#000}
+  table{border-collapse:collapse;width:100%}
+  th,td{border:1px solid #000;padding:6px 10px}
+  th{background:#f0f0f0;font-weight:bold;text-align:center;font-size:13px}
+  .nb td,.nb th{border:none;padding:3px 5px}
+  .sep{border-top:2.5px solid #000;margin:6px 0}
+  .sep2{border-top:1px solid #000;margin:5px 0}
+  .r{text-align:right}.c{text-align:center}.b{font-weight:bold}
+  @page WordSection1{size:21.0cm 29.7cm;margin:1.5cm 1.8cm;mso-page-orientation:portrait}
+  @page{size:21.0cm 29.7cm;margin:1.5cm 1.8cm}
+  div.WordSection1{page:WordSection1}
+  @media print{body{padding:0} .WordSection1{padding-bottom:32px}}
+</style>
+</head>
+<body>
+<div class="WordSection1">
+
+<div style="text-align:center;font-size:15px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-bottom:8px;color:#000">
+  الجمهورية الجزائرية الديموقراطية الشعبية
+</div>
+
+<table class="nb" style="width:100%;margin-bottom:6px">
+  <tr>
+    <td style="border:none;vertical-align:top;width:70%">
+      <div style="font-size:12px;line-height:2;color:#000">
+        <div style="font-size:13.5px;font-weight:bold;margin-bottom:4px">
+          Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL
+        </div>
+        <div>Cité Administrative, 01ème Étage, Ayouf Ouest — Jijel</div>
+        <div>IF&nbsp;: 000918044299126 &nbsp;·&nbsp; RC&nbsp;: 18/000442991H09</div>
+        <div>Tél&nbsp;: 034 47 37 62 &nbsp;·&nbsp; Fax&nbsp;: 034 47 37 62</div>
+        <div>BNQ&nbsp;: BADR Jijel — 00300676300261300093</div>
+      </div>
+    </td>
+    <td style="border:none;text-align:right;vertical-align:middle;width:30%">
+      <img src="/logo.png" alt="EPWGCET" style="width:90px;height:90px;object-fit:contain"/>
+    </td>
+  </tr>
+</table>
+
+<div class="sep"></div>
+
+<div style="display:flex;justify-content:space-between;padding:6px 2px;font-weight:bold;font-size:13.5px">
+  <span>FACTURE PARTIELLE / ACOMPTE : ${invNum}</span>
+  <span>JIJEL, LE : ${date}</span>
+</div>
+<div style="margin:4px 2px 0;font-size:11px;color:#7c3aed;font-weight:bold;letter-spacing:.03em">⚠ Ce document constitue un acompte partiel et non un règlement définitif.</div>
+
+<div class="sep"></div>
+
+<div style="margin:10px 2px 14px;font-size:12.5px;line-height:1.9">
+  <div style="font-weight:bold;font-size:13px;margin-bottom:3px">FACTURÉ À :</div>
+  <div>${c.id} — ${c.name}</div>
+  ${c.nif    ? `<div>M.F.&nbsp;: ${c.nif}</div>` : ''}
+  ${c.rc     ? `<div>R.C.&nbsp;: ${c.rc}</div>`  : ''}
+  ${c.address? `<div>${c.address}</div>`           : ''}
+  <div style="margin-top:4px;font-size:11.5px;color:#555">
+    Régime TVA&nbsp;: ${TVA > 0 ? `Assujetti — ${TVA}%` : 'Non assujetti (exonéré)'}
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:36px">N°</th>
+      <th style="text-align:left;padding-left:10px">DÉSIGNATION</th>
+      <th style="width:100px">QUANTITÉ</th>
+      <th style="width:110px">PRIX U. (DA)</th>
+      <th style="width:64px">% TVA</th>
+      <th style="width:110px">MONTANT HT</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rowHTML}
+    <tr style="background:#f5f5f5">
+      <td colspan="2" class="b" style="font-size:13px">TOTAL GÉNÉRAL (1 ligne)</td>
+      <td class="c" style="color:#999;font-size:11px">—</td>
+      <td></td><td></td>
+      <td class="r b">${fB(amountHT)}</td>
+    </tr>
+  </tbody>
+</table>
+
+<div style="margin-top:10px;border:1px solid #000;padding:7px 12px;font-size:12px">
+  <strong>Arrêtée la présente facture partielle à la somme de :</strong><br>
+  <span style="font-weight:bold;text-transform:uppercase;letter-spacing:.02em">${amountToWords(totalTTC)}</span>
+</div>
+
+<div style="display:flex;gap:16px;margin-top:12px;align-items:flex-start">
+  <table style="width:46%">
+    <thead>
+      <tr><th>TVA %</th><th>BASE HT</th><th>MONTANT TVA</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="c">${TVA > 0 ? TVA+',00 %' : 'Exonéré'}</td>
+        <td class="r">${fB(amountHT)}</td>
+        <td class="r">${fB(tvaAmt)}</td>
+      </tr>
+      <tr class="b">
+        <td class="c b">TOTAL</td>
+        <td class="r b">${fB(amountHT)}</td>
+        <td class="r b">${fB(tvaAmt)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <table style="width:52%;margin-left:auto">
+    <tbody>
+      <tr><td style="width:58%">Montant H.T.</td><td class="r">${fB(amountHT)}</td></tr>
+      <tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(tvaAmt)}</td></tr>
+      <tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>
+      <tr style="background:#ede9fe">
+        <td class="b" style="font-size:13px">Montant du présent acompte</td>
+        <td class="r b" style="font-size:14px;color:#7c3aed">${fB(totalTTC)}</td>
+      </tr>
+      <tr style="background:#fee2e2">
+        <td class="b" style="font-size:13px">Solde restant après règlement</td>
+        <td class="r b" style="font-size:14px;color:#dc2626">${fB(remainingTTC)}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div style="margin-top:48px;display:flex;justify-content:flex-start;padding-left:8%">
+  <div style="text-align:center;min-width:200px">
+    <div style="font-weight:bold;font-size:13px;margin-bottom:60px;text-transform:uppercase">Le Directeur</div>
+    <div style="border-top:1px solid #000;padding-top:5px;font-size:11px;color:#555">Signature &amp; Cachet</div>
+  </div>
+</div>
+
+<div style="position:fixed;bottom:0;left:0;right:0;border-top:1.5px solid #000;padding:5px 1.8cm;font-size:9.5px;color:#333;text-align:center;background:#fff;font-family:Arial,Helvetica,sans-serif">
+  Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL &nbsp;—&nbsp; Cité Administrative 3ème étage, Jijel 18000 &nbsp;—&nbsp; Tél&nbsp;: 030 49 05 94 &nbsp;—&nbsp; contact@epwgcet-jijel.dz
+</div>
+
+</div></body></html>`;
+}
+
 function generateEmptyBillHTML(c, company) {
   const TVA = c.vatSubject ? 19 : 0;
   const date = new Date().toLocaleDateString('fr-DZ');
@@ -4476,6 +4649,55 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [notifModal,  setNotifModal]  = useState(null);
   const [notifCopied, setNotifCopied] = useState(false);
 
+  // Paiement Partiel par Calcul state
+  const [partialCalcModal, setPartialCalcModal] = useState(null); // {inv, cl}
+  const [partialCalcAmt,   setPartialCalcAmt]   = useState("");
+  const [partialCalcWT,    setPartialCalcWT]     = useState("");
+  const [partialCalcMode,  setPartialCalcMode]   = useState("tonnage"); // "tonnage" | "rotation"
+
+  const openPartialCalcModal = (inv, cl) => {
+    setPartialCalcModal({inv, cl});
+    setPartialCalcAmt("");
+    setPartialCalcWT(wasteTypes[0]?.id || "");
+    setPartialCalcMode("tonnage");
+  };
+
+  const doPartialPaymentByCalc = async () => {
+    if (!partialCalcModal) return;
+    const {inv, cl} = partialCalcModal;
+    const enteredAmt = parseFloat(partialCalcAmt) || 0;
+    if (enteredAmt <= 0) return;
+    const wt = wasteTypes.find(w => w.id === partialCalcWT);
+    if (!wt) return;
+    const isRotation = partialCalcMode === "rotation";
+    const unitPrice  = isRotation ? (wt.rotationPrice || 0) : (wt.price || 0);
+    if (unitPrice <= 0) return;
+    // Amount entered is TTC; derive HT for the document
+    const TVA = cl.vatSubject ? 0.19 : 0;
+    const amountHT = enteredAmt / (1 + TVA);
+    const qty = amountHT / unitPrice;
+    const remaining = Math.max(0, (inv.totalAmount - (inv.paidAmount || 0)) - enteredAmt);
+    const newPaid   = (inv.paidAmount || 0) + enteredAmt;
+    const isFull    = newPaid >= inv.totalAmount;
+    // Update invoice
+    await updateInvoice({...inv,
+      paidAmount: newPaid,
+      status: isFull ? "paid" : "partial",
+      paidAt: isFull ? new Date().toISOString().slice(0,10) : null,
+    });
+    // Generate and download partial Word bill
+    const ts      = Date.now();
+    const partNum = `FAC-PARTIAL-${ts}-${cl.id}`;
+    const html    = generatePartialBillHTML(cl, company, partNum, wt.label, qty, isRotation, unitPrice, amountHT, remaining);
+    const blob    = new Blob(['\ufeff', html], {type: 'application/msword'});
+    const url     = URL.createObjectURL(blob);
+    const a       = document.createElement('a');
+    a.href = url; a.download = `${partNum}.doc`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    setPartialCalcModal(null);
+  };
+
   const openPayModal = (inv) => { setPayInvModal(inv); setPartialAmt(String(inv.totalAmount - (inv.paidAmount||0))); setPayConfirm(false); };
 
   const doMarkPaid = async (inv, partial=false) => {
@@ -4725,6 +4947,9 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                             )}
                             {inv&&inv.status!=="paid"&&(
                               <button className="btn bsm" style={{fontSize:10,background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(inv)}>✓ Payée</button>
+                            )}
+                            {inv&&inv.status!=="paid"&&(
+                              <button className="btn bsm" style={{fontSize:10,background:"#6366f1",color:"#fff",borderColor:"#6366f1"}} onClick={()=>openPartialCalcModal(inv,cl)}>💳 Paiement Partiel</button>
                             )}
                             {inv&&inv.status==="pending"&&(
                               <button className="btn be bsm" style={{fontSize:10}} onClick={()=>markOverdue(inv)}>🔴 Impayée</button>
@@ -5350,6 +5575,126 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               </div>
               <div className="mf">
                 <button className="btn bg" onClick={()=>setNotifModal(null)}>Fermer</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {partialCalcModal&&(()=>{
+        const {inv, cl} = partialCalcModal;
+        const wt = wasteTypes.find(w => w.id === partialCalcWT);
+        const isRotation = partialCalcMode === "rotation";
+        const unitPrice  = wt ? (isRotation ? (wt.rotationPrice||0) : (wt.price||0)) : 0;
+        const TVA = cl.vatSubject ? 0.19 : 0;
+        const enteredAmt = parseFloat(partialCalcAmt) || 0;
+        const amountHT   = enteredAmt > 0 && (1+TVA) > 0 ? enteredAmt / (1+TVA) : 0;
+        const qty        = unitPrice > 0 ? amountHT / unitPrice : 0;
+        const remaining  = Math.max(0, (inv.totalAmount - (inv.paidAmount||0)) - enteredAmt);
+        const resteDu    = inv.totalAmount - (inv.paidAmount||0);
+        const canConfirm = enteredAmt > 0 && enteredAmt <= resteDu && wt && unitPrice > 0;
+        return (
+          <div className="ov">
+            <div className="modal" style={{maxWidth:520}}>
+              <div className="mh">
+                <span className="mh-title">💳 Paiement Partiel par Calcul</span>
+                <button className="btn bg bsm" onClick={()=>setPartialCalcModal(null)}>✕</button>
+              </div>
+              <div className="mb2">
+                {/* Client + Debt summary */}
+                <div className="cost-box mb4">
+                  <div className="cl"><span className="clb">Client</span><span className="clv mn fw7">{cl.name}</span></div>
+                  <div className="cl"><span className="clb">Référence facture</span><span className="clv mn">{inv.id}</span></div>
+                  <div className="cl"><span className="clb">Total facturé</span><span className="clv mn">{fmt(inv.totalAmount)}</span></div>
+                  {(inv.paidAmount||0)>0&&<div className="cl"><span className="clb">Déjà réglé</span><span className="clv mn" style={{color:"var(--g)"}}>{fmt(inv.paidAmount)}</span></div>}
+                  <div className="cl ct"><span style={{fontWeight:700}}>Montant Dû restant</span><span className="ctv">{fmt(resteDu)}</span></div>
+                </div>
+
+                {/* Amount input */}
+                <div className="field mb3" style={{marginBottom:14}}>
+                  <label>Montant versé (DA) — TTC</label>
+                  <input className="fi" type="number" min="0" max={resteDu}
+                    value={partialCalcAmt} placeholder="Saisir le montant versé..."
+                    onChange={e=>setPartialCalcAmt(e.target.value)}/>
+                  {enteredAmt > resteDu && <div style={{fontSize:10,color:"var(--err)",marginTop:3}}>⚠ Montant supérieur au reste dû</div>}
+                </div>
+
+                {/* Waste type selector */}
+                <div className="field mb3" style={{marginBottom:14}}>
+                  <label>Type de déchet</label>
+                  <select className="fi" value={partialCalcWT} onChange={e=>setPartialCalcWT(e.target.value)}>
+                    {wasteTypes.map(w=>(
+                      <option key={w.id} value={w.id}>
+                        {w.label} — Tonne: {fmt(w.price||0)} DA / Rot: {fmt(w.rotationPrice||0)} DA
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Billing mode toggle */}
+                <div className="field mb3" style={{marginBottom:14}}>
+                  <label>Mode de facturation</label>
+                  <div className="seg" style={{width:"fit-content",marginTop:4}}>
+                    <button className={`seg-btn${partialCalcMode==="tonnage"?" active":""}`} onClick={()=>setPartialCalcMode("tonnage")}>⚖️ Tonnage</button>
+                    <button className={`seg-btn${partialCalcMode==="rotation"?" active":""}`} onClick={()=>setPartialCalcMode("rotation")}>🔄 Rotation</button>
+                  </div>
+                </div>
+
+                {/* Auto-calculated quantity */}
+                {wt && unitPrice > 0 && enteredAmt > 0 && (
+                  <div style={{background:"rgba(99,102,241,.07)",border:"1px solid rgba(99,102,241,.25)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+                    <div style={{fontWeight:700,fontSize:12,color:"#6366f1",marginBottom:8}}>📐 Calcul automatique</div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                      <span style={{color:"var(--muted)"}}>Prix unitaire</span>
+                      <span className="mn fw7">{fmt(unitPrice)} DA / {isRotation?"rot.":"t"}</span>
+                    </div>
+                    {cl.vatSubject&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                      <span style={{color:"var(--muted)"}}>Montant HT (base)</span>
+                      <span className="mn">{fmt(Math.round(amountHT*100)/100)} DA</span>
+                    </div>}
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:13,fontWeight:800,borderTop:"1px solid rgba(99,102,241,.2)",paddingTop:6,marginTop:4}}>
+                      <span>Quantité équivalente</span>
+                      <span className="mn" style={{color:"#6366f1"}}>
+                        {isRotation ? `${Math.round(qty)} rotation${Math.round(qty)>1?"s":""}` : `${qty.toLocaleString("fr-FR",{minimumFractionDigits:3,maximumFractionDigits:3})} t`}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Preview bill summary */}
+                {wt && unitPrice > 0 && enteredAmt > 0 && enteredAmt <= resteDu && (
+                  <div style={{background:"rgba(46,201,92,.06)",border:"1px solid rgba(46,201,92,.2)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+                    <div style={{fontWeight:700,fontSize:12,color:"var(--g)",marginBottom:8}}>🧾 Aperçu de la facture partielle</div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
+                      <span style={{color:"var(--muted)"}}>Désignation</span>
+                      <span className="fw7">Traitement — {wt.label}</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
+                      <span style={{color:"var(--muted)"}}>Quantité</span>
+                      <span className="fw7">{isRotation ? `${Math.round(qty)} rot.` : `${qty.toLocaleString("fr-FR",{minimumFractionDigits:3,maximumFractionDigits:3})} t`}</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
+                      <span style={{color:"var(--muted)"}}>Prix unitaire</span>
+                      <span className="mn">{fmt(unitPrice)} DA / {isRotation?"rot.":"t"}</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:700,borderTop:"1px solid rgba(46,201,92,.25)",paddingTop:6,marginTop:4}}>
+                      <span>Montant de l'acompte</span>
+                      <span className="mn tg">{fmt(enteredAmt)} DA</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:700,marginTop:4,color:"var(--err)"}}>
+                      <span>Solde restant après règlement</span>
+                      <span className="mn">{fmt(remaining)} DA</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="mf">
+                <button className="btn bg" onClick={()=>setPartialCalcModal(null)}>Annuler</button>
+                <button className="btn bsm" disabled={!canConfirm}
+                  style={{background:"#6366f1",color:"#fff",borderColor:"#6366f1",opacity:canConfirm?1:.5}}
+                  onClick={doPartialPaymentByCalc}>
+                  ✓ Valider et Générer la Facture Partielle
+                </button>
               </div>
             </div>
           </div>
