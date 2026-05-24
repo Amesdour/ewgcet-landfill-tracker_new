@@ -4647,18 +4647,21 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
   // Paiement Partiel par Calcul state
   const [partialCalcModal, setPartialCalcModal] = useState(null); // {inv, cl}
-  const [partialCalcAmt,   setPartialCalcAmt]   = useState("");
-  const [partialCalcWT,    setPartialCalcWT]     = useState("");
-  const [partialCalcMode,  setPartialCalcMode]   = useState("tonnage"); // "tonnage" | "rotation"
+  const [partialCalcAmt,     setPartialCalcAmt]     = useState("");
+  const [partialCalcWT,      setPartialCalcWT]      = useState("");
+  const [partialCalcMode,    setPartialCalcMode]    = useState("tonnage"); // "tonnage" | "rotation"
+  const [partialCalcPrinted, setPartialCalcPrinted] = useState(false);
 
   const openPartialCalcModal = (inv, cl) => {
     setPartialCalcModal({inv, cl});
     setPartialCalcAmt("");
     setPartialCalcWT(wasteTypes[0]?.id || "");
     setPartialCalcMode("tonnage");
+    setPartialCalcPrinted(false);
   };
 
-  const doPartialPaymentByCalc = async () => {
+  // Step 1: generate & print the bill (no invoice update yet)
+  const doGeneratePartialBill = () => {
     if (!partialCalcModal) return;
     const {inv, cl} = partialCalcModal;
     const enteredAmt = parseFloat(partialCalcAmt) || 0;
@@ -4668,20 +4671,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     const isRotation = partialCalcMode === "rotation";
     const unitPrice  = isRotation ? (wt.rotationPrice || 0) : (wt.price || 0);
     if (unitPrice <= 0) return;
-    // Amount entered is TTC; derive HT for the document
     const TVA = cl.vatSubject ? 0.19 : 0;
     const amountHT = enteredAmt / (1 + TVA);
     const qty = amountHT / unitPrice;
     const remaining = Math.max(0, (inv.totalAmount - (inv.paidAmount || 0)) - enteredAmt);
-    const newPaid   = (inv.paidAmount || 0) + enteredAmt;
-    const isFull    = newPaid >= inv.totalAmount;
-    // Update invoice
-    await updateInvoice({...inv,
-      paidAmount: newPaid,
-      status: isFull ? "paid" : "partial",
-      paidAt: isFull ? new Date().toISOString().slice(0,10) : null,
-    });
-    // Generate partial bill HTML once, use for both PDF and Word
     const ts      = Date.now();
     const partNum = `FAC-PARTIAL-${ts}-${cl.id}`;
     const html    = generatePartialBillHTML(cl, company, partNum, wt.label, qty, isRotation, unitPrice, amountHT, remaining);
@@ -4695,7 +4688,24 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     a.href = url; a.download = `${partNum}.doc`;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
+    setPartialCalcPrinted(true);
+  };
+
+  // Step 2: confirm the payment after the bill has been printed
+  const doConfirmPartialPayment = async () => {
+    if (!partialCalcModal) return;
+    const {inv, cl} = partialCalcModal;
+    const enteredAmt = parseFloat(partialCalcAmt) || 0;
+    if (enteredAmt <= 0) return;
+    const newPaid = (inv.paidAmount || 0) + enteredAmt;
+    const isFull  = newPaid >= inv.totalAmount;
+    await updateInvoice({...inv,
+      paidAmount: newPaid,
+      status: isFull ? "paid" : "partial",
+      paidAt: isFull ? new Date().toISOString().slice(0,10) : null,
+    });
     setPartialCalcModal(null);
+    setPartialCalcPrinted(false);
   };
 
   const openPayModal = (inv) => { setPayInvModal(inv); setPartialAmt(String(inv.totalAmount - (inv.paidAmount||0))); setPayConfirm(false); };
@@ -5681,20 +5691,31 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                       <span>Montant de l'acompte</span>
                       <span className="mn tg">{fmt(enteredAmt)} DA</span>
                     </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:700,marginTop:4,color:"var(--err)"}}>
-                      <span>Solde restant après règlement</span>
-                      <span className="mn">{fmt(remaining)} DA</span>
-                    </div>
+                  </div>
+                )}
+
+                {/* Step 2: confirmation block — appears after bill is printed */}
+                {partialCalcPrinted&&(
+                  <div style={{background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.3)",borderRadius:10,padding:"12px 14px",marginTop:8}}>
+                    <div style={{fontWeight:700,fontSize:12,color:"var(--g)",marginBottom:6}}>✅ Facture générée et imprimée</div>
+                    <div style={{fontSize:12,color:"var(--muted)"}}>Confirmez la réception effective du paiement pour mettre à jour le statut de la facture.</div>
                   </div>
                 )}
               </div>
               <div className="mf">
-                <button className="btn bg" onClick={()=>setPartialCalcModal(null)}>Annuler</button>
-                <button className="btn bsm" disabled={!canConfirm}
-                  style={{background:"#6366f1",color:"#fff",borderColor:"#6366f1",opacity:canConfirm?1:.5}}
-                  onClick={doPartialPaymentByCalc}>
-                  ✓ Valider et Générer la Facture Partielle
-                </button>
+                <button className="btn bg" onClick={()=>{ setPartialCalcModal(null); setPartialCalcPrinted(false); }}>Annuler</button>
+                {!partialCalcPrinted
+                  ? <button className="btn bsm" disabled={!canConfirm}
+                      style={{background:"#6366f1",color:"#fff",borderColor:"#6366f1",opacity:canConfirm?1:.5}}
+                      onClick={doGeneratePartialBill}>
+                      🖨️ Imprimer et Télécharger la Facture
+                    </button>
+                  : <button className="btn bsm"
+                      style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}}
+                      onClick={doConfirmPartialPayment}>
+                      ✓ Confirmer la réception du paiement
+                    </button>
+                }
               </div>
             </div>
           </div>
