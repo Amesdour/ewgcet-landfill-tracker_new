@@ -4119,9 +4119,9 @@ ${opts.isDebt ? '<div style="margin:4px 2px 0;font-size:11px;color:#c00;font-wei
 </table>
 
 <!-- ── AMOUNT IN WORDS ── -->
-<div style="margin-top:10px;border:1px solid #000;padding:7px 12px;font-size:12px">
+${(()=>{const alreadyPaid=opts.alreadyPaid||0;const netAPayer=alreadyPaid>0?Math.max(0,totalTTC-alreadyPaid):totalTTC;return`<div style="margin-top:10px;border:1px solid #000;padding:7px 12px;font-size:12px">
   <strong>${opts.isDebt ? 'Arrêté le présent avis de débit à la somme de :' : 'Arrêtée la présente facture à la somme de :'}</strong><br>
-  <span style="font-weight:bold;text-transform:uppercase;letter-spacing:.02em">${amountToWords(totalTTC)}</span>
+  <span style="font-weight:bold;text-transform:uppercase;letter-spacing:.02em">${amountToWords(netAPayer)}</span>
 </div>
 
 <!-- ── TVA SUMMARY + TOTALS ── -->
@@ -4148,13 +4148,14 @@ ${opts.isDebt ? '<div style="margin:4px 2px 0;font-size:11px;color:#c00;font-wei
       <tr><td style="width:58%">Montant H.T.</td><td class="r">${fB(totalHT)}</td></tr>
       <tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(totalTVA)}</td></tr>
       <tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>
+      ${alreadyPaid>0?`<tr><td style="color:#16a34a">Déjà réglé</td><td class="r" style="color:#16a34a">− ${fB(alreadyPaid)}</td></tr>`:''}
       <tr style="background:#e8e8e8">
         <td class="b" style="font-size:14px">NET À PAYER</td>
-        <td class="r b" style="font-size:15px">${fB(totalTTC)}</td>
+        <td class="r b" style="font-size:15px">${fB(netAPayer)}</td>
       </tr>
     </tbody>
   </table>
-</div>
+</div>`;})()}
 
 <!-- ── SIGNATURE ── -->
 <div style="margin-top:48px;display:flex;justify-content:flex-start;padding-left:8%">
@@ -4782,13 +4783,15 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
   const downloadDebtPDF = () => {
     if (!c || debtEntries.length === 0) return;
-    const html = generateOfficialBillHTML(c, debtEntries, company, month, debtNum, wasteTypes, {isDebt:true});
+    const alreadyPaid = currentInv?.paidAmount || 0;
+    const html = generateOfficialBillHTML(c, debtEntries, company, month, debtNum, wasteTypes, {isDebt:true, alreadyPaid});
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(), 600); }
   };
   const downloadDebtWord = () => {
     if (!c || debtEntries.length === 0) return;
-    const html = generateOfficialBillHTML(c, debtEntries, company, month, debtNum, wasteTypes, {isDebt:true});
+    const alreadyPaid = currentInv?.paidAmount || 0;
+    const html = generateOfficialBillHTML(c, debtEntries, company, month, debtNum, wasteTypes, {isDebt:true, alreadyPaid});
     const blob = new Blob(['\ufeff', html], {type:'application/msword'});
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -5184,7 +5187,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               {currentInv&&(currentInv.paidAmount||0)>0&&(
                 <>
                   <div className="fx jsb mt1"><span className="tsm" style={{color:"var(--g)"}}>Déjà réglé</span><span className="mn tsm fw7" style={{color:"var(--g)"}}>{fmt(currentInv.paidAmount)}</span></div>
-                  {debtTTC>0&&<div className="fx jsb mt1"><span className="tsm fw7" style={{color:"var(--err)"}}>Reste dû</span><span className="mn fw8" style={{fontFamily:"var(--head)",fontSize:15,color:"var(--err)"}}>{fmt(debtTTC)}</span></div>}
+                  {currentInv&&(currentInv.totalAmount-(currentInv.paidAmount||0))>0&&<div className="fx jsb mt1"><span className="tsm fw7" style={{color:"var(--err)"}}>Reste dû</span><span className="mn fw8" style={{fontFamily:"var(--head)",fontSize:15,color:"var(--err)"}}>{fmt(currentInv.totalAmount-(currentInv.paidAmount||0))}</span></div>}
                 </>
               )}
             </div>
