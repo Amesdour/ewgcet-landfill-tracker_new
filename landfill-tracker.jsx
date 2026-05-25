@@ -4530,10 +4530,11 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       const billingMode = d.payMethod==="rotation" ? "rotation" : "tonnage";
       const wt          = wasteTypes.find(w=>w.id===d.wasteType);
       const key         = `${opT}|${d.wasteType}|${billingMode}|${d.unitPrice}`;
-      if (!acc[key]) acc[key] = { opType:opT, wasteTypeId:d.wasteType, wtLabel:wt?.label||d.wasteType, billingMode, unitPrice:d.unitPrice||0, qty:0, count:0, total:0 };
+      if (!acc[key]) acc[key] = { opType:opT, wasteTypeId:d.wasteType, wtLabel:wt?.label||d.wasteType, billingMode, unitPrice:d.unitPrice||0, qty:0, count:0, total:0, minTs:d.ts };
       acc[key].count += 1;
       acc[key].qty   += billingMode==="rotation" ? 1 : (d.net||0);
       acc[key].total += d.total||0;
+      if (d.ts && d.ts < acc[key].minTs) acc[key].minTs = d.ts;
       return acc;
     }, {})
   );
@@ -5344,12 +5345,17 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         ? Math.round((item.total / totalHT) * invTTC * 100) / 100
                         : (c.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total)
                     );
-                    // Assign coverage filling smallest items first so that items which
-                    // were already paid stay covered when a large existing row grows
-                    // due to a newly-added discharge (e.g. same type merged into row 1).
+                    // Assign coverage filling oldest discharges first — this ensures that
+                    // discharge records added before a payment was made are marked as covered,
+                    // while newer discharges (added after payment) remain unpaid, consistent
+                    // with the discharge list's status field.
                     const payStatuses  = new Array(lineItems.length).fill('unpaid');
                     const partialPaids = new Array(lineItems.length).fill(0);
-                    const sortedIdx = lineItems.map((_,i)=>i).sort((a,b)=>itemTTCs[a]-itemTTCs[b]);
+                    const sortedIdx = lineItems.map((_,i)=>i).sort((a,b)=>{
+                      const tsA = lineItems[a].minTs || '';
+                      const tsB = lineItems[b].minTs || '';
+                      return tsA < tsB ? -1 : tsA > tsB ? 1 : 0;
+                    });
                     let coverLeft = currentInv ? (currentInv.paidAmount||0) : 0;
                     for (const idx of sortedIdx) {
                       const itc = itemTTCs[idx];
