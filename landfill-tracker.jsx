@@ -1289,13 +1289,14 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const limitBlocked = !isAdmin && wouldExceed;
   const isCollectRotation        = opType==="collect" && (collectMode==="rotation" || client?.collectBillingMode==="rotation");
   const collectRotationPriceOk   = !isCollectRotation || (wt?.collectRotationPrice??0) > 0;
+  const wasteTypeAllowed = validWasteTypes.some(w => w.id === form.wasteType);
   const canSubmit = opType==="collect"
     ? isCollectRotation
-      ? (form.truck && form.clientId && form.wasteType && collectRotationPriceOk)
-      : (form.truck && form.clientId && gross>tare && form.wasteType)
+      ? (form.truck && form.clientId && form.wasteType && wasteTypeAllowed && collectRotationPriceOk)
+      : (form.truck && form.clientId && gross>tare && form.wasteType && wasteTypeAllowed)
     : isRotationClient
-      ? (form.truck && form.clientId && form.wasteType)
-      : (form.truck && form.clientId && gross>tare && form.wasteType);
+      ? (form.truck && form.clientId && form.wasteType && wasteTypeAllowed)
+      : (form.truck && form.clientId && gross>tare && form.wasteType && wasteTypeAllowed);
 
   // Collect-mode pricing
   const collectUnitPrice     = isCollectRotation ? (wt?.collectRotationPrice??0) : (wt?.collectPrice??0);
@@ -1826,7 +1827,14 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
             </div>
           )}
 
-          <div className="field"><label>Type de Déchets</label>
+          <div className="field">
+            <label>Type de Déchets
+              {clientAllowedWaste&&clientAllowedWaste.length>0&&(
+                <span style={{marginLeft:6,fontSize:10,background:"var(--orange)",color:"#fff",borderRadius:4,padding:"1px 5px"}}>
+                  Restreint par contrat
+                </span>
+              )}
+            </label>
             <select className="fi" value={form.wasteType} onChange={e=>set("wasteType",e.target.value)}>
               {validWasteTypes.map(w=>{
                 const isRotMode = mode==="rotation"||(isConvWithRotation&&convSubMode==="rotation");
@@ -1837,6 +1845,9 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
                 return <option key={w.id} value={w.id}>{w.label} — {fmt(tarif)}{unit}</option>;
               })}
             </select>
+            {validWasteTypes.length===0&&form.clientId&&(
+              <span style={{color:"var(--err)",fontSize:11}}>⚠ Aucun type de déchet autorisé pour ce client — vérifiez son contrat.</span>
+            )}
           </div>
 
           {opType==="collect"?(

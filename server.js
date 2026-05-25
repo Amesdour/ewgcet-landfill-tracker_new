@@ -163,6 +163,16 @@ app.get('/api/discharges', async (req, res) => {
 app.post('/api/discharges', async (req, res) => {
   const d = req.body;
   try {
+    // Enforce client waste type restriction
+    if (d.clientId && d.wasteType) {
+      const { rows: clientRows } = await q('SELECT allowed_waste_types FROM clients WHERE id=$1', [d.clientId]);
+      if (clientRows.length > 0) {
+        const allowed = clientRows[0].allowed_waste_types || [];
+        if (allowed.length > 0 && !allowed.includes(d.wasteType)) {
+          return res.status(403).json({ error: `Type de déchet non autorisé pour ce client.` });
+        }
+      }
+    }
     await q(
       `INSERT INTO discharges(id,ts,site_id,client_id,client_name,truck,waste_type,gross,tare,net,unit_price,total,status,pay_method,op_id,op_type)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
