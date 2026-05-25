@@ -119,6 +119,7 @@ const mapClient = r => ({
   assignedSites:r.assigned_sites||[],
   serviceType:r.service_type||'treatment_only',
   collectBillingMode:r.collect_billing_mode||'tonnage',
+  allowedWasteTypes:r.allowed_waste_types||[],
 });
 
 const mapUser = r => ({
@@ -238,14 +239,15 @@ app.post('/api/clients', async (req, res) => {
   const c = req.body;
   try {
     await q(
-      `INSERT INTO clients(id,name,client_type,type,status,credit_limit,consumed,credit_enabled,weight_limit_year,pay_frequency,pay_instrument,phone,address,nif,rc,docs,note,vat_subject,assigned_sites,service_type,collect_billing_mode)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) ON CONFLICT(id) DO NOTHING`,
+      `INSERT INTO clients(id,name,client_type,type,status,credit_limit,consumed,credit_enabled,weight_limit_year,pay_frequency,pay_instrument,phone,address,nif,rc,docs,note,vat_subject,assigned_sites,service_type,collect_billing_mode,allowed_waste_types)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) ON CONFLICT(id) DO NOTHING`,
       [c.id,c.name,c.clientType,c.type,c.status,c.creditLimit||0,0,
        c.creditEnabled||false,c.weightLimitYear||0,
        c.payFrequency||'monthly',c.payInstrument||'cheque',
        c.phone||'',c.address||'',c.nif||'',c.rc||'',JSON.stringify(c.docs||[]),c.note||'',
        c.vatSubject||false,JSON.stringify(c.assignedSites||[]),
-       c.serviceType||'treatment_only',c.collectBillingMode||'tonnage']
+       c.serviceType||'treatment_only',c.collectBillingMode||'tonnage',
+       JSON.stringify(c.allowedWasteTypes||[])]
     );
     ok(res, { ok:true });
   } catch(e) { er(res,e); }
@@ -258,13 +260,15 @@ app.put('/api/clients/:id', async (req, res) => {
       `UPDATE clients SET name=$1,client_type=$2,type=$3,status=$4,credit_limit=$5,
        credit_enabled=$6,weight_limit_year=$7,pay_frequency=$8,pay_instrument=$9,
        phone=$10,address=$11,nif=$12,rc=$13,docs=$14,note=$15,vat_subject=$16,
-       assigned_sites=$17,rotation_limit=$18,service_type=$19,collect_billing_mode=$20 WHERE id=$21`,
+       assigned_sites=$17,rotation_limit=$18,service_type=$19,collect_billing_mode=$20,
+       allowed_waste_types=$21 WHERE id=$22`,
       [c.name,c.clientType,c.type,c.status,c.creditLimit||0,
        c.creditEnabled||false,c.weightLimitYear||0,
        c.payFrequency||'monthly',c.payInstrument||'cheque',
        c.phone||'',c.address||'',c.nif||'',c.rc||'',JSON.stringify(c.docs||[]),c.note||'',
        c.vatSubject||false,JSON.stringify(c.assignedSites||[]),c.rotationLimit||0,
-       c.serviceType||'treatment_only',c.collectBillingMode||'tonnage',req.params.id]
+       c.serviceType||'treatment_only',c.collectBillingMode||'tonnage',
+       JSON.stringify(c.allowedWasteTypes||[]),req.params.id]
     );
     ok(res, { ok:true });
   } catch(e) { er(res,e); }

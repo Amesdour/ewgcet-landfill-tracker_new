@@ -1171,11 +1171,17 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
   const site = sites.find(s=>s.id===form.siteId);
   // Filter by site's accepted waste list (if configured), otherwise fall back to site type
-  const validWasteTypes = site
+  const siteWasteTypes = site
     ? (site.acceptedWaste&&site.acceptedWaste.length>0
         ? wasteTypes.filter(w=>site.acceptedWaste.includes(w.id))
         : wasteTypes.filter(w=>w.siteTypes.includes(site.type)))
     : wasteTypes;
+  // Further restrict by the selected client's allowedWasteTypes when set by admin
+  const selectedClientForWaste = clients.find(c=>c.id===form.clientId);
+  const clientAllowedWaste = selectedClientForWaste?.allowedWasteTypes;
+  const validWasteTypes = (clientAllowedWaste&&clientAllowedWaste.length>0)
+    ? siteWasteTypes.filter(w=>clientAllowedWaste.includes(w.id))
+    : siteWasteTypes;
 
   // Fix wasteType if current one not valid for selected site
   const wasteTypeValid = validWasteTypes.find(w=>w.id===form.wasteType);
@@ -3980,16 +3986,18 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
     groups[key].net   += d.net;
     groups[key].total += d.total;
   });
-  const rows = Object.values(groups).map((g,i)=>({
-    num: i+1,
-    opType: g.opType,
-    label: `${g.opType==='collect'?'Collecte et Traitement — ':'Traitement — '}${wasteTypes.find(w=>w.id===g.wasteType)?.label || g.wasteType}`,
-    isRotation: g.isRotation,
-    qty: g.isRotation ? g.count : g.net,
-    unitPrice: g.unitPrice,
-    tva: TVA,
-    ht: g.total,
-  }));
+  const rows = opts.precomputedRows
+    ? opts.precomputedRows.map((r, i) => ({...r, num: i+1, tva: TVA}))
+    : Object.values(groups).map((g,i)=>({
+        num: i+1,
+        opType: g.opType,
+        label: `${g.opType==='collect'?'Collecte et Traitement — ':'Traitement — '}${wasteTypes.find(w=>w.id===g.wasteType)?.label || g.wasteType}`,
+        isRotation: g.isRotation,
+        qty: g.isRotation ? g.count : g.net,
+        unitPrice: g.unitPrice,
+        tva: TVA,
+        ht: g.total,
+      }));
   const totalHT  = rows.reduce((s,r)=>s+r.ht, 0);
   const totalTVA = totalHT * TVA / 100;
   const totalTTC = totalHT + totalTVA;
@@ -4781,17 +4789,70 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const debtNum     = `${invNum}-SOLDE`;
   const hasDebtBill = currentInv && (currentInv.paidAmount||0) > 0 && currentInv.status !== "paid" && debtEntries.length > 0;
 
+  const computeOutstandingRows = () => {
+    const paidAmt = currentInv?.paidAmount || 0;
+    const invTTC  = currentInv?.totalAmount || 0;
+    const allLineItemsMap = entries.reduce((acc, d) => {
+      if (d.status === 'cancelled') return acc;
+      const opT   = d.opType === 'collect' ? 'collect' : 'treatment';
+      const isRot = d.payMethod === 'rotation';
+      const key   = `${opT}|${d.wasteType}|${isRot?'rotation':'tonnage'}|${d.unitPrice}`;
+      const wt    = wasteTypes.find(w => w.id === d.wasteType);
+      if (!acc[key]) acc[key] = { opType:opT, wasteType:d.wasteType, wtLabel:wt?.label||d.wasteType, isRotation:isRot, unitPrice:d.unitPrice||0, qty:0, count:0, total:0, minTs:d.ts };
+      acc[key].count += 1;
+      acc[key].qty   += isRot ? 1 : (d.net||0);
+      acc[key].total += d.total||0;
+      if (d.ts && d.ts < acc[key].minTs) acc[key].minTs = d.ts;
+      return acc;
+    }, {});
+    const allLineItems = Object.values(allLineItemsMap);
+    const totalHT  = allLineItems.reduce((s, li) => s + li.total, 0);
+    const itemTTCs = allLineItems.map(item =>
+      totalHT > 0
+        ? Math.round((item.total / totalHT) * invTTC * 100) / 100
+        : (c.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total)
+    );
+    const sortedIdx = allLineItems.map((_, i) => i).sort((a, b) => {
+      const tsA = allLineItems[a].minTs || '';
+      const tsB = allLineItems[b].minTs || '';
+      return tsA < tsB ? -1 : tsA > tsB ? 1 : 0;
+    });
+    let coverLeft = paidAmt;
+    const outstandingRows = [];
+    for (const idx of sortedIdx) {
+      const item = allLineItems[idx];
+      const itc  = itemTTCs[idx];
+      if (coverLeft >= itc) {
+        coverLeft -= itc;
+      } else if (coverLeft > 0) {
+        const remainingTTC = itc - coverLeft;
+        const remainingHT  = c.vatSubject ? Math.round(remainingTTC / 1.19 * 100) / 100 : remainingTTC;
+        const fraction     = item.total > 0 ? remainingHT / item.total : 0;
+        const remainingQty = item.isRotation
+          ? Math.round(item.count * fraction)
+          : Math.round(item.qty * fraction * 1000) / 1000;
+        outstandingRows.push({ opType:item.opType, label:`${item.opType==='collect'?'Collecte et Traitement — ':'Traitement — '}${item.wtLabel}`, isRotation:item.isRotation, qty:remainingQty, unitPrice:item.unitPrice, ht:remainingHT });
+        coverLeft = 0;
+      } else {
+        outstandingRows.push({ opType:item.opType, label:`${item.opType==='collect'?'Collecte et Traitement — ':'Traitement — '}${item.wtLabel}`, isRotation:item.isRotation, qty:item.isRotation?item.count:item.qty, unitPrice:item.unitPrice, ht:item.total });
+      }
+    }
+    return outstandingRows;
+  };
+
   const downloadDebtPDF = () => {
-    if (!c || debtEntries.length === 0) return;
-    const alreadyPaid = currentInv?.paidAmount || 0;
-    const html = generateOfficialBillHTML(c, debtEntries, company, month, debtNum, wasteTypes, {isDebt:true, alreadyPaid});
+    if (!c || !currentInv) return;
+    const outstandingRows = computeOutstandingRows();
+    if (!outstandingRows.length) return;
+    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows});
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(), 600); }
   };
   const downloadDebtWord = () => {
-    if (!c || debtEntries.length === 0) return;
-    const alreadyPaid = currentInv?.paidAmount || 0;
-    const html = generateOfficialBillHTML(c, debtEntries, company, month, debtNum, wasteTypes, {isDebt:true, alreadyPaid});
+    if (!c || !currentInv) return;
+    const outstandingRows = computeOutstandingRows();
+    if (!outstandingRows.length) return;
+    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows});
     const blob = new Blob(['\ufeff', html], {type:'application/msword'});
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
