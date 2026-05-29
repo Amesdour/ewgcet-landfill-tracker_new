@@ -5420,24 +5420,22 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         ? Math.round((item.total / totalHT) * invTTC * 100) / 100
                         : (c.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total)
                     );
-                    // Assign coverage filling oldest discharges first — this ensures that
-                    // discharge records added before a payment was made are marked as covered,
-                    // while newer discharges (added after payment) remain unpaid, consistent
-                    // with the discharge list's status field.
+                    // Distribute partial payment equally across all waste-type line items.
+                    // e.g. 3000 DA paid, 3 waste-type lines → 1000 DA allocated to each line.
                     const payStatuses  = new Array(lineItems.length).fill('unpaid');
                     const partialPaids = new Array(lineItems.length).fill(0);
-                    const sortedIdx = lineItems.map((_,i)=>i).sort((a,b)=>{
-                      const tsA = lineItems[a].minTs || '';
-                      const tsB = lineItems[b].minTs || '';
-                      return tsA < tsB ? -1 : tsA > tsB ? 1 : 0;
-                    });
-                    let coverLeft = currentInv ? (currentInv.paidAmount||0) : 0;
-                    for (const idx of sortedIdx) {
-                      const itc = itemTTCs[idx];
-                      if (coverLeft >= itc) {
-                        payStatuses[idx] = 'paid'; coverLeft -= itc;
-                      } else if (coverLeft > 0) {
-                        payStatuses[idx] = 'partial'; partialPaids[idx] = coverLeft; coverLeft = 0;
+                    const totalPaid = currentInv ? (currentInv.paidAmount||0) : 0;
+                    if (totalPaid > 0 && lineItems.length > 0) {
+                      const sharePerLine = totalPaid / lineItems.length;
+                      for (let idx = 0; idx < lineItems.length; idx++) {
+                        const itc = itemTTCs[idx];
+                        if (sharePerLine >= itc) {
+                          payStatuses[idx] = 'paid';
+                          partialPaids[idx] = itc;
+                        } else {
+                          payStatuses[idx] = 'partial';
+                          partialPaids[idx] = Math.round(sharePerLine * 100) / 100;
+                        }
                       }
                     }
                     return lineItems.map((item,i)=>{
