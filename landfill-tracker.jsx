@@ -2300,13 +2300,13 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
             <thead>
               <tr>
                 <th>ID</th><th>Date/Heure</th><th>Site</th><th>Camion</th><th>Client</th>
-                <th>Type</th><th>Opération</th><th>Net(t)</th><th>Tarif</th><th>Total</th><th>Mode</th><th>Statut</th><th>Op.</th><th>Action</th>
+                <th>Type</th><th>Opération</th><th>Net(t)</th><th>Tarif</th><th>Total HT</th><th>Net à payer</th><th>Mode</th><th>Statut</th><th>Op.</th><th>Action</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length===0?(
                 <tr>
-                  <td colSpan={14} style={{textAlign:"center",padding:40}}>
+                  <td colSpan={15} style={{textAlign:"center",padding:40}}>
                     <div style={{fontSize:32,marginBottom:8}}>📭</div>
                     <div style={{color:"var(--muted)"}}>Aucune entrée</div>
                     <div style={{color:"var(--dim)",fontSize:11,marginTop:4}}>Les déchargements enregistrés apparaîtront ici</div>
@@ -2315,6 +2315,9 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
               ):filtered.map(d=>{
                 const wt = wasteTypes.find(w=>w.id===d.wasteType);
                 const op = users.find(u=>u.id===d.opId);
+                const cl = clients.find(c=>c.id===d.clientId);
+                const TVAr = cl?.vatSubject ? 0.19 : 0;
+                const netAPayer = Math.round(d.total * (1 + TVAr) * 100) / 100;
                 const isFlagged = d.status==="flagged";
                 return (
                   <tr key={d.id} className={isFlagged?"flagged-row":""}>
@@ -2334,6 +2337,12 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
                     <td><span className="mn">{fmtN(d.net)}</span></td>
                     <td><span className="mn tmu">{fmt(d.unitPrice)}{d.payMethod==="rotation"?<span style={{fontSize:9,marginLeft:2}}>/rot.</span>:<span style={{fontSize:9,marginLeft:2}}>/t</span>}</span></td>
                     <td><span className="mn tg fw7">{fmt(d.total)}</span></td>
+                    <td>
+                      <span className="mn fw7" style={{color:"var(--purple)"}}>
+                        {fmt(netAPayer)}
+                        {TVAr>0&&<span style={{fontSize:9,marginLeft:3,color:"var(--muted)",fontWeight:400}}>TTC</span>}
+                      </span>
+                    </td>
                     <td>{d.payMethod==="cash"?<span className="badge b-cash">💵 Cash</span>:d.payMethod==="rotation"?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>:<span className="badge b-info">📋 Conv.</span>}</td>
                     <td><StatusBadge s={d.status}/></td>
                     <td><span className="mn tmu" style={{fontSize:10}}>{op?.name.split(" ")[0]||"—"}</span></td>
@@ -6060,6 +6069,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                   : <div style={{border:"1px solid var(--border)",borderRadius:8,overflow:"hidden"}}>
                     {unpaidForInv.map((d,i)=>{
                       const checked = !!selectedDischarges.find(x=>x.id===d.id);
+                      const dNetAPayer = Math.round(d.total * (1 + TVArate) * 100) / 100;
                       return(
                         <label key={d.id} onClick={()=>toggleDischarge(d)} style={{
                           display:"flex",alignItems:"center",gap:10,padding:"8px 12px",
@@ -6076,10 +6086,15 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                             {" · "}
                             <span style={{fontSize:11,color:"var(--muted)"}}>{d.wasteType} · {d.net}t</span>
                           </span>
-                          <span style={{fontFamily:"var(--mono)",fontWeight:700,fontSize:12,
-                            color:checked?(isBillMode?"var(--purple)":"var(--g)"):"var(--muted)",flexShrink:0}}>
-                            {fmt(d.total)}
-                          </span>
+                          <div style={{textAlign:"right",flexShrink:0}}>
+                            <div style={{fontFamily:"var(--mono)",fontWeight:700,fontSize:12,
+                              color:checked?(isBillMode?"var(--purple)":"var(--g)"):"var(--muted)"}}>
+                              {fmt(dNetAPayer)}
+                            </div>
+                            {TVArate>0&&<div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)"}}>
+                              HT: {fmt(d.total)}
+                            </div>}
+                          </div>
                         </label>
                       );
                     })}
