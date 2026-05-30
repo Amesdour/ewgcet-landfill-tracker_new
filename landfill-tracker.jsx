@@ -4021,7 +4021,15 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
     : hasRotation ? `${totalRots} rotation${totalRots>1?'s':''}` : `${fQ(totalTonnes)} t`;
   const date = new Date().toLocaleDateString('fr-DZ');
   const co = f => (Array.isArray(company)?company:COMPANY_FIELDS_DEFAULT).find(x=>x.id===f)?.value||'';
-  const rowsHTML = rows.map(r=>`
+  const rowsHTML = rows.map(r=> r.isCredit ? `
+    <tr style="color:#16a34a;">
+      <td style="text-align:center;">—</td>
+      <td><em>${r.label}</em></td>
+      <td style="text-align:center;">—</td>
+      <td style="text-align:center;">—</td>
+      <td style="text-align:center;">—</td>
+      <td style="text-align:right;">− ${fB(-r.ht)}</td>
+    </tr>` : `
     <tr>
       <td style="text-align:center;">${r.num}</td>
       <td><strong>${r.label}</strong></td>
@@ -4164,9 +4172,9 @@ ${(()=>{const alreadyPaid=opts.alreadyPaid||0;const netAPayer=alreadyPaid>0?Math
   </table>
   <table style="width:52%;margin-left:auto">
     <tbody>
-      ${opts.isDebt && alreadyPaid>0 ? '' : `<tr><td style="width:58%">Montant H.T.</td><td class="r">${fB(totalHT)}</td></tr>`}
-      ${opts.isDebt && alreadyPaid>0 ? '' : `<tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(totalTVA)}</td></tr>`}
-      ${opts.isDebt && alreadyPaid>0 ? '' : `<tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>`}
+      <tr><td style="width:58%">Montant H.T.</td><td class="r">${fB(totalHT)}</td></tr>
+      <tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(totalTVA)}</td></tr>
+      <tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>
       <tr style="background:#e8e8e8">
         <td class="b" style="font-size:14px">NET À PAYER</td>
         <td class="r b" style="font-size:15px">${fB(netAPayer)}</td>
@@ -4816,23 +4824,21 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       groups[key].qty   += isRot ? 1 : (d.net||0);
       groups[key].total += d.total||0;
     });
-    const items    = Object.values(groups);
-    const totalHTAll = items.reduce((s, g) => s + g.total, 0);
-    const paid     = alreadyPaidAgainstDebt;
-    return items.map(g => {
-      // Distribute partial payment proportionally across operations by their share of totalHT
-      const fraction   = totalHTAll > 0 ? g.total / totalHTAll : 0;
-      const deductHT   = paid > 0 ? Math.round(fraction * paid * 100) / 100 : 0;
-      const remainHT   = Math.max(0, g.total - deductHT);
-      return {
-        opType: g.opType,
-        label: `${g.opType === 'collect' ? 'Collecte et Traitement — ' : 'Traitement — '}${g.wtLabel}`,
-        isRotation: g.isRotation,
-        qty: g.isRotation ? g.count : g.qty,
-        unitPrice: g.unitPrice,
-        ht: remainHT,
-      };
-    });
+    const items = Object.values(groups);
+    const paid  = alreadyPaidAgainstDebt;
+    const rows  = items.map(g => ({
+      opType: g.opType,
+      label: `${g.opType === 'collect' ? 'Collecte et Traitement — ' : 'Traitement — '}${g.wtLabel}`,
+      isRotation: g.isRotation,
+      qty: g.isRotation ? g.count : g.qty,
+      unitPrice: g.unitPrice,
+      ht: g.total,
+    }));
+    // Append a credit row so TOTAL GÉNÉRAL = net remaining; qty×price stays correct per line
+    if (paid > 0) {
+      rows.push({ isCredit: true, label: 'Acompte versé — Règlement partiel reçu', ht: -paid });
+    }
+    return rows;
   };
 
   const downloadDebtPDF = () => {
