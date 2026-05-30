@@ -2913,19 +2913,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   <div className="fg fg3 mb3">
                     {(()=>{
                       const now = new Date();
-                     const findBestDischarges = (budget, discharges) => {
-  const sorted = [...discharges].sort((a, b) => (b.total||0) - (a.total||0));
-  let remaining = budget;
-  const selected = [];
-  for (const d of sorted) {
-    if ((d.total||0) <= remaining + 0.001) {
-      selected.push(d);
-      remaining = Math.round((remaining - (d.total||0)) * 1000) / 1000;
-    }
-  }
-  return selected;
-};
-                      const isRotation = c.type==="rotation";
+                              const isRotation = c.type==="rotation";
                       const isMonthly = c.payFrequency==="monthly";
                       const periodPrefix = isMonthly
                         ? `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`
@@ -4550,6 +4538,19 @@ function generateEmptyBillHTML(c, company) {
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,updateInvoice,updateDischarge,company}) {
   const now = new Date();
+         const findBestDischarges = (budget, discharges) => {
+  const sorted = [...discharges].sort((a, b) => (b.total||0) - (a.total||0));
+  let remaining = budget;
+  const selected = [];
+  for (const d of sorted) {
+    if ((d.total||0) <= remaining + 0.001) {
+      selected.push(d);
+      remaining = Math.round((remaining - (d.total||0)) * 1000) / 1000;
+    }
+  }
+  return selected;
+};
+       
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
   const [view,  setView]  = useState("global"); // "global" | "client" | "debts"
   const [selC,  setSelC]  = useState("");
