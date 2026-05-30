@@ -2913,6 +2913,18 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   <div className="fg fg3 mb3">
                     {(()=>{
                       const now = new Date();
+                     const findBestDischarges = (budget, discharges) => {
+  const sorted = [...discharges].sort((a, b) => (b.total||0) - (a.total||0));
+  let remaining = budget;
+  const selected = [];
+  for (const d of sorted) {
+    if ((d.total||0) <= remaining + 0.001) {
+      selected.push(d);
+      remaining = Math.round((remaining - (d.total||0)) * 1000) / 1000;
+    }
+  }
+  return selected;
+};
                       const isRotation = c.type==="rotation";
                       const isMonthly = c.payFrequency==="monthly";
                       const periodPrefix = isMonthly
@@ -4668,6 +4680,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   };
 
   const [payInvModal, setPayInvModal] = useState(null);
+  const [selectedDischarges, setSelectedDischarges] = useState([]);
   const [partialAmt,  setPartialAmt]  = useState("");
   const [payConfirm,  setPayConfirm]  = useState(false);
   const [notifModal,  setNotifModal]  = useState(null);
@@ -4736,9 +4749,22 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     setPartialCalcPrinted(false);
   };
 
-  const openPayModal = (inv) => { setPayInvModal(inv); setPartialAmt(String(inv.totalAmount - (inv.paidAmount||0))); setPayConfirm(false); };
+  const openPayModal = (inv) => {
+  const resteDu = inv.totalAmount - (inv.paidAmount||0);
+  const unpaidDischarges = discharges.filter(d =>
+    d.clientId === inv.clientId &&
+    d.ts.startsWith(inv.month) &&
+    d.status !== "cancelled" &&
+    d.status !== "paid"
+  );
+  const best = findBestDischarges(resteDu, unpaidDischarges);
+  setSelectedDischarges(best);
+  setPayInvModal(inv);
+  setPartialAmt(String(resteDu));
+  setPayConfirm(false);
+};
 
-  const doMarkPaid = async (inv, partial=false) => {
+ const doMarkPaid = async (inv, partial=false) => {
     const amt = partial ? (parseFloat(partialAmt)||0) : (inv.totalAmount - (inv.paidAmount||0));
     const newPaid = (inv.paidAmount||0) + amt;
     const isFull  = newPaid >= inv.totalAmount;
@@ -4747,17 +4773,17 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       status: isFull ? "paid" : "partial",
       paidAt: isFull ? new Date().toISOString().slice(0,10) : null,
     });
-    // When fully paid, mark every discharge for that client+month as "paid"
-    if (isFull) {
-      const toMark = discharges.filter(d =>
-        d.clientId === inv.clientId &&
-        d.ts.startsWith(inv.month) &&
-        d.status !== "cancelled" &&
-        d.status !== "paid"
-      );
-      for (const d of toMark) {
-        await updateDischarge({...d, status: "paid"});
-      }
+    // Mark selected discharges as paid
+    const toMark = partial
+      ? selectedDischarges
+      : discharges.filter(d =>
+          d.clientId === inv.clientId &&
+          d.ts.startsWith(inv.month) &&
+          d.status !== "cancelled" &&
+          d.status !== "paid"
+        );
+    for (const d of toMark) {
+      await updateDischarge({...d, status: "paid"});
     }
     setPayInvModal(null);
     setPayConfirm(false);
@@ -5822,19 +5848,46 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               </div>
               <div className="field mb3" style={{marginBottom:16}}>
                 <label>Montant du versement (DA)</label>
-                <input className="fi" type="number" value={partialAmt} onChange={e=>setPartialAmt(e.target.value)}
-                  max={payInvModal.totalAmount-(payInvModal.paidAmount||0)} placeholder="Montant versé..."/>
+                <input className="fi" type="number" value={partialAmt} onChange={e=>{
+  setPartialAmt(e.target.value);
+  const amt = parseFloat(e.target.value)||0;
+  const unpaidDischarges = discharges.filter(d =>
+    d.clientId === payInvModal.clientId &&
+    d.ts.startsWith(payInvModal.month) &&
+    d.status !== "cancelled" &&
+    d.status !== "paid"
+  );
+  setSelectedDischarges(findBestDischarges(amt, unpaidDischarges));
+}}
+  max={payInvModal.totalAmount-(payInvModal.paidAmount||0)} placeholder="Montant versé..."/>
                 <div className="tsm tmu mt1" style={{fontSize:10}}>
                   {parseFloat(partialAmt)>=(payInvModal.totalAmount-(payInvModal.paidAmount||0))
                     ?"✅ Paiement intégral — facture soldée"
                     :`⏳ Paiement partiel — reste: ${fmt(payInvModal.totalAmount-(payInvModal.paidAmount||0)-parseFloat(partialAmt||0))}`}
                 </div>
               </div>
-              <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",
-                background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.2)",borderRadius:8,padding:"12px 14px"}}>
-                <input type="checkbox" checked={payConfirm} onChange={e=>setPayConfirm(e.target.checked)}/>
-                <span style={{fontWeight:600}}>✅ Confirmer la réception du paiement</span>
-              </label>
+              {selectedDischarges.length > 0 && (
+  <div style={{marginBottom:14,background:"rgba(41,196,84,.06)",border:"1px solid rgba(41,196,84,.2)",borderRadius:8,padding:"12px 14px"}}>
+    <div style={{fontWeight:700,fontSize:12,color:"var(--g)",marginBottom:8}}>
+      📋 Déchargements couverts par ce paiement ({selectedDischarges.length})
+    </div>
+    {selectedDischarges.map(d=>(
+      <div key={d.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:"1px solid rgba(41,196,84,.1)"}}>
+        <span style={{color:"var(--muted)"}}>{d.ts.slice(0,10)} — {d.truck}</span>
+        <span style={{fontFamily:"var(--mono)",fontWeight:700,color:"var(--g)"}}>{fmt(d.total)}</span>
+      </div>
+    ))}
+    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:700,marginTop:8,paddingTop:6,borderTop:"1px solid rgba(41,196,84,.2)"}}>
+      <span>Total couvert</span>
+      <span style={{fontFamily:"var(--mono)",color:"var(--g)"}}>{fmt(selectedDischarges.reduce((s,d)=>s+(d.total||0),0))}</span>
+    </div>
+  </div>
+)}
+<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",
+  background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.2)",borderRadius:8,padding:"12px 14px"}}>
+  <input type="checkbox" checked={payConfirm} onChange={e=>setPayConfirm(e.target.checked)}/>
+  <span style={{fontWeight:600}}>✅ Confirmer la réception du paiement</span>
+</label>
             </div>
             <div className="mf">
               <button className="btn bg" onClick={()=>setPayInvModal(null)}>Annuler</button>
