@@ -4816,21 +4816,30 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       groups[key].qty   += isRot ? 1 : (d.net||0);
       groups[key].total += d.total||0;
     });
-    return Object.values(groups).map(g => ({
-      opType: g.opType,
-      label: `${g.opType === 'collect' ? 'Collecte et Traitement — ' : 'Traitement — '}${g.wtLabel}`,
-      isRotation: g.isRotation,
-      qty: g.isRotation ? g.count : g.qty,
-      unitPrice: g.unitPrice,
-      ht: g.total,
-    }));
+    const items    = Object.values(groups);
+    const totalHTAll = items.reduce((s, g) => s + g.total, 0);
+    const paid     = alreadyPaidAgainstDebt;
+    return items.map(g => {
+      // Distribute partial payment proportionally across operations by their share of totalHT
+      const fraction   = totalHTAll > 0 ? g.total / totalHTAll : 0;
+      const deductHT   = paid > 0 ? Math.round(fraction * paid * 100) / 100 : 0;
+      const remainHT   = Math.max(0, g.total - deductHT);
+      return {
+        opType: g.opType,
+        label: `${g.opType === 'collect' ? 'Collecte et Traitement — ' : 'Traitement — '}${g.wtLabel}`,
+        isRotation: g.isRotation,
+        qty: g.isRotation ? g.count : g.qty,
+        unitPrice: g.unitPrice,
+        ht: remainHT,
+      };
+    });
   };
 
   const downloadDebtPDF = () => {
     if (!c || !currentInv) return;
     const outstandingRows = computeOutstandingRows();
     if (!outstandingRows.length) return;
-    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows, alreadyPaid: alreadyPaidAgainstDebt});
+    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows});
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(), 600); }
   };
@@ -4838,7 +4847,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     if (!c || !currentInv) return;
     const outstandingRows = computeOutstandingRows();
     if (!outstandingRows.length) return;
-    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows, alreadyPaid: alreadyPaidAgainstDebt});
+    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows});
     const blob = new Blob(['\ufeff', html], {type:'application/msword'});
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
