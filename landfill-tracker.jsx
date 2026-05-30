@@ -4799,6 +4799,11 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const debtTTC     = c?.vatSubject ? Math.round(debtHT * 1.19 * 100) / 100 : debtHT;
   const debtNum     = `${invNum}-SOLDE`;
   const hasDebtBill = currentInv && currentInv.status !== "paid" && debtEntries.length > 0;
+  // Amount already paid specifically against the unpaid discharges:
+  // currentInv.paidAmount may include payment for old paid discharges in the same month,
+  // so subtract those to get only what was paid toward the current outstanding balance.
+  const paidDischargesHT = entries.filter(d => d.status === "paid").reduce((s,d) => s + (d.total||0), 0);
+  const alreadyPaidAgainstDebt = Math.max(0, (currentInv?.paidAmount||0) - paidDischargesHT);
 
   const computeOutstandingRows = () => {
     const groups = {};
@@ -4826,7 +4831,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     if (!c || !currentInv) return;
     const outstandingRows = computeOutstandingRows();
     if (!outstandingRows.length) return;
-    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows, alreadyPaid: currentInv?.paidAmount||0});
+    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows, alreadyPaid: alreadyPaidAgainstDebt});
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(), 600); }
   };
@@ -4834,7 +4839,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     if (!c || !currentInv) return;
     const outstandingRows = computeOutstandingRows();
     if (!outstandingRows.length) return;
-    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows, alreadyPaid: currentInv?.paidAmount||0});
+    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows, alreadyPaid: alreadyPaidAgainstDebt});
     const blob = new Blob(['\ufeff', html], {type:'application/msword'});
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
