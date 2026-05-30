@@ -4367,6 +4367,173 @@ function generatePartialBillHTML(c, company, invNum, wtLabel, qty, isRotation, u
 </div></body></html>`;
 }
 
+function generatePartialPaymentBillHTML(c, company, billNum, selectedDischarges, wasteTypes, remainingTTC) {
+  const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
+  const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
+  const TVA = c.vatSubject ? 19 : 0;
+  const groups = {};
+  selectedDischarges.forEach(d => {
+    const opT  = d.opType === 'collect' ? 'collect' : 'treatment';
+    const isRot = d.payMethod === 'rotation';
+    const key = `${opT}__${d.wasteType}__${isRot?'rotation':'tonnage'}__${d.unitPrice}`;
+    if (!groups[key]) groups[key] = {opType:opT, wasteType:d.wasteType, isRotation:isRot, count:0, net:0, total:0, unitPrice:d.unitPrice};
+    groups[key].count += 1;
+    groups[key].net   += d.net || 0;
+    groups[key].total += d.total || 0;
+  });
+  const rows = Object.values(groups).map((g,i) => ({
+    num: i+1,
+    label: `${g.opType==='collect'?'Collecte et Traitement — ':'Traitement — '}${wasteTypes.find(w=>w.id===g.wasteType)?.label||g.wasteType}`,
+    isRotation: g.isRotation,
+    qty: g.isRotation ? g.count : g.net,
+    unitPrice: g.unitPrice,
+    ht: g.total,
+  }));
+  const totalHT  = rows.reduce((s,r) => s+r.ht, 0);
+  const totalTVA = totalHT * TVA / 100;
+  const totalTTC = totalHT + totalTVA;
+  const date = new Date().toLocaleDateString('fr-DZ');
+  const rowsHTML = rows.map(r => `
+    <tr>
+      <td style="text-align:center;">${r.num}</td>
+      <td><strong>${r.label}</strong></td>
+      <td style="text-align:right;">${r.isRotation ? r.qty+' rot.' : fQ(r.qty)+' t'}</td>
+      <td style="text-align:right;">${fB(r.unitPrice)}&nbsp;/&nbsp;${r.isRotation?'rot.':'t'}</td>
+      <td style="text-align:center;">${TVA}%</td>
+      <td style="text-align:right;">${fB(r.ht)}</td>
+    </tr>`).join('');
+  return `<!DOCTYPE html>
+<html xmlns:o='urn:schemas-microsoft-com:office:office'
+      xmlns:w='urn:schemas-microsoft-com:office:word'
+      xmlns='http://www.w3.org/TR/REC-html40' lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Facture Partielle ${billNum}</title>
+<!--[if gte mso 9]><xml>
+<w:WordDocument>
+  <w:View>Print</w:View>
+  <w:Zoom>100</w:Zoom>
+  <w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml><![endif]-->
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#000}
+  table{border-collapse:collapse;width:100%}
+  th,td{border:1px solid #000;padding:6px 10px}
+  th{background:#f0f0f0;font-weight:bold;text-align:center;font-size:13px}
+  .nb td,.nb th{border:none;padding:3px 5px}
+  .sep{border-top:2.5px solid #000;margin:6px 0}
+  .r{text-align:right}.c{text-align:center}.b{font-weight:bold}
+  @page WordSection1{size:21.0cm 29.7cm;margin:1.5cm 1.8cm;mso-page-orientation:portrait}
+  @page{size:21.0cm 29.7cm;margin:1.5cm 1.8cm}
+  div.WordSection1{page:WordSection1}
+  @media print{body{padding:0} .WordSection1{padding-bottom:32px}}
+</style>
+</head>
+<body>
+<div class="WordSection1">
+<div style="text-align:center;font-size:15px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-bottom:8px;color:#000">
+  الجمهورية الجزائرية الديموقراطية الشعبية
+</div>
+<table class="nb" style="width:100%;margin-bottom:6px">
+  <tr>
+    <td style="border:none;vertical-align:top;width:70%">
+      <div style="font-size:12px;line-height:2;color:#000">
+        <div style="font-size:13.5px;font-weight:bold;margin-bottom:4px">Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL</div>
+        <div>Cité Administrative, 01ème Étage, Ayouf Ouest — Jijel</div>
+        <div>IF&nbsp;: 000918044299126 &nbsp;·&nbsp; RC&nbsp;: 18/000442991H09</div>
+        <div>Tél&nbsp;: 034 47 37 62 &nbsp;·&nbsp; Fax&nbsp;: 034 47 37 62</div>
+        <div>BNQ&nbsp;: BADR Jijel — 00300676300261300093</div>
+      </div>
+    </td>
+    <td style="border:none;text-align:right;vertical-align:middle;width:30%">
+      <img src="/logo.png" alt="EPWGCET" style="width:90px;height:90px;object-fit:contain"/>
+    </td>
+  </tr>
+</table>
+<div class="sep"></div>
+<div style="display:flex;justify-content:space-between;padding:6px 2px;font-weight:bold;font-size:13.5px">
+  <span>FACTURE PARTIELLE / ACOMPTE : ${billNum}</span>
+  <span>JIJEL, LE : ${date}</span>
+</div>
+<div style="margin:4px 2px 0;font-size:11px;color:#7c3aed;font-weight:bold;letter-spacing:.03em">⚠ Ce document constitue un acompte partiel et non un règlement définitif.</div>
+<div class="sep"></div>
+<div style="margin:10px 2px 14px;font-size:12.5px;line-height:1.9">
+  <div style="font-weight:bold;font-size:13px;margin-bottom:3px">FACTURÉ À :</div>
+  <div>${c.id} — ${c.name}</div>
+  ${c.nif    ? `<div>M.F.&nbsp;: ${c.nif}</div>` : ''}
+  ${c.rc     ? `<div>R.C.&nbsp;: ${c.rc}</div>`  : ''}
+  ${c.address? `<div>${c.address}</div>`           : ''}
+  <div style="margin-top:4px;font-size:11.5px;color:#555">Régime TVA&nbsp;: ${TVA>0?`Assujetti — ${TVA}%`:'Non assujetti (exonéré)'}</div>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:36px">N°</th>
+      <th style="text-align:left;padding-left:10px">DÉSIGNATION</th>
+      <th style="width:100px">QUANTITÉ</th>
+      <th style="width:110px">PRIX U. (DA)</th>
+      <th style="width:64px">% TVA</th>
+      <th style="width:110px">MONTANT HT</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rowsHTML}
+    <tr style="background:#f5f5f5">
+      <td colspan="2" class="b" style="font-size:13px">TOTAL GÉNÉRAL (${rows.length} ligne${rows.length>1?'s':''})</td>
+      <td class="c" style="color:#999;font-size:11px">—</td>
+      <td></td><td></td>
+      <td class="r b">${fB(totalHT)}</td>
+    </tr>
+  </tbody>
+</table>
+<div style="margin-top:10px;border:1px solid #000;padding:7px 12px;font-size:12px">
+  <strong>Arrêtée la présente facture partielle à la somme de :</strong><br>
+  <span style="font-weight:bold;text-transform:uppercase;letter-spacing:.02em">${amountToWords(totalTTC)}</span>
+</div>
+<div style="display:flex;gap:16px;margin-top:12px;align-items:flex-start">
+  <table style="width:46%">
+    <thead><tr><th>TVA %</th><th>BASE HT</th><th>MONTANT TVA</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="c">${TVA>0?TVA+',00 %':'Exonéré'}</td>
+        <td class="r">${fB(totalHT)}</td>
+        <td class="r">${fB(totalTVA)}</td>
+      </tr>
+      <tr class="b">
+        <td class="c b">TOTAL</td>
+        <td class="r b">${fB(totalHT)}</td>
+        <td class="r b">${fB(totalTVA)}</td>
+      </tr>
+    </tbody>
+  </table>
+  <table style="width:52%;margin-left:auto">
+    <tbody>
+      <tr><td style="width:58%">Montant H.T.</td><td class="r">${fB(totalHT)}</td></tr>
+      <tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(totalTVA)}</td></tr>
+      <tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>
+      <tr style="background:#ede9fe">
+        <td class="b" style="font-size:14px">NET À PAYER</td>
+        <td class="r b" style="font-size:15px;color:#7c3aed">${fB(totalTTC)}</td>
+      </tr>
+      ${remainingTTC > 0 ? `<tr style="background:#fff7ed"><td style="font-size:11px;color:#b45309">Solde restant dû</td><td class="r" style="font-size:11px;color:#b45309">${fB(remainingTTC)}</td></tr>` : ''}
+    </tbody>
+  </table>
+</div>
+<div style="margin-top:48px;display:flex;justify-content:flex-start;padding-left:8%">
+  <div style="text-align:center;min-width:200px">
+    <div style="font-weight:bold;font-size:13px;margin-bottom:60px;text-transform:uppercase">Le Directeur</div>
+    <div style="border-top:1px solid #000;padding-top:5px;font-size:11px;color:#555">Signature &amp; Cachet</div>
+  </div>
+</div>
+<div style="position:fixed;bottom:0;left:0;right:0;border-top:1.5px solid #000;padding:5px 1.8cm;font-size:9.5px;color:#333;text-align:center;background:#fff;font-family:Arial,Helvetica,sans-serif">
+  Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL &nbsp;—&nbsp; Cité Administrative 3ème étage, Jijel 18000 &nbsp;—&nbsp; Tél&nbsp;: 030 49 05 94 &nbsp;—&nbsp; contact@epwgcet-jijel.dz
+</div>
+</div></body></html>`;
+}
+
 function generateEmptyBillHTML(c, company) {
   const TVA = c.vatSubject ? 19 : 0;
   const date = new Date().toLocaleDateString('fr-DZ');
@@ -4684,6 +4851,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [selectedDischarges, setSelectedDischarges] = useState([]);
   const [partialAmt,  setPartialAmt]  = useState("");
   const [payConfirm,  setPayConfirm]  = useState(false);
+  const [partialBillPrinted, setPartialBillPrinted] = useState(false);
   const [notifModal,  setNotifModal]  = useState(null);
   const [notifCopied, setNotifCopied] = useState(false);
 
@@ -4750,23 +4918,41 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     setPartialCalcPrinted(false);
   };
 
-  const openPayModal = (inv) => {
-  const resteDu = inv.totalAmount - (inv.paidAmount||0);
-  const unpaidDischarges = discharges.filter(d =>
-    d.clientId === inv.clientId &&
-    d.ts.startsWith(inv.month) &&
-    d.status !== "cancelled" &&
-    d.status !== "paid"
-  );
-  const best = findBestDischarges(resteDu, unpaidDischarges);
-  setSelectedDischarges(best);
-  setPayInvModal(inv);
-  setPartialAmt(String(resteDu));
-  setPayConfirm(false);
-};
+  const doGeneratePartialBillFromDischarges = () => {
+    if (!payInvModal || selectedDischarges.length === 0) return;
+    const cl = clients.find(x => x.id === payInvModal.clientId);
+    if (!cl) return;
+    const TVArate = cl.vatSubject ? 0.19 : 0;
+    const selectedHT  = selectedDischarges.reduce((s,d) => s+(d.total||0), 0);
+    const selectedTTC = Math.round(selectedHT * (1 + TVArate) * 100) / 100;
+    const alreadyPaid = payInvModal.paidAmount || 0;
+    const remainingTTC = Math.max(0, payInvModal.totalAmount - alreadyPaid - selectedTTC);
+    const billNum = `FAC-PARTIAL-${Date.now()}-${cl.id}`;
+    const html = generatePartialPaymentBillHTML(cl, company, billNum, selectedDischarges, wasteTypes, remainingTTC);
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+    const blob = new Blob(['\ufeff', html], {type:'application/msword'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `${billNum}.doc`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    setPartialBillPrinted(true);
+  };
 
- const doMarkPaid = async (inv, partial=false) => {
-    const amt = partial ? (parseFloat(partialAmt)||0) : (inv.totalAmount - (inv.paidAmount||0));
+  const openPayModal = (inv) => {
+    setPayInvModal(inv);
+    setSelectedDischarges([]);
+    setPayConfirm(false);
+    setPartialBillPrinted(false);
+  };
+
+ const doMarkPaid = async (inv) => {
+    const cl = clients.find(x => x.id === inv.clientId);
+    const TVArate = cl?.vatSubject ? 0.19 : 0;
+    const selectedHT  = selectedDischarges.reduce((s,d) => s+(d.total||0), 0);
+    const amt = Math.round(selectedHT * (1 + TVArate) * 100) / 100;
+    if (amt <= 0) return;
     const newPaid = (inv.paidAmount||0) + amt;
     const isFull  = newPaid >= inv.totalAmount;
     await updateInvoice({...inv,
@@ -4774,23 +4960,14 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       status: isFull ? "paid" : "partial",
       paidAt: isFull ? new Date().toISOString().slice(0,10) : null,
     });
-    // Mark selected discharges as paid
-    const toMark = partial
-      ? selectedDischarges
-      : discharges.filter(d =>
-          d.clientId === inv.clientId &&
-          d.ts.startsWith(inv.month) &&
-          d.status !== "cancelled" &&
-          d.status !== "paid"
-        );
-    for (const d of toMark) {
+    for (const d of selectedDischarges) {
       await updateDischarge({...d, status: "paid"});
     }
     setPayInvModal(null);
     setPayConfirm(false);
-    // Auto-download the PDF receipt when payment is complete
-    if (isFull && c && entries.length > 0) {
-      const html = generateOfficialBillHTML(c, entries, company, month, inv.id, wasteTypes);
+    setPartialBillPrinted(false);
+    if (isFull && cl && entries.length > 0) {
+      const html = generateOfficialBillHTML(cl, entries, company, month, inv.id, wasteTypes);
       const win = window.open('', '_blank');
       if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(), 600); }
     }
@@ -5832,73 +6009,128 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
         );
       })()}
 
-      {payInvModal&&(
+      {payInvModal&&(()=>{
+        const payInvCl = clients.find(x=>x.id===payInvModal.clientId);
+        const TVArate  = payInvCl?.vatSubject ? 0.19 : 0;
+        const unpaidForInv = discharges.filter(d=>
+          d.clientId===payInvModal.clientId &&
+          d.ts.startsWith(payInvModal.month) &&
+          d.status!=="cancelled" && d.status!=="paid"
+        ).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+        const selHT  = selectedDischarges.reduce((s,d)=>s+(d.total||0),0);
+        const selTTC = Math.round(selHT*(1+TVArate)*100)/100;
+        const resteDu = payInvModal.totalAmount-(payInvModal.paidAmount||0);
+        const isFull  = selTTC>=resteDu-0.01;
+        const toggleDischarge = (d) => {
+          setPartialBillPrinted(false);
+          setPayConfirm(false);
+          setSelectedDischarges(prev=>
+            prev.find(x=>x.id===d.id) ? prev.filter(x=>x.id!==d.id) : [...prev,d]
+          );
+        };
+        return(
         <div className="ov">
-          <div className="modal">
+          <div className="modal" style={{maxWidth:560}}>
             <div className="mh">
-              <span className="mh-title">💳 Enregistrer un paiement</span>
+              <span className="mh-title">💳 Paiement partiel — sélection des dépôts</span>
               <button className="btn bg bsm" onClick={()=>setPayInvModal(null)}>✕</button>
             </div>
             <div className="mb2">
+              {/* Invoice summary */}
               <div className="cost-box mb4">
-                <div className="cl"><span className="clb">Client</span><span className="clv mn">{clients.find(c=>c.id===payInvModal.clientId)?.name||payInvModal.clientId}</span></div>
+                <div className="cl"><span className="clb">Client</span><span className="clv mn">{payInvCl?.name||payInvModal.clientId}</span></div>
                 <div className="cl"><span className="clb">Référence</span><span className="clv mn">{payInvModal.id}</span></div>
                 <div className="cl"><span className="clb">Montant total</span><span className="clv mn fw7">{fmt(payInvModal.totalAmount)}</span></div>
-                <div className="cl"><span className="clb">Déjà payé</span><span className="clv mn" style={{color:"var(--g)"}}>{fmt(payInvModal.paidAmount||0)}</span></div>
-                <div className="cl ct"><span style={{fontWeight:700}}>RESTE DÛ</span><span className="ctv">{fmt(payInvModal.totalAmount-(payInvModal.paidAmount||0))}</span></div>
+                {(payInvModal.paidAmount||0)>0&&<div className="cl"><span className="clb">Déjà payé</span><span className="clv mn" style={{color:"var(--g)"}}>{fmt(payInvModal.paidAmount)}</span></div>}
+                <div className="cl ct"><span style={{fontWeight:700}}>RESTE DÛ</span><span className="ctv">{fmt(resteDu)}</span></div>
               </div>
-              <div className="field mb3" style={{marginBottom:16}}>
-                <label>Montant du versement (DA)</label>
-                <input className="fi" type="number" value={partialAmt} onChange={e=>{
-  setPartialAmt(e.target.value);
-  const amt = parseFloat(e.target.value)||0;
-  const unpaidDischarges = discharges.filter(d =>
-    d.clientId === payInvModal.clientId &&
-    d.ts.startsWith(payInvModal.month) &&
-    d.status !== "cancelled" &&
-    d.status !== "paid"
-  );
-  setSelectedDischarges(findBestDischarges(amt, unpaidDischarges));
-}}
-  max={payInvModal.totalAmount-(payInvModal.paidAmount||0)} placeholder="Montant versé..."/>
-                <div className="tsm tmu mt1" style={{fontSize:10}}>
-                  {parseFloat(partialAmt)>=(payInvModal.totalAmount-(payInvModal.paidAmount||0))
-                    ?"✅ Paiement intégral — facture soldée"
-                    :`⏳ Paiement partiel — reste: ${fmt(payInvModal.totalAmount-(payInvModal.paidAmount||0)-parseFloat(partialAmt||0))}`}
+
+              {/* Discharge checklist */}
+              <div style={{marginBottom:14}}>
+                <div style={{fontWeight:700,fontSize:12,marginBottom:8,color:"var(--muted)"}}>
+                  Cochez les dépôts que le client règle :
                 </div>
+                {unpaidForInv.length===0
+                  ? <div style={{fontSize:12,color:"var(--muted)",padding:"8px 0"}}>Aucun dépôt non réglé pour ce mois.</div>
+                  : <div style={{border:"1px solid var(--border)",borderRadius:8,overflow:"hidden"}}>
+                    {unpaidForInv.map((d,i)=>{
+                      const checked = !!selectedDischarges.find(x=>x.id===d.id);
+                      return(
+                        <label key={d.id} onClick={()=>toggleDischarge(d)} style={{
+                          display:"flex",alignItems:"center",gap:10,padding:"8px 12px",
+                          cursor:"pointer",background:checked?"rgba(99,102,241,.07)":"transparent",
+                          borderBottom:i<unpaidForInv.length-1?"1px solid var(--border)":"none",
+                          userSelect:"none"
+                        }}>
+                          <input type="checkbox" readOnly checked={checked} style={{flexShrink:0}}/>
+                          <span style={{flex:1,fontSize:12}}>
+                            <span style={{color:"var(--muted)"}}>{d.ts.slice(0,10)}</span>
+                            {" — "}
+                            <span style={{fontWeight:600}}>{d.truck}</span>
+                            {" · "}
+                            <span style={{fontSize:11,color:"var(--muted)"}}>{d.wasteType} · {d.net}t</span>
+                          </span>
+                          <span style={{fontFamily:"var(--mono)",fontWeight:700,fontSize:12,color:checked?"var(--purple)":"var(--muted)",flexShrink:0}}>{fmt(d.total)}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                }
               </div>
-              {selectedDischarges.length > 0 && (
-  <div style={{marginBottom:14,background:"rgba(41,196,84,.06)",border:"1px solid rgba(41,196,84,.2)",borderRadius:8,padding:"12px 14px"}}>
-    <div style={{fontWeight:700,fontSize:12,color:"var(--g)",marginBottom:8}}>
-      📋 Déchargements couverts par ce paiement ({selectedDischarges.length})
-    </div>
-    {selectedDischarges.map(d=>(
-      <div key={d.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"3px 0",borderBottom:"1px solid rgba(41,196,84,.1)"}}>
-        <span style={{color:"var(--muted)"}}>{d.ts.slice(0,10)} — {d.truck}</span>
-        <span style={{fontFamily:"var(--mono)",fontWeight:700,color:"var(--g)"}}>{fmt(d.total)}</span>
-      </div>
-    ))}
-    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:700,marginTop:8,paddingTop:6,borderTop:"1px solid rgba(41,196,84,.2)"}}>
-      <span>Total couvert</span>
-      <span style={{fontFamily:"var(--mono)",color:"var(--g)"}}>{fmt(selectedDischarges.reduce((s,d)=>s+(d.total||0),0))}</span>
-    </div>
-  </div>
-)}
-<label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",
-  background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.2)",borderRadius:8,padding:"12px 14px"}}>
-  <input type="checkbox" checked={payConfirm} onChange={e=>setPayConfirm(e.target.checked)}/>
-  <span style={{fontWeight:600}}>✅ Confirmer la réception du paiement</span>
-</label>
+
+              {/* Running total */}
+              {selectedDischarges.length>0&&(
+                <div style={{background:"rgba(99,102,241,.07)",border:"1px solid rgba(99,102,241,.2)",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                    <span style={{color:"var(--muted)"}}>Montant HT sélectionné</span>
+                    <span style={{fontFamily:"var(--mono)",fontWeight:700}}>{fmt(selHT)}</span>
+                  </div>
+                  {TVArate>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                    <span style={{color:"var(--muted)"}}>TVA (19%)</span>
+                    <span style={{fontFamily:"var(--mono)"}}>{fmt(Math.round((selTTC-selHT)*100)/100)}</span>
+                  </div>}
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,fontWeight:700,borderTop:"1px solid rgba(99,102,241,.2)",paddingTop:6,marginTop:4}}>
+                    <span>Montant TTC à payer</span>
+                    <span style={{fontFamily:"var(--mono)",color:"var(--purple)"}}>{fmt(selTTC)}</span>
+                  </div>
+                  <div style={{fontSize:11,marginTop:6,color:isFull?"var(--g)":"var(--warn)",fontWeight:600}}>
+                    {isFull?"✅ Paiement intégral — facture soldée":
+                      `⏳ Paiement partiel — reste après: ${fmt(Math.max(0,resteDu-selTTC))}`}
+                  </div>
+                </div>
+              )}
+
+              {/* Step 1: generate bill */}
+              <button
+                className="btn bsm"
+                style={{width:"100%",marginBottom:10,background:"#6366f1",color:"#fff",borderColor:"#6366f1",opacity:selectedDischarges.length===0?.5:1}}
+                disabled={selectedDischarges.length===0}
+                onClick={doGeneratePartialBillFromDischarges}
+              >
+                {partialBillPrinted?"✅ Facture générée (re-générer)":"🖨 Générer la facture partielle (PDF + Word)"}
+              </button>
+
+              {/* Step 2: confirm */}
+              {partialBillPrinted&&(
+                <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",
+                  background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.2)",borderRadius:8,padding:"12px 14px"}}>
+                  <input type="checkbox" checked={payConfirm} onChange={e=>setPayConfirm(e.target.checked)}/>
+                  <span style={{fontWeight:600}}>✅ Confirmer la réception du paiement</span>
+                </label>
+              )}
             </div>
             <div className="mf">
               <button className="btn bg" onClick={()=>setPayInvModal(null)}>Annuler</button>
-              <button className="btn bp" disabled={!payConfirm||!(parseFloat(partialAmt)>0)} onClick={()=>doMarkPaid(payInvModal,true)}>
+              <button className="btn bp"
+                disabled={!payConfirm||!partialBillPrinted||selectedDischarges.length===0}
+                onClick={()=>doMarkPaid(payInvModal)}>
                 🟢 Valider le paiement
               </button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </>
   );
 }
