@@ -4826,7 +4826,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     if (!c || !currentInv) return;
     const outstandingRows = computeOutstandingRows();
     if (!outstandingRows.length) return;
-    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows});
+    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows, alreadyPaid: currentInv?.paidAmount||0});
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(), 600); }
   };
@@ -4834,7 +4834,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     if (!c || !currentInv) return;
     const outstandingRows = computeOutstandingRows();
     if (!outstandingRows.length) return;
-    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows});
+    const html = generateOfficialBillHTML(c, [], company, month, debtNum, wasteTypes, {isDebt:true, precomputedRows:outstandingRows, alreadyPaid: currentInv?.paidAmount||0});
     const blob = new Blob(['\ufeff', html], {type:'application/msword'});
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
