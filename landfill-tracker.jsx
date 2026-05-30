@@ -4824,21 +4824,35 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       groups[key].qty   += isRot ? 1 : (d.net||0);
       groups[key].total += d.total||0;
     });
-    const items = Object.values(groups);
-    const paid  = alreadyPaidAgainstDebt;
-    const rows  = items.map(g => ({
-      opType: g.opType,
-      label: `${g.opType === 'collect' ? 'Collecte et Traitement — ' : 'Traitement — '}${g.wtLabel}`,
-      isRotation: g.isRotation,
-      qty: g.isRotation ? g.count : g.qty,
-      unitPrice: g.unitPrice,
-      ht: g.total,
-    }));
-    // Append a credit row so TOTAL GÉNÉRAL = net remaining; qty×price stays correct per line
-    if (paid > 0) {
-      rows.push({ isCredit: true, label: 'Acompte versé — Règlement partiel reçu', ht: -paid });
-    }
-    return rows;
+    const items      = Object.values(groups);
+    const totalHTAll = items.reduce((s, g) => s + g.total, 0);
+    const paid       = alreadyPaidAgainstDebt;
+    return items.map(g => {
+      // Distribute partial payment proportionally by each operation's share of total HT
+      const fraction    = totalHTAll > 0 ? g.total / totalHTAll : 0;
+      const deductHT    = paid > 0 ? fraction * paid : 0;
+      const remainHTRaw = Math.max(0, g.total - deductHT);
+      // Derive tonnage from remaining HT so qty × unitPrice = MONTANT HT exactly
+      let remainQty, remainHT;
+      if (g.isRotation) {
+        const rotFrac = g.total > 0 ? remainHTRaw / g.total : 1;
+        remainQty = Math.round(g.count * rotFrac);
+        remainHT  = Math.round(remainQty * (g.unitPrice||0) * 1000) / 1000;
+      } else {
+        remainQty = g.unitPrice > 0
+          ? Math.round(remainHTRaw / g.unitPrice * 1000) / 1000
+          : Math.round(g.qty * fraction * 1000) / 1000;
+        remainHT = Math.round(remainQty * g.unitPrice * 1000) / 1000;
+      }
+      return {
+        opType: g.opType,
+        label: `${g.opType === 'collect' ? 'Collecte et Traitement — ' : 'Traitement — '}${g.wtLabel}`,
+        isRotation: g.isRotation,
+        qty: remainQty,
+        unitPrice: g.unitPrice,
+        ht: remainHT,
+      };
+    });
   };
 
   const downloadDebtPDF = () => {
