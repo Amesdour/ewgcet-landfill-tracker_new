@@ -4798,57 +4798,28 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const debtHT      = debtEntries.reduce((s,d) => s + (d.total||0), 0);
   const debtTTC     = c?.vatSubject ? Math.round(debtHT * 1.19 * 100) / 100 : debtHT;
   const debtNum     = `${invNum}-SOLDE`;
-  const hasDebtBill = currentInv && (currentInv.paidAmount||0) > 0 && currentInv.status !== "paid" && debtEntries.length > 0;
+  const hasDebtBill = currentInv && currentInv.status !== "paid" && debtEntries.length > 0;
 
   const computeOutstandingRows = () => {
-    const paidAmt = currentInv?.paidAmount || 0;
-    const invTTC  = currentInv?.totalAmount || 0;
-    const allLineItemsMap = entries.reduce((acc, d) => {
-      if (d.status === 'cancelled') return acc;
-      const opT   = d.opType === 'collect' ? 'collect' : 'treatment';
+    const groups = {};
+    debtEntries.forEach(d => {
+      const opT  = d.opType === 'collect' ? 'collect' : 'treatment';
       const isRot = d.payMethod === 'rotation';
-      const key   = `${opT}|${d.wasteType}|${isRot?'rotation':'tonnage'}|${d.unitPrice}`;
-      const wt    = wasteTypes.find(w => w.id === d.wasteType);
-      if (!acc[key]) acc[key] = { opType:opT, wasteType:d.wasteType, wtLabel:wt?.label||d.wasteType, isRotation:isRot, unitPrice:d.unitPrice||0, qty:0, count:0, total:0, minTs:d.ts };
-      acc[key].count += 1;
-      acc[key].qty   += isRot ? 1 : (d.net||0);
-      acc[key].total += d.total||0;
-      if (d.ts && d.ts < acc[key].minTs) acc[key].minTs = d.ts;
-      return acc;
-    }, {});
-    const allLineItems = Object.values(allLineItemsMap);
-    const totalHT  = allLineItems.reduce((s, li) => s + li.total, 0);
-    const itemTTCs = allLineItems.map(item =>
-      totalHT > 0
-        ? Math.round((item.total / totalHT) * invTTC * 100) / 100
-        : (c.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total)
-    );
-    const sortedIdx = allLineItems.map((_, i) => i).sort((a, b) => {
-      const tsA = allLineItems[a].minTs || '';
-      const tsB = allLineItems[b].minTs || '';
-      return tsA < tsB ? -1 : tsA > tsB ? 1 : 0;
+      const key  = `${opT}|${d.wasteType}|${isRot ? 'rotation' : 'tonnage'}|${d.unitPrice}`;
+      const wt   = wasteTypes.find(w => w.id === d.wasteType);
+      if (!groups[key]) groups[key] = { opType:opT, wtLabel:wt?.label||d.wasteType, isRotation:isRot, unitPrice:d.unitPrice||0, qty:0, count:0, total:0 };
+      groups[key].count += 1;
+      groups[key].qty   += isRot ? 1 : (d.net||0);
+      groups[key].total += d.total||0;
     });
-    let coverLeft = paidAmt;
-    const outstandingRows = [];
-    for (const idx of sortedIdx) {
-      const item = allLineItems[idx];
-      const itc  = itemTTCs[idx];
-      if (coverLeft >= itc) {
-        coverLeft -= itc;
-      } else if (coverLeft > 0) {
-        const remainingTTC = itc - coverLeft;
-        const remainingHT  = c.vatSubject ? Math.round(remainingTTC / 1.19 * 100) / 100 : remainingTTC;
-        const fraction     = item.total > 0 ? remainingHT / item.total : 0;
-        const remainingQty = item.isRotation
-          ? Math.round(item.count * fraction)
-          : Math.round(item.qty * fraction * 1000) / 1000;
-        outstandingRows.push({ opType:item.opType, label:`${item.opType==='collect'?'Collecte et Traitement — ':'Traitement — '}${item.wtLabel}`, isRotation:item.isRotation, qty:remainingQty, unitPrice:item.unitPrice, ht:remainingHT });
-        coverLeft = 0;
-      } else {
-        outstandingRows.push({ opType:item.opType, label:`${item.opType==='collect'?'Collecte et Traitement — ':'Traitement — '}${item.wtLabel}`, isRotation:item.isRotation, qty:item.isRotation?item.count:item.qty, unitPrice:item.unitPrice, ht:item.total });
-      }
-    }
-    return outstandingRows;
+    return Object.values(groups).map(g => ({
+      opType: g.opType,
+      label: `${g.opType === 'collect' ? 'Collecte et Traitement — ' : 'Traitement — '}${g.wtLabel}`,
+      isRotation: g.isRotation,
+      qty: g.isRotation ? g.count : g.qty,
+      unitPrice: g.unitPrice,
+      ht: g.total,
+    }));
   };
 
   const downloadDebtPDF = () => {
