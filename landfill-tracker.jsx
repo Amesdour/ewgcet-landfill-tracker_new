@@ -4852,6 +4852,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [partialAmt,  setPartialAmt]  = useState("");
   const [payConfirm,  setPayConfirm]  = useState(false);
   const [partialBillPrinted, setPartialBillPrinted] = useState(false);
+  const [payInvMode,         setPayInvMode]          = useState("bill"); // "bill" | "confirm"
   const [notifModal,  setNotifModal]  = useState(null);
   const [notifCopied, setNotifCopied] = useState(false);
 
@@ -4937,11 +4938,16 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     a.href = url; a.download = `${billNum}.doc`;
     document.body.appendChild(a); a.click();
     document.body.removeChild(a); URL.revokeObjectURL(url);
-    setPartialBillPrinted(true);
+    if (payInvMode === "bill") {
+      setPayInvModal(null);
+    } else {
+      setPartialBillPrinted(true);
+    }
   };
 
-  const openPayModal = (inv) => {
+  const openPayModal = (inv, mode = "bill") => {
     setPayInvModal(inv);
+    setPayInvMode(mode);
     setSelectedDischarges([]);
     setPayConfirm(false);
     setPartialBillPrinted(false);
@@ -5757,7 +5763,14 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
             {/* Actions for unpaid / partial invoices */}
             {currentInv&&currentInv.status!=="paid"&&(
               <>
-                <button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(currentInv)}>💳 Enregistrer Paiement</button>
+                <button className="btn bsm" style={{background:"#6366f1",color:"#fff",borderColor:"#6366f1"}}
+                  onClick={()=>openPayModal(currentInv,"bill")} disabled={!currentInv}>
+                  📄 Facture Partielle
+                </button>
+                <button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}}
+                  onClick={()=>openPayModal(currentInv,"confirm")} disabled={!currentInv}>
+                  💳 Confirmer Paiement
+                </button>
                 {(currentInv.status==="pending"||currentInv.status==="partial")&&(
                   <button className="btn be bsm" onClick={()=>markOverdue(currentInv)}>🔴 Marquer Impayée</button>
                 )}
@@ -5768,24 +5781,6 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                     title="Télécharger en format Word (.doc)">📄 Word</button>
                 </div>
               </>
-            )}
-            {/* Debt bill — shown only when part of the invoice is already paid but a balance remains */}
-            {hasDebtBill&&(
-              <div style={{width:"100%",marginTop:4,padding:"10px 14px",background:"rgba(239,68,68,.05)",border:"1px solid rgba(239,68,68,.25)",borderRadius:8,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-                <div style={{flex:1}}>
-                  <div style={{fontWeight:700,fontSize:12,color:"var(--err)"}}>📄 Avis de Débit — Solde Restant Dû</div>
-                  <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>
-                    Télécharger uniquement les {debtEntries.length} prestation(s) non encore réglée(s) — Réf : {debtNum}
-                  </div>
-                </div>
-                <button className="btn bsm" style={{background:"var(--err)",color:"#fff",borderColor:"var(--err)"}}
-                  onClick={downloadDebtPDF} disabled={debtEntries.length===0}>
-                  📥 PDF Avis de Débit
-                </button>
-                <button className="btn bg bsm" onClick={downloadDebtWord} disabled={debtEntries.length===0}>
-                  📄 Word
-                </button>
-              </div>
             )}
             <div style={{fontSize:11,color:"var(--muted)",width:"100%",marginTop:4}}>Réf: {invNum}</div>
           </div>
@@ -6028,11 +6023,14 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
             prev.find(x=>x.id===d.id) ? prev.filter(x=>x.id!==d.id) : [...prev,d]
           );
         };
+        const isBillMode = payInvMode === "bill";
         return(
         <div className="ov">
           <div className="modal" style={{maxWidth:560}}>
             <div className="mh">
-              <span className="mh-title">💳 Paiement partiel — sélection des dépôts</span>
+              <span className="mh-title">
+                {isBillMode ? "📄 Générer Facture Partielle" : "💳 Confirmer Paiement"}
+              </span>
               <button className="btn bg bsm" onClick={()=>setPayInvModal(null)}>✕</button>
             </div>
             <div className="mb2">
@@ -6045,10 +6043,17 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 <div className="cl ct"><span style={{fontWeight:700}}>RESTE DÛ</span><span className="ctv">{fmt(resteDu)}</span></div>
               </div>
 
+              {/* Mode hint */}
+              <div style={{fontSize:11,color:"var(--muted)",marginBottom:10,padding:"6px 10px",background:"var(--bg2)",borderRadius:6,border:"1px solid var(--border)"}}>
+                {isBillMode
+                  ? "Sélectionnez les dépôts à facturer et générez la facture partielle à remettre au client."
+                  : "Sélectionnez les dépôts que le client a réglés, puis confirmez la réception du paiement."}
+              </div>
+
               {/* Discharge checklist */}
               <div style={{marginBottom:14}}>
                 <div style={{fontWeight:700,fontSize:12,marginBottom:8,color:"var(--muted)"}}>
-                  Cochez les dépôts que le client règle :
+                  {isBillMode ? "Dépôts à inclure dans la facture :" : "Dépôts réglés par le client :"}
                 </div>
                 {unpaidForInv.length===0
                   ? <div style={{fontSize:12,color:"var(--muted)",padding:"8px 0"}}>Aucun dépôt non réglé pour ce mois.</div>
@@ -6058,7 +6063,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                       return(
                         <label key={d.id} onClick={()=>toggleDischarge(d)} style={{
                           display:"flex",alignItems:"center",gap:10,padding:"8px 12px",
-                          cursor:"pointer",background:checked?"rgba(99,102,241,.07)":"transparent",
+                          cursor:"pointer",
+                          background:checked?(isBillMode?"rgba(99,102,241,.07)":"rgba(46,201,92,.07)"):"transparent",
                           borderBottom:i<unpaidForInv.length-1?"1px solid var(--border)":"none",
                           userSelect:"none"
                         }}>
@@ -6070,7 +6076,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                             {" · "}
                             <span style={{fontSize:11,color:"var(--muted)"}}>{d.wasteType} · {d.net}t</span>
                           </span>
-                          <span style={{fontFamily:"var(--mono)",fontWeight:700,fontSize:12,color:checked?"var(--purple)":"var(--muted)",flexShrink:0}}>{fmt(d.total)}</span>
+                          <span style={{fontFamily:"var(--mono)",fontWeight:700,fontSize:12,
+                            color:checked?(isBillMode?"var(--purple)":"var(--g)"):"var(--muted)",flexShrink:0}}>
+                            {fmt(d.total)}
+                          </span>
                         </label>
                       );
                     })}
@@ -6080,7 +6089,11 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
               {/* Running total */}
               {selectedDischarges.length>0&&(
-                <div style={{background:"rgba(99,102,241,.07)",border:"1px solid rgba(99,102,241,.2)",borderRadius:8,padding:"10px 14px",marginBottom:14}}>
+                <div style={{
+                  background: isBillMode?"rgba(99,102,241,.07)":"rgba(46,201,92,.07)",
+                  border:`1px solid ${isBillMode?"rgba(99,102,241,.2)":"rgba(46,201,92,.2)"}`,
+                  borderRadius:8,padding:"10px 14px",marginBottom:14
+                }}>
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
                     <span style={{color:"var(--muted)"}}>Montant HT sélectionné</span>
                     <span style={{fontFamily:"var(--mono)",fontWeight:700}}>{fmt(selHT)}</span>
@@ -6089,43 +6102,50 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                     <span style={{color:"var(--muted)"}}>TVA (19%)</span>
                     <span style={{fontFamily:"var(--mono)"}}>{fmt(Math.round((selTTC-selHT)*100)/100)}</span>
                   </div>}
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,fontWeight:700,borderTop:"1px solid rgba(99,102,241,.2)",paddingTop:6,marginTop:4}}>
-                    <span>Montant TTC à payer</span>
-                    <span style={{fontFamily:"var(--mono)",color:"var(--purple)"}}>{fmt(selTTC)}</span>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,fontWeight:700,
+                    borderTop:`1px solid ${isBillMode?"rgba(99,102,241,.2)":"rgba(46,201,92,.2)"}`,paddingTop:6,marginTop:4}}>
+                    <span>Montant TTC</span>
+                    <span style={{fontFamily:"var(--mono)",color:isBillMode?"var(--purple)":"var(--g)"}}>{fmt(selTTC)}</span>
                   </div>
                   <div style={{fontSize:11,marginTop:6,color:isFull?"var(--g)":"var(--warn)",fontWeight:600}}>
-                    {isFull?"✅ Paiement intégral — facture soldée":
-                      `⏳ Paiement partiel — reste après: ${fmt(Math.max(0,resteDu-selTTC))}`}
+                    {isFull?"✅ Règlement intégral — facture soldée":
+                      `⏳ Paiement partiel — reste après : ${fmt(Math.max(0,resteDu-selTTC))}`}
                   </div>
                 </div>
               )}
 
-              {/* Step 1: generate bill */}
-              <button
-                className="btn bsm"
-                style={{width:"100%",marginBottom:10,background:"#6366f1",color:"#fff",borderColor:"#6366f1",opacity:selectedDischarges.length===0?.5:1}}
-                disabled={selectedDischarges.length===0}
-                onClick={doGeneratePartialBillFromDischarges}
-              >
-                {partialBillPrinted?"✅ Facture générée (re-générer)":"🖨 Générer la facture partielle (PDF + Word)"}
-              </button>
+              {/* Bill mode: generate button only */}
+              {isBillMode&&(
+                <button
+                  className="btn bsm"
+                  style={{width:"100%",background:"#6366f1",color:"#fff",borderColor:"#6366f1",
+                    opacity:selectedDischarges.length===0?.5:1,justifyContent:"center",display:"flex",alignItems:"center",gap:8}}
+                  disabled={selectedDischarges.length===0}
+                  onClick={doGeneratePartialBillFromDischarges}
+                >
+                  🖨 Générer la facture partielle (PDF + Word)
+                </button>
+              )}
 
-              {/* Step 2: confirm */}
-              {partialBillPrinted&&(
+              {/* Confirm mode: confirm checkbox */}
+              {!isBillMode&&(
                 <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",
-                  background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.2)",borderRadius:8,padding:"12px 14px"}}>
-                  <input type="checkbox" checked={payConfirm} onChange={e=>setPayConfirm(e.target.checked)}/>
+                  background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.2)",borderRadius:8,padding:"12px 14px",
+                  opacity:selectedDischarges.length===0?.5:1,pointerEvents:selectedDischarges.length===0?"none":"auto"}}>
+                  <input type="checkbox" checked={payConfirm} onChange={e=>setPayConfirm(e.target.checked)} disabled={selectedDischarges.length===0}/>
                   <span style={{fontWeight:600}}>✅ Confirmer la réception du paiement</span>
                 </label>
               )}
             </div>
             <div className="mf">
               <button className="btn bg" onClick={()=>setPayInvModal(null)}>Annuler</button>
-              <button className="btn bp"
-                disabled={!payConfirm||!partialBillPrinted||selectedDischarges.length===0}
-                onClick={()=>doMarkPaid(payInvModal)}>
-                🟢 Valider le paiement
-              </button>
+              {!isBillMode&&(
+                <button className="btn bp"
+                  disabled={!payConfirm||selectedDischarges.length===0}
+                  onClick={()=>doMarkPaid(payInvModal)}>
+                  🟢 Valider le paiement
+                </button>
+              )}
             </div>
           </div>
         </div>
