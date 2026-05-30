@@ -4164,10 +4164,9 @@ ${(()=>{const alreadyPaid=opts.alreadyPaid||0;const netAPayer=alreadyPaid>0?Math
   </table>
   <table style="width:52%;margin-left:auto">
     <tbody>
-      <tr><td style="width:58%">Montant H.T.</td><td class="r">${fB(totalHT)}</td></tr>
-      <tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(totalTVA)}</td></tr>
-      <tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>
-      ${alreadyPaid>0?`<tr><td style="color:#16a34a">Déjà réglé</td><td class="r" style="color:#16a34a">− ${fB(alreadyPaid)}</td></tr>`:''}
+      ${opts.isDebt && alreadyPaid>0 ? '' : `<tr><td style="width:58%">Montant H.T.</td><td class="r">${fB(totalHT)}</td></tr>`}
+      ${opts.isDebt && alreadyPaid>0 ? '' : `<tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(totalTVA)}</td></tr>`}
+      ${opts.isDebt && alreadyPaid>0 ? '' : `<tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>`}
       <tr style="background:#e8e8e8">
         <td class="b" style="font-size:14px">NET À PAYER</td>
         <td class="r b" style="font-size:15px">${fB(netAPayer)}</td>
