@@ -454,7 +454,8 @@ const fmtTs  = ts => new Date(ts).toLocaleString("fr-DZ",{dateStyle:"short",time
 const uid    = () => "D" + Date.now().toString(36).toUpperCase();
 const uidC   = () => "C" + Date.now().toString(36).toUpperCase();
 const uidU   = () => "U" + Date.now().toString(36).toUpperCase();
-const nowIso = () => new Date().toISOString().slice(0,16);
+const nowIso = () => { const n=new Date(); return new Date(n.getTime()-n.getTimezoneOffset()*60000).toISOString().slice(0,16); };
+const tsMatchesPfx = (ts, pfx) => { const d=new Date(ts); if(pfx.length===4) return d.getFullYear().toString()===pfx; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`===pfx; };
 
 const creditPct   = c => c.creditLimit ? Math.round((c.consumed/c.creditLimit)*100) : 0;
 const creditColor = p => p>=90 ? "var(--err)" : p>=70 ? "var(--warn)" : "var(--g)";
@@ -1085,7 +1086,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
                 const monthPfx = `${yr}-${String(new Date().getMonth()+1).padStart(2,"0")}`;
                 const isMonthly = c.payFrequency==="monthly";
                 const pfx = isMonthly ? monthPfx : yr;
-                const periodDs = discharges.filter(d=>d.clientId===c.id&&d.ts.startsWith(pfx)&&d.status!=="cancelled");
+                const periodDs = discharges.filter(d=>d.clientId===c.id&&tsMatchesPfx(d.ts,pfx)&&d.status!=="cancelled");
                 const usedW   = periodDs.reduce((s,d)=>s+d.net,0);
                 const usedRot = periodDs.length;
                 const isRotation = c.type==="rotation";
@@ -1245,10 +1246,10 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const isMonthlyRotation = client && isRotationClient && client.payFrequency==="monthly";
   const periodPrefix = (isMonthlyQuota||isMonthlyRotation) ? currentMonthPrefix : currentYear;
   const usedThisYear = client && !client.creditEnabled && !isRotationClient
-    ? discharges.filter(d=>d.clientId===client.id&&d.ts.startsWith(periodPrefix)&&d.status!=="cancelled").reduce((s,d)=>s+d.net,0)
+    ? discharges.filter(d=>d.clientId===client.id&&tsMatchesPfx(d.ts,periodPrefix)&&d.status!=="cancelled").reduce((s,d)=>s+d.net,0)
     : 0;
   const usedRotations = isRotationClient
-    ? discharges.filter(d=>d.clientId===client.id&&d.ts.startsWith(periodPrefix)&&d.status!=="cancelled").length
+    ? discharges.filter(d=>d.clientId===client.id&&tsMatchesPfx(d.ts,periodPrefix)&&d.status!=="cancelled").length
     : 0;
   // Use collect pricing in collect mode for accurate limit checks
   const effectiveTotalForLimit = opType==="collect"
@@ -1263,7 +1264,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   // Convention clients with an admin-set rotation quota
   const isConvWithRotation      = mode==="convention" && client && client.type==="convention" && (client.rotationLimit||0)>0;
   const usedConvRotations       = isConvWithRotation
-    ? discharges.filter(d=>d.clientId===client.id&&d.payMethod==="rotation"&&d.ts.startsWith(periodPrefix)&&d.status!=="cancelled").length
+    ? discharges.filter(d=>d.clientId===client.id&&d.payMethod==="rotation"&&tsMatchesPfx(d.ts,periodPrefix)&&d.status!=="cancelled").length
     : 0;
   const rotationConvPct         = isConvWithRotation ? Math.round((usedConvRotations/(client.rotationLimit||1))*100) : 0;
   const wouldExceedConvRot      = isConvWithRotation && convSubMode==="rotation" && client.rotationLimit>0 && (usedConvRotations+1)>client.rotationLimit;
@@ -2745,7 +2746,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 ? `${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,"0")}`
                 : now2.getFullYear().toString();
               const rotUsed = isRotTab&&cl.status==="approved"
-                ? discharges.filter(d=>d.clientId===cl.id&&d.ts.startsWith(rotPfx)&&d.status!=="cancelled").length
+                ? discharges.filter(d=>d.clientId===cl.id&&tsMatchesPfx(d.ts,rotPfx)&&d.status!=="cancelled").length
                 : 0;
               const rotPct = isRotTab&&cl.weightLimitYear>0 ? Math.round((rotUsed/cl.weightLimitYear)*100) : 0;
               const pct=isRotTab?rotPct:creditPct(cl); const col=creditColor(pct);
@@ -4735,7 +4736,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const billed = clients.filter(c=>(c.type==="convention"||c.type==="rotation"||c.type==="prepaid")&&c.status==="approved");
   const c       = billed.find(c=>c.id===selC) || billed[0];
   const selCId  = c?.id || "";
-  const entries = discharges.filter(d=>d.clientId===selCId&&d.ts.startsWith(month)&&d.status!=="cancelled");
+  const entries = discharges.filter(d=>d.clientId===selCId&&tsMatchesPfx(d.ts,month)&&d.status!=="cancelled");
   const totalNet  = entries.reduce((s,d)=>s+d.net,0);
   const totalCost = entries.reduce((s,d)=>s+d.total,0);
 
@@ -4759,7 +4760,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
   const monthLabel = new Date(month+"-02").toLocaleString("fr-FR",{month:"long",year:"numeric"});
   const globalRows = billed.map(cl=>{
-    const clEntries = discharges.filter(d=>d.clientId===cl.id&&d.ts.startsWith(month)&&d.status!=="cancelled");
+    const clEntries = discharges.filter(d=>d.clientId===cl.id&&tsMatchesPfx(d.ts,month)&&d.status!=="cancelled");
     const clNet  = clEntries.reduce((s,d)=>s+d.net,0);
     const rawCost = clEntries.reduce((s,d)=>s+d.total,0);
     // For credit-enabled clients the invoiceable amount is only the excess over the credit limit
@@ -4781,7 +4782,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       const isRot=cl.type==="rotation";
       const isMonthly=cl.payFrequency==="monthly";
       const pfx=isMonthly?`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`:now.getFullYear().toString();
-      const pDs=discharges.filter(d=>d.clientId===cl.id&&d.ts.startsWith(pfx)&&d.status!=="cancelled");
+      const pDs=discharges.filter(d=>d.clientId===cl.id&&tsMatchesPfx(d.ts,pfx)&&d.status!=="cancelled");
       const used=isRot?pDs.length:pDs.reduce((s,d)=>s+d.net,0);
       const lim=cl.weightLimitYear;
       limitPct=Math.min(Math.round((used/lim)*100),100);
@@ -5178,7 +5179,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                                 const pfx = isMonthly
                                   ? `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`
                                   : now.getFullYear().toString();
-                                const pDs = discharges.filter(d=>d.clientId===cl.id&&d.ts.startsWith(pfx)&&d.status!=="cancelled");
+                                const pDs = discharges.filter(d=>d.clientId===cl.id&&tsMatchesPfx(d.ts,pfx)&&d.status!=="cancelled");
                                 usedQ  = isRot ? pDs.length : pDs.reduce((s,d)=>s+d.net,0);
                                 limitQ = cl.weightLimitYear;
                                 unitLabel = isRot?"rot.":"t";
@@ -5372,7 +5373,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                             )}
                             {(()=>{
                               const icl  = clients.find(x=>x.id===inv.clientId);
-                              const iEnt = discharges.filter(d=>d.clientId===inv.clientId&&d.ts.startsWith(inv.month)&&d.status!=="cancelled");
+                              const iEnt = discharges.filter(d=>d.clientId===inv.clientId&&tsMatchesPfx(d.ts,inv.month)&&d.status!=="cancelled");
                               if (!icl || iEnt.length===0) return null;
                               const isDebtDoc = (inv.paidAmount||0) > 0 && inv.status !== "paid";
                               const iEnt2 = isDebtDoc ? iEnt.filter(d=>d.status!=="paid") : iEnt;
@@ -5535,7 +5536,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
             const pfx = (isMonthlyQ||isMonthlyR)
               ? `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`
               : now.getFullYear().toString();
-            const periodDs = discharges.filter(d=>d.clientId===c.id&&d.ts.startsWith(pfx)&&d.status!=="cancelled");
+            const periodDs = discharges.filter(d=>d.clientId===c.id&&tsMatchesPfx(d.ts,pfx)&&d.status!=="cancelled");
             const usedPeriod = c.creditEnabled
               ? c.consumed
               : isRotation
@@ -6018,7 +6019,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
         const TVArate  = payInvCl?.vatSubject ? 0.19 : 0;
         const unpaidForInv = discharges.filter(d=>
           d.clientId===payInvModal.clientId &&
-          d.ts.startsWith(payInvModal.month) &&
+          tsMatchesPfx(d.ts, payInvModal.month) &&
           d.status!=="cancelled" && d.status!=="paid"
         ).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
         const selHT  = selectedDischarges.reduce((s,d)=>s+(d.total||0),0);
