@@ -981,7 +981,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
 
       <div className="kpi-grid">
         {[
-          {kc:"var(--g)",    ic:"💰", l:"Recettes Totales",    v:fmt(totalRev),           s:month},
+          {kc:"var(--g)",    ic:"💰", l:"Recettes Totales",    v:fmt(totalRev),           s:"Cumul depuis le début de l'activité"},
           {kc:"var(--info)", ic:"⚖️", l:"Tonnage Total",       v:fmtN(totalTons)+" t",    s:discharges.length+" déchargements"},
           {kc:"var(--g2)",   ic:"💵", l:"Recettes Cash",       v:fmt(cashRev),             s:discharges.filter(d=>d.payMethod==="cash").length+" transactions cash"},
           {kc:"var(--warn)", ic:"🏭", l:"Sites Actifs",        v:String(sites.length),    s:"3 CET · 1 CDI · Wilaya Jijel"},
