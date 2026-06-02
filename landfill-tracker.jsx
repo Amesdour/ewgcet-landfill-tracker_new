@@ -4736,7 +4736,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const billed = clients.filter(c=>(c.type==="convention"||c.type==="rotation"||c.type==="prepaid")&&c.status==="approved");
   const c       = billed.find(c=>c.id===selC) || billed[0];
   const selCId  = c?.id || "";
-  const entries = discharges.filter(d=>d.clientId===selCId&&tsMatchesPfx(d.ts,month)&&d.status!=="cancelled");
+  // Annual clients accumulate across the whole year; monthly clients use the selected month
+  const clientPeriod = (cl) => cl?.payFrequency === "annual" ? month.slice(0,4) : month;
+  const selPeriod = clientPeriod(c);
+  const entries = discharges.filter(d=>d.clientId===selCId&&tsMatchesPfx(d.ts,selPeriod)&&d.status!=="cancelled");
   const totalNet  = entries.reduce((s,d)=>s+d.net,0);
   const totalCost = entries.reduce((s,d)=>s+d.total,0);
 
@@ -4755,19 +4758,22 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       return acc;
     }, {})
   );
-  const invNum    = `FAC-${month.replace("-","")}-${selCId}`;
-  const currentInv = invoices.find(i=>i.id===invNum) || invoices.find(i=>i.clientId===selCId&&i.month===month);
+  const invNum    = `FAC-${selPeriod.replace("-","")}-${selCId}`;
+  const currentInv = invoices.find(i=>i.id===invNum) || invoices.find(i=>i.clientId===selCId&&i.month===selPeriod);
 
   const monthLabel = new Date(month+"-02").toLocaleString("fr-FR",{month:"long",year:"numeric"});
+  // Label shown in the selected-client detail view — year only for annual billing clients
+  const selPeriodLabel = c?.payFrequency === "annual" ? month.slice(0,4) : monthLabel;
   const globalRows = billed.map(cl=>{
-    const clEntries = discharges.filter(d=>d.clientId===cl.id&&tsMatchesPfx(d.ts,month)&&d.status!=="cancelled");
+    const clPeriod = clientPeriod(cl);
+    const clEntries = discharges.filter(d=>d.clientId===cl.id&&tsMatchesPfx(d.ts,clPeriod)&&d.status!=="cancelled");
     const clNet  = clEntries.reduce((s,d)=>s+d.net,0);
     const rawCost = clEntries.reduce((s,d)=>s+d.total,0);
     // For credit-enabled clients the invoiceable amount is only the excess over the credit limit
     const clCost = cl.creditEnabled && cl.creditLimit>0
       ? Math.max(0, cl.consumed - cl.creditLimit)
       : rawCost;
-    const existInv = invoices.find(i=>i.clientId===cl.id&&i.month===month);
+    const existInv = invoices.find(i=>i.clientId===cl.id&&i.month===clPeriod);
     // Compute limit usage percentage for notification
     let limitPct = 0, limitData = null;
     if (cl.type==="prepaid" && cl.creditLimit>0) {
@@ -4810,15 +4816,17 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   // Generate/update invoice for a client+month (totalAmount stored as TTC)
   const generateInvoice = async (cl, costHT) => {
     const ttc = cl.vatSubject ? Math.round(costHT * 1.19 * 100) / 100 : costHT;
-    const id = `FAC-${month.replace("-","")}-${cl.id}`;
-    const existing = invoices.find(i=>i.id===id) || invoices.find(i=>i.clientId===cl.id&&i.month===month);
+    // Annual clients get a year-level invoice (e.g. "2026"); monthly clients get "2026-06"
+    const period = clientPeriod(cl);
+    const id = `FAC-${period.replace("-","")}-${cl.id}`;
+    const existing = invoices.find(i=>i.id===id) || invoices.find(i=>i.clientId===cl.id&&i.month===period);
     // Prepaid clients have already deposited their balance — invoice is always fully paid
     if (cl.type === "prepaid") {
       const today = new Date().toISOString().slice(0,10);
       if (existing) {
         await updateInvoice({...existing, totalAmount:ttc, paidAmount:ttc, status:"paid", paidAt: existing.paidAt || today});
       } else {
-        await addInvoice({id, clientId:cl.id, month, totalAmount:ttc, paidAmount:ttc, status:"paid", paidAt:today, note:""});
+        await addInvoice({id, clientId:cl.id, month:period, totalAmount:ttc, paidAmount:ttc, status:"paid", paidAt:today, note:""});
       }
       return;
     }
@@ -4844,7 +4852,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
         }
       }
     } else {
-      await addInvoice({id, clientId:cl.id, month, totalAmount:ttc, status:"pending", note:""});
+      await addInvoice({id, clientId:cl.id, month:period, totalAmount:ttc, status:"pending", note:""});
     }
   };
 
@@ -5433,7 +5441,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--muted)",marginTop:2}}>{invNum}</div>
               <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>
                 Émise le : {new Date().toLocaleDateString("fr-DZ")}<br/>
-                Période : <strong>{new Date(month+"-01").toLocaleString("fr-FR",{month:"long",year:"numeric"})}</strong>
+                Période : <strong>{selPeriodLabel}</strong>
               </div>
               {(()=>{const inv=currentInv;if(!inv)return null;const invLive={...inv,totalAmount:(inv.paidAmount||0)+debtTTC};return <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}><InvoiceStatusBadge s={inv.status}/>{(inv.status==="partial"||(inv.paidAmount>0&&inv.status!=="paid"))&&<PayProgress inv={invLive}/>}</div>;})()}
             </div>
