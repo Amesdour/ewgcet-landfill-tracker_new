@@ -126,7 +126,13 @@ const mapUser = r => ({
   id:r.id, name:r.name, email:r.email,
   role:r.role, status:r.status, phone:r.phone||'',
   matricule:r.matricule||'', siteId:r.site_id, createdAt:r.created_at,
+  emailVerified:r.email_verified||false,
+  verificationCode:r.verification_code||null,
 });
+
+function genCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
 
 const mapSite = r => ({
   id:r.id, name:r.name, type:r.type, region:r.region,
@@ -303,13 +309,49 @@ app.post('/api/users', async (req, res) => {
   const u = req.body;
   try {
     const hashed = await bcrypt.hash(u.password || 'changeme', 10);
+    const code = (u.role === 'operator') ? genCode() : null;
+    const expires = code ? new Date(Date.now() + 48 * 60 * 60 * 1000) : null;
     await q(
-      `INSERT INTO users(id,name,email,password,role,status,phone,matricule,site_id,created_at)
-       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO NOTHING`,
+      `INSERT INTO users(id,name,email,password,role,status,phone,matricule,site_id,created_at,
+        email_verified,verification_code,verification_expires_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(id) DO NOTHING`,
       [u.id,u.name,u.email,hashed,u.role,u.status,u.phone||'',
-       u.matricule||'',u.siteId||'all',u.createdAt||new Date().toISOString().slice(0,10)]
+       u.matricule||'',u.siteId||'all',u.createdAt||new Date().toISOString().slice(0,10),
+       false, code, expires]
+    );
+    ok(res, { ok:true, verificationCode: code });
+  } catch(e) { er(res,e); }
+});
+
+app.post('/api/users/:id/verify-email', async (req, res) => {
+  const { code } = req.body;
+  try {
+    const { rows } = await q(
+      'SELECT verification_code, verification_expires_at FROM users WHERE id=$1',
+      [req.params.id]
+    );
+    if (!rows.length) return er(res, 'Utilisateur non trouvé', 404);
+    const { verification_code, verification_expires_at } = rows[0];
+    if (!verification_code) return er(res, 'Aucun code de vérification actif', 400);
+    if (new Date() > new Date(verification_expires_at)) return er(res, 'Code expiré', 400);
+    if (code !== verification_code) return er(res, 'Code incorrect', 400);
+    await q(
+      'UPDATE users SET email_verified=TRUE, verification_code=NULL, verification_expires_at=NULL WHERE id=$1',
+      [req.params.id]
     );
     ok(res, { ok:true });
+  } catch(e) { er(res,e); }
+});
+
+app.post('/api/users/:id/regenerate-code', async (req, res) => {
+  try {
+    const code = genCode();
+    const expires = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    await q(
+      'UPDATE users SET verification_code=$1, verification_expires_at=$2, email_verified=FALSE WHERE id=$3',
+      [code, expires, req.params.id]
+    );
+    ok(res, { ok:true, verificationCode: code });
   } catch(e) { er(res,e); }
 });
 

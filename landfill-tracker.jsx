@@ -613,6 +613,11 @@ function RegisterScreen({onBack, onRegistered, sites, company}) {
   const [error, setError] = useState("");
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
+  const [pendingUser, setPendingUser] = useState(null);
+  const [codeInput,   setCodeInput]   = useState("");
+  const [codeError,   setCodeError]   = useState("");
+  const [verified,    setVerified]    = useState(false);
+
   const handleRegister = async () => {
     if (!form.name||!form.email||!form.password||!form.phone) { setError("Veuillez remplir tous les champs."); return; }
     if (form.password.length < 6) { setError("Le mot de passe doit contenir au moins 6 caractères."); return; }
@@ -623,18 +628,60 @@ function RegisterScreen({onBack, onRegistered, sites, company}) {
     };
     await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newUser)});
     onRegistered(newUser);
+    setPendingUser(newUser);
     setSent(true);
   };
 
-  if (sent) return (
+  const handleVerifyCode = async () => {
+    if (!codeInput.trim()) { setCodeError("Veuillez saisir le code."); return; }
+    setCodeError("");
+    const res = await fetch(`/api/users/${pendingUser.id}/verify-email`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({code: codeInput.trim()}),
+    });
+    if (res.ok) { setVerified(true); }
+    else { const d = await res.json(); setCodeError(d.error||"Code incorrect."); }
+  };
+
+  if (sent && verified) return (
     <div className="login-shell">
       <div className="login-box" style={{textAlign:"center"}}>
         <div style={{fontSize:48,marginBottom:16}}>✅</div>
-        <div style={{fontFamily:"var(--head)",fontSize:20,fontWeight:800,marginBottom:10}}>Demande envoyée</div>
+        <div style={{fontFamily:"var(--head)",fontSize:20,fontWeight:800,marginBottom:10}}>E-mail vérifié !</div>
         <p style={{color:"var(--muted)",fontSize:13,lineHeight:1.7,marginBottom:24}}>
-          Votre demande d'accès a été transmise à l'administrateur. Vous recevrez une confirmation dès validation de votre compte.
+          Votre adresse e-mail a été confirmée. L'administrateur va maintenant valider votre compte.
         </p>
         <button className="btn bp bfw" onClick={onBack}>← Retour à la connexion</button>
+      </div>
+    </div>
+  );
+
+  if (sent) return (
+    <div className="login-shell">
+      <div className="login-box">
+        <div className="login-logo">
+          <img src="/logo.png" alt="EPWGCET" className="login-logo-icon"/>
+          <div className="login-company">{cof(company,'short')}</div>
+          <div className="login-wilaya">{cof(company,'wilaya')}</div>
+        </div>
+        <div className="login-title">Vérification de l'e-mail</div>
+        <div className="alrt ai mb3">
+          <span>📬</span>
+          <span style={{fontSize:12}}>
+            Demande envoyée. Contactez l'administrateur pour obtenir votre <strong>code de vérification à 6 chiffres</strong>, puis saisissez-le ci-dessous.
+          </span>
+        </div>
+        {codeError && <div className="alrt ae mb3"><span>⚠</span><span>{codeError}</span></div>}
+        <div className="fg" style={{gap:12}}>
+          <div className="field">
+            <label>Code de vérification</label>
+            <input className="fi" placeholder="123456" maxLength={6} value={codeInput}
+              onChange={e=>setCodeInput(e.target.value.replace(/\D/g,''))}
+              style={{letterSpacing:8,fontSize:20,textAlign:"center"}}/>
+          </div>
+          <button className="btn bp bfw" onClick={handleVerifyCode}>✓ Confirmer le code</button>
+          <button className="btn bg bfw" onClick={onBack}>← Retour à la connexion</button>
+        </div>
       </div>
     </div>
   );
@@ -791,8 +838,10 @@ export default function App() {
     setClients(p=>p.filter(c=>c.id!==id));
   };
   const addUser      = async u  => {
-    await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
-    setUsers(p=>[...p,u]);
+    const res = await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
+    const data = await res.json();
+    setUsers(p=>[...p,{...u, verificationCode: data.verificationCode||null, emailVerified:false}]);
+    return data;
   };
   const updateUser   = async u  => {
     await fetch(`/api/users/${u.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
@@ -3731,6 +3780,7 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
   const [editForm,  setEditForm]  = useState({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CET-JIJ"});
   const [form,      setForm]      = useState({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CET-JIJ"});
   const [tab,       setTab]       = useState("active");
+  const [codes,     setCodes]     = useState({});
   const set    = (k,v) => setForm(f=>({...f,[k]:v}));
   const setEd  = (k,v) => setEditForm(f=>({...f,[k]:v}));
 
@@ -3738,16 +3788,27 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
   const pendingOps = operators.filter(u=>u.status==="pending");
   const activeOps  = operators.filter(u=>u.status!=="pending");
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!form.name||!form.email||!form.password) return;
     const u = {
       id:uidU(), name:form.name, email:form.email, password:form.password, role:"operator",
       status:"active", phone:form.phone, matricule:form.matricule||`OP-${new Date().getFullYear()}-${String(operators.length+1).padStart(3,"0")}`,
       siteId:form.siteId, createdAt:new Date().toISOString().slice(0,10),
     };
-    addUser(u);
+    const data = await addUser(u);
+    if (data?.verificationCode) setCodes(c=>({...c,[u.id]:data.verificationCode}));
     setModal(false);
     setForm({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CET-JIJ"});
+  };
+
+  const regenerateCode = async (u) => {
+    const res = await fetch(`/api/users/${u.id}/regenerate-code`,{method:'POST'});
+    const data = await res.json();
+    if (data.verificationCode) setCodes(c=>({...c,[u.id]:data.verificationCode}));
+  };
+
+  const copyCode = (code) => {
+    navigator.clipboard.writeText(code).catch(()=>{});
   };
 
   const toggleStatus = u => updateUser({...u, status:u.status==="active"?"inactive":u.status==="inactive"?"active":u.status});
@@ -3811,7 +3872,13 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
                   <UserStatusBadge s={u.status}/>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:5,fontSize:12,marginBottom:12}}>
-                  <div className="fx aic g2"><span>📧</span><span className="tmu truncate">{u.email}</span></div>
+                  <div className="fx aic g2">
+                    <span>📧</span><span className="tmu truncate">{u.email}</span>
+                    {u.emailVerified
+                      ? <span className="badge" style={{background:"#d1fae5",color:"#065f46",fontSize:9,marginLeft:2}}>✓ vérifié</span>
+                      : <span className="badge" style={{background:"#fef3c7",color:"#92400e",fontSize:9,marginLeft:2}}>non vérifié</span>
+                    }
+                  </div>
                   <div className="fx aic g2"><span>📞</span><span className="tmu">{u.phone||"—"}</span></div>
                   <div className="fx aic g2"><span>🏭</span><span className="tmu">{siteLabel(u.siteId)}</span></div>
                   <div className="fx aic g2"><span>📅</span><span className="tmu">{u.createdAt}</span></div>
@@ -3845,7 +3912,9 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
           </div>
         ):(
           <div className="op-grid">
-            {pendingOps.map(u=>(
+            {pendingOps.map(u=>{
+              const code = codes[u.id] || u.verificationCode;
+              return (
               <div key={u.id} className="op-card">
                 <div className="fx aic jsb mb3">
                   <div className="fx aic g2">
@@ -3855,6 +3924,10 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
                       <span className="badge b-warn">En attente</span>
                     </div>
                   </div>
+                  {u.emailVerified
+                    ? <span className="badge" style={{background:"#d1fae5",color:"#065f46",fontSize:9}}>✓ e-mail vérifié</span>
+                    : <span className="badge" style={{background:"#fef3c7",color:"#92400e",fontSize:9}}>e-mail non vérifié</span>
+                  }
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:5,fontSize:12,marginBottom:12}}>
                   <div className="fx aic g2"><span>📧</span><span className="tmu truncate">{u.email}</span></div>
@@ -3862,12 +3935,25 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
                   <div className="fx aic g2"><span>🏭</span><span className="tmu">Demandé: {siteLabel(u.siteId)}</span></div>
                   <div className="fx aic g2"><span>📅</span><span className="tmu">{u.createdAt}</span></div>
                 </div>
+                {!u.emailVerified && (
+                  <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
+                    <div style={{fontSize:10,color:"#166534",marginBottom:6,fontWeight:600}}>🔑 CODE DE VÉRIFICATION (à communiquer à l'opérateur)</div>
+                    <div className="fx aic g2">
+                      <span style={{fontFamily:"monospace",fontSize:22,fontWeight:800,letterSpacing:6,color:"#15803d"}}>
+                        {code||"—"}
+                      </span>
+                      {code&&<button className="btn bg bsm" title="Copier" onClick={()=>copyCode(code)}>📋</button>}
+                      <button className="btn bg bsm" title="Nouveau code" onClick={()=>regenerateCode(u)}>🔄</button>
+                    </div>
+                  </div>
+                )}
                 <div className="fg fg2">
                   <button className="btn bp bsm" onClick={()=>approveOp(u)}>✓ Approuver</button>
                   <button className="btn be bsm" onClick={()=>rejectOp(u)}>✗ Refuser</button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )
       )}
