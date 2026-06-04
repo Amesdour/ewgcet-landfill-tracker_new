@@ -180,7 +180,7 @@ const STYLES = `
   background:rgba(46,204,88,.4);
 }
 body{background:var(--bg);color:var(--txt);font-family:var(--font);font-size:14px;line-height:1.5}
-button{cursor:pointer;font-family:var(--font)}
+button{cursor:pointer;font-family:var(--font);color:var(--txt)}
 input,select,textarea{font-family:var(--font)}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:var(--s1)}
@@ -2946,7 +2946,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                         {c.clientType==="state"?"🏛 Institution État":"🏢 Entreprise Privée"}
                       </span>
                     )}
-                    {c.type==="prepaid"&&<span className="badge" style={{background:"rgba(59,130,246,.12)",color:"#1d4ed8",border:"1px solid rgba(59,130,246,.3)"}}>🎫 Bonus Prépayé</span>}
+                    {c.type==="prepaid"&&<span className="badge b-info">🎫 Bonus Prépayé</span>}
                     {c.type==="daily"&&<span className="badge b-cash">💵 Client Cash</span>}
                     {c.type==="rotation"&&<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Convention Rotation</span>}
                     {c.type==="rotation"&&<ClientStatusBadge s={c.status}/>}
@@ -2977,7 +2977,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     <div style={{fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>Régime TVA</div>
                     <div style={{marginTop:4}}>
                       {c.vatSubject
-                        ? <span className="badge" style={{background:"rgba(234,179,8,.12)",color:"#92400e",border:"1px solid rgba(234,179,8,.3)",fontSize:10}}>✅ Assujetti TVA</span>
+                        ? <span className="badge b-warn" style={{fontSize:10}}>✅ Assujetti TVA</span>
                         : <span className="badge" style={{background:"rgba(100,116,139,.1)",color:"var(--muted)",border:"1px solid var(--bdr)",fontSize:10}}>🚫 Non assujetti</span>
                       }
                     </div>
