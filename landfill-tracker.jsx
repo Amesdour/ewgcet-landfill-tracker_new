@@ -5120,6 +5120,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [payInvMode,         setPayInvMode]          = useState("bill"); // "bill" | "confirm"
   const [notifModal,  setNotifModal]  = useState(null);
   const [notifCopied, setNotifCopied] = useState(false);
+  const [smsInvModal, setSmsInvModal] = useState(null); // {inv, cl, totalHT, totalTTC}
+  const [smsInvCopied,setSmsInvCopied]= useState(false);
 
   // Paiement Partiel par Calcul state
   const [partialCalcModal, setPartialCalcModal] = useState(null); // {inv, cl}
@@ -6046,6 +6048,16 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 </div>
               </>
             )}
+            {currentInv&&(
+              <div style={{width:"100%",display:"flex",justifyContent:"flex-end",marginTop:2}}>
+                <button className="btn bsm"
+                  style={{background:"#25d366",color:"#fff",borderColor:"#25d366",display:"flex",alignItems:"center",gap:6}}
+                  onClick={()=>{setSmsInvCopied(false);setSmsInvModal({inv:currentInv,cl:c,totalHT:totalCost,totalTTC:c.vatSubject?totalCost*1.19:totalCost});}}
+                  title="Envoyer la facture par SMS ou WhatsApp">
+                  📱 Envoyer SMS / WhatsApp
+                </button>
+              </div>
+            )}
             <div style={{fontSize:11,color:"var(--muted)",width:"100%",marginTop:4}}>Réf: {invNum}</div>
           </div>
         </div>
@@ -6131,6 +6143,94 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               </div>
               <div className="mf">
                 <button className="btn bg" onClick={()=>setNotifModal(null)}>Fermer</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {smsInvModal&&(()=>{
+        const {inv,cl,totalHT,totalTTC}=smsInvModal;
+        const resteDu=Math.max(0,inv.totalAmount-(inv.paidAmount||0));
+        const isPaid=inv.status==="paid";
+        const periodFmt=(()=>{const [y,m]=inv.month.split("-");const mNames=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];return `${mNames[parseInt(m,10)-1]} ${y}`;})();
+        const fmtDA=n=>new Intl.NumberFormat("fr-DZ",{minimumFractionDigits:2,maximumFractionDigits:2}).format(n)+" DA";
+        const coPhone=cof(company,"phone")||"";
+        const coEmail=cof(company,"email")||"";
+        const msg=isPaid
+          ?`EPWGCET Jijel — Reçu de paiement\n\nClient : ${cl.name}\nPériode : ${periodFmt}\nN° Facture : ${inv.id}\n${cl.vatSubject?`Montant HT : ${fmtDA(totalHT)}\nTVA 19% : ${fmtDA(totalHT*0.19)}\n`:""}TOTAL RÉGLÉ : ${fmtDA(inv.totalAmount)}\n\nVotre facture est entièrement soldée. Merci pour votre règlement.\n\n${coPhone?`Tél : ${coPhone}`:""}\nEPWGCET — ${new Date().toLocaleDateString("fr-FR")}`
+          :`EPWGCET Jijel — Avis de facturation\n\nClient : ${cl.name}\nPériode : ${periodFmt}\nN° Facture : ${inv.id}\n${cl.vatSubject?`Montant HT : ${fmtDA(totalHT)}\nTVA 19% : ${fmtDA(totalHT*0.19)}\n`:""}`+
+           `NET À PAYER : ${fmtDA(totalTTC)}`+
+           ((inv.paidAmount||0)>0?`\nDéjà réglé : ${fmtDA(inv.paidAmount)}\nReste dû : ${fmtDA(resteDu)}`:"") +
+           `\n\nMerci de procéder au règlement dans les meilleurs délais.${coPhone?`\nContact : ${coPhone}`:""}${coEmail?` | ${coEmail}`:""}\nEPWGCET — ${new Date().toLocaleDateString("fr-FR")}`;
+        const rawPhone=(cl.phone||"").replace(/\s/g,"");
+        const waPhone=rawPhone.startsWith("0")?`213${rawPhone.slice(1)}`:rawPhone.replace(/^\+/,"");
+        const mailSubj=isPaid?`Reçu de paiement — ${cl.name} — ${periodFmt}`:`Avis de facturation — ${cl.name} — ${periodFmt}`;
+        const copyMsg=()=>{navigator.clipboard.writeText(msg);setSmsInvCopied(true);setTimeout(()=>setSmsInvCopied(false),2500);};
+        return (
+          <div className="ov">
+            <div className="modal" style={{maxWidth:540}}>
+              <div className="mh">
+                <span className="mh-title">📱 {isPaid?"Envoyer reçu":"Envoyer facture"} par SMS</span>
+                <button className="btn bg bsm" onClick={()=>setSmsInvModal(null)}>✕</button>
+              </div>
+              <div className="mb2">
+                {/* Header info strip */}
+                <div className="cost-box mb3" style={{marginBottom:14}}>
+                  <div className="cl"><span className="clb">👤 Client</span><span className="clv fw7">{cl.name}</span></div>
+                  <div className="cl"><span className="clb">📅 Période</span><span className="clv">{periodFmt}</span></div>
+                  <div className="cl"><span className="clb">🧾 Référence</span><span className="clv mn">{inv.id}</span></div>
+                  <div className="cl"><span className="clb">{isPaid?"✅ Soldé":"💰 À payer"}</span>
+                    <span className="clv fw7" style={{color:isPaid?"var(--g)":"var(--err)"}}>
+                      {isPaid?fmtDA(inv.totalAmount):fmtDA(resteDu)}
+                    </span>
+                  </div>
+                  <div className="cl"><span className="clb">📞 Téléphone</span>
+                    <span className="clv mn">{cl.phone||<em style={{color:"var(--muted)"}}>Non renseigné</em>}</span>
+                  </div>
+                </div>
+                {/* Message preview */}
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"var(--muted)",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>Message à envoyer</div>
+                  <div style={{background:"var(--bg2)",border:"1px solid var(--bdr)",borderRadius:8,padding:"10px 12px",
+                    fontSize:12,lineHeight:1.7,whiteSpace:"pre-wrap",fontFamily:"var(--mono)",color:"var(--tx)"}}>
+                    {msg}
+                  </div>
+                </div>
+                {/* Action buttons */}
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <button className="btn bg" style={{flex:1,fontSize:11,justifyContent:"center",display:"flex",alignItems:"center",gap:6}}
+                    onClick={copyMsg}>
+                    {smsInvCopied?"✅ Copié !":"📋 Copier le message"}
+                  </button>
+                  {cl.phone&&(
+                    <a href={`sms:${rawPhone}?body=${encodeURIComponent(msg)}`}
+                      style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                        padding:"8px 14px",borderRadius:8,border:"1px solid #ccc",
+                        background:"#1a73e8",color:"#fff",fontSize:11,fontWeight:600,textDecoration:"none"}}>
+                      💬 SMS natif
+                    </a>
+                  )}
+                  {cl.phone&&(
+                    <a href={`https://wa.me/${waPhone}?text=${encodeURIComponent(msg)}`}
+                      target="_blank" rel="noreferrer"
+                      style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                        padding:"8px 14px",borderRadius:8,border:"1px solid #25d366",
+                        background:"#25d366",color:"#fff",fontSize:11,fontWeight:600,textDecoration:"none"}}>
+                      🟢 WhatsApp
+                    </a>
+                  )}
+                  <a href={`mailto:${cl.email||""}?subject=${encodeURIComponent(mailSubj)}&body=${encodeURIComponent(msg)}`}
+                    style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                      padding:"8px 14px",borderRadius:8,border:"1px solid var(--indigo)",
+                      background:"var(--indigo)",color:"#fff",fontSize:11,fontWeight:600,textDecoration:"none"}}>
+                    ✉️ E-mail
+                  </a>
+                </div>
+                {!cl.phone&&<div style={{fontSize:10,color:"var(--muted)",marginTop:8}}>⚠️ Aucun numéro de téléphone enregistré pour ce client.</div>}
+              </div>
+              <div className="mf">
+                <button className="btn bg" onClick={()=>setSmsInvModal(null)}>Fermer</button>
               </div>
             </div>
           </div>
