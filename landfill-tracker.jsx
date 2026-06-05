@@ -316,6 +316,7 @@ tr.flagged-row:hover td{background:rgba(240,85,61,.08)}
 .b-cash{background:rgba(109,232,150,.12);color:var(--g2);border:1px solid rgba(109,232,150,.28)}
 .b-muted{background:rgba(77,110,86,.1);color:var(--muted);border:1px solid var(--bdr)}
 .b-dim{background:var(--s3);color:var(--muted);border:1px solid var(--bdr)}
+.b-indigo{background:rgba(99,102,241,.12);color:var(--indigo);border:1px solid rgba(99,102,241,.28)}
 
 /* Forms */
 .fg{display:grid;gap:13px}
@@ -1132,7 +1133,9 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
   const rotIds    = new Set(clients.filter(c=>c.type==="rotation").map(c=>c.id));
   const totalRev  = discharges.reduce((s,d)=>s+d.total,0);
   const totalTons = discharges.filter(d=>!rotIds.has(d.clientId)).reduce((s,d)=>s+d.net,0);
-  const cashRev   = discharges.filter(d=>d.payMethod==="cash").reduce((s,d)=>s+d.total,0);
+  const cashRev   = discharges.filter(d=>d.payMethod==="cash"||d.payMethod==="tpe").reduce((s,d)=>s+d.total,0);
+  const tpeCount  = discharges.filter(d=>d.payMethod==="tpe").length;
+  const cashCount = discharges.filter(d=>d.payMethod==="cash").length;
   const flagged   = discharges.filter(d=>d.status==="flagged");
   const pendingC  = clients.filter(c=>(c.type==="convention"||c.type==="rotation")&&(c.status==="pending_docs"||c.status==="under_review"));
   const byWaste   = wasteTypes.map(w=>({...w,
@@ -1166,7 +1169,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
         {[
           {kc:"var(--g)",    ic:"💰", l:"Recettes Totales",    v:fmt(totalRev),           s:"Cumul depuis le début de l'activité"},
           {kc:"var(--info)", ic:"⚖️", l:"Tonnage Total",       v:fmtN(totalTons)+" t",    s:discharges.length+" déchargements"},
-          {kc:"var(--g2)",   ic:"💵", l:"Recettes Cash",       v:fmt(cashRev),             s:discharges.filter(d=>d.payMethod==="cash").length+" transactions cash"},
+          {kc:"var(--g2)",   ic:"💳", l:"Paiements Directs",    v:fmt(cashRev),             s:`${cashCount} espèces · ${tpeCount} TPE`},
           {kc:"var(--warn)", ic:"🏭", l:"Sites Actifs",        v:String(sites.length),    s:"3 CET · 1 CDI · Wilaya Jijel"},
         ].map(k=>(
           <div key={k.l} className="kpi" style={{"--kc":k.kc}}>
@@ -1344,6 +1347,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const [form,         setForm]         = useState({siteId:defaultSite, truck:"", clientId:"", wasteType:"", gross:"", tare:""});
   const [payModal,     setPayModal]     = useState(false);
   const [cashConf,     setCashConf]     = useState(false);
+  const [selPayMethod, setSelPayMethod] = useState("cash"); // "cash" | "tpe"
   const [lastEntry,    setLastEntry]    = useState(null);
   const [hint,         setHint]         = useState(null);
   const [convSubMode,  setConvSubMode]  = useState("tonnage"); // "tonnage" | "rotation" for convention clients with rotationLimit
@@ -1507,7 +1511,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
       truck:form.truck.toUpperCase(), wasteType:form.wasteType, gross, tare, net,
       unitPrice,
       total: finalTotal,
-status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.creditLimit))?"flagged":(effectiveMethod==="cash"||effectiveMethod==="prepaid")?"paid":"settled",      payMethod:effectiveMethod, opId:authUser.id,
+status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.creditLimit))?"flagged":(effectiveMethod==="cash"||effectiveMethod==="tpe"||effectiveMethod==="prepaid")?"paid":"settled",      payMethod:effectiveMethod, opId:authUser.id,
       opType:opType,
     };
     addDischarge(e);
@@ -1564,7 +1568,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
               ?<div className="rrttl" style={{color:"var(--orange)"}}><span>ROTATIONS</span><span>+1 rotation</span></div>
               :<div className="rrttl"><span>TOTAL</span><span>{fmt(lastEntry.total)}</span></div>}
             <div style={{textAlign:"center",marginTop:12,color:"var(--muted)",fontSize:10}}>
-              {lastEntry.payMethod==="cash"?"💵 Payé en espèces":lastEntry.payMethod==="rotation"?"🔄 Convention Rotation":"📋 Crédit compte mensuel"}<br/>
+              {lastEntry.payMethod==="cash"?"💵 Payé en espèces":lastEntry.payMethod==="tpe"?"💳 Payé par TPE":lastEntry.payMethod==="rotation"?"🔄 Convention Rotation":"📋 Crédit compte mensuel"}<br/>
               {cof(company,'wilaya')}
             </div>
           </div>
@@ -2198,8 +2202,8 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
         <div className="ov">
           <div className="modal">
             <div className="mh">
-              <span className="mh-title">💵 Paiement Cash Requis</span>
-              <button className="btn bg bsm" onClick={()=>setPayModal(false)}>✕</button>
+              <span className="mh-title">{selPayMethod==="tpe"?"💳 Paiement TPE Requis":"💵 Paiement Cash Requis"}</span>
+              <button className="btn bg bsm" onClick={()=>{setPayModal(false);setCashConf(false);}}>✕</button>
             </div>
             <div className="mb2">
               <div className="alrt ae mb4"><span>🚧</span><strong>BARRIÈRE FERMÉE — En attente de paiement</strong></div>
@@ -2210,20 +2214,36 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
                 <div className="cl ct"><span style={{fontWeight:700}}>MONTANT DÛ</span><span className="ctv">{fmt(total)}</span></div>
               </div>
               <div className="card mb3" style={{display:"flex",flexDirection:"column",gap:10}}>
-                <div style={{fontWeight:700,marginBottom:4}}>Mode de règlement :</div>
-                <label className="fx aic g2" style={{cursor:"pointer"}}><input type="radio" name="pm" defaultChecked/> 💵 Espèces</label>
-                <label className="fx aic g2" style={{cursor:"pointer",opacity:.45}}><input type="radio" name="pm" disabled/> 💳 TPE Terminal (bientôt)</label>
-                <label className="fx aic g2" style={{cursor:"pointer",opacity:.45}}><input type="radio" name="pm" disabled/> 📱 E-Paiement QR (bientôt)</label>
+                <div style={{fontWeight:700,marginBottom:4,fontSize:12,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".08em",fontFamily:"var(--mono)"}}>Mode de règlement</div>
+                <label className="fx aic g2" style={{cursor:"pointer",padding:"10px 12px",borderRadius:8,border:`2px solid ${selPayMethod==="cash"?"var(--g)":"var(--bdr)"}`,background:selPayMethod==="cash"?"rgba(46,201,92,.06)":"none",transition:"all .15s"}}>
+                  <input type="radio" name="pm" value="cash" checked={selPayMethod==="cash"} onChange={()=>{setSelPayMethod("cash");setCashConf(false);}} style={{accentColor:"var(--g)"}}/>
+                  <span style={{marginLeft:8,fontWeight:600}}>💵 Espèces</span>
+                  <span style={{marginLeft:"auto",fontSize:11,color:"var(--muted)"}}>Paiement en numéraire</span>
+                </label>
+                <label className="fx aic g2" style={{cursor:"pointer",padding:"10px 12px",borderRadius:8,border:`2px solid ${selPayMethod==="tpe"?"var(--indigo)":"var(--bdr)"}`,background:selPayMethod==="tpe"?"rgba(99,102,241,.06)":"none",transition:"all .15s"}}>
+                  <input type="radio" name="pm" value="tpe" checked={selPayMethod==="tpe"} onChange={()=>{setSelPayMethod("tpe");setCashConf(false);}} style={{accentColor:"var(--indigo)"}}/>
+                  <span style={{marginLeft:8,fontWeight:600}}>💳 TPE — Carte Bancaire</span>
+                  <span style={{marginLeft:"auto",fontSize:11,color:"var(--muted)"}}>Terminal de paiement</span>
+                </label>
               </div>
               <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",
-                background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.2)",borderRadius:8,padding:"12px 14px"}}>
-                <input type="checkbox" checked={cashConf} onChange={e=>setCashConf(e.target.checked)}/>
-                <span style={{fontWeight:600}}>✅ Confirmer la réception du montant en espèces</span>
+                background:selPayMethod==="tpe"?"rgba(99,102,241,.06)":"rgba(46,201,92,.08)",
+                border:`1px solid ${selPayMethod==="tpe"?"rgba(99,102,241,.25)":"rgba(46,201,92,.2)"}`,
+                borderRadius:8,padding:"12px 14px",transition:"all .2s"}}>
+                <input type="checkbox" checked={cashConf} onChange={e=>setCashConf(e.target.checked)}
+                  style={{accentColor:selPayMethod==="tpe"?"var(--indigo)":"var(--g)"}}/>
+                <span style={{fontWeight:600}}>
+                  {selPayMethod==="tpe"?"✅ Confirmer la transaction TPE validée sur le terminal":"✅ Confirmer la réception du montant en espèces"}
+                </span>
               </label>
             </div>
             <div className="mf">
-              <button className="btn bg" onClick={()=>setPayModal(false)}>Annuler</button>
-              <button className="btn bp" disabled={!cashConf} onClick={()=>finalise("cash")}>🟢 Valider & Ouvrir Barrière</button>
+              <button className="btn bg" onClick={()=>{setPayModal(false);setCashConf(false);}}>Annuler</button>
+              <button className="btn bp" disabled={!cashConf}
+                style={selPayMethod==="tpe"?{background:"var(--indigo)",borderColor:"var(--indigo)"}:{}}
+                onClick={()=>finalise(selPayMethod)}>
+                🟢 Valider & Ouvrir Barrière
+              </button>
             </div>
           </div>
         </div>
@@ -2318,7 +2338,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
       d.net.toFixed(3),
       d.unitPrice.toFixed(2),
       d.total.toFixed(2),
-      d.payMethod==="cash"?"Espèces":d.payMethod==="convention"?"Convention":d.payMethod==="prepaid"?"Prépayé":d.payMethod,
+      d.payMethod==="cash"?"Espèces":d.payMethod==="tpe"?"TPE":d.payMethod==="convention"?"Convention":d.payMethod==="prepaid"?"Prépayé":d.payMethod,
       d.status==="ok"?"OK":d.status==="paid"?"Payé":d.status==="settled"?"Réglé":d.status==="flagged"?"Alerte":d.status==="cancelled"?"Annulé":d.status,
       users.find(u=>u.id===d.opId)?.name||d.opId||"",
     ].map(esc).join(","));
@@ -2443,6 +2463,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
         <select className="fi" style={{width:155}} value={modeF} onChange={e=>setModeF(e.target.value)}>
           <option value="all">💳 Mode paiement</option>
           <option value="cash">Espèces</option>
+          <option value="tpe">TPE — Carte</option>
           <option value="convention">Convention</option>
           <option value="credit">Crédit</option>
           <option value="prepaid">Prépayé</option>
@@ -2527,7 +2548,12 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
                         {TVAr>0&&<span style={{fontSize:9,marginLeft:3,color:"var(--muted)",fontWeight:400}}>TTC</span>}
                       </span>
                     </td>
-                    <td>{d.payMethod==="cash"?<span className="badge b-cash">💵 Cash</span>:d.payMethod==="rotation"?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>:<span className="badge b-info">📋 Conv.</span>}</td>
+                    <td>{
+                      d.payMethod==="cash"?<span className="badge b-cash">💵 Cash</span>
+                      :d.payMethod==="tpe"?<span className="badge b-indigo">💳 TPE</span>
+                      :d.payMethod==="rotation"?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>
+                      :<span className="badge b-info">📋 Conv.</span>
+                    }</td>
                     <td><StatusBadge s={d.status}/></td>
                     <td><span className="mn tmu" style={{fontSize:10}}>{op?.name.split(" ")[0]||"—"}</span></td>
                     <td>
@@ -2669,7 +2695,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
                   ["Tare",           fmtN(printD.tare)+" t"],
                   ["Poids net",      fmtN(printD.net)+" t"],
                   ["Tarif unitaire", fmt(printD.unitPrice)+"/t"],
-                  ["Mode paiement",  printD.payMethod==="cash"?"Espèces":printD.payMethod==="convention"?"Convention mensuelle":printD.payMethod==="prepaid"?"Prépayé":"Convention"],
+                  ["Mode paiement",  printD.payMethod==="cash"?"Espèces":printD.payMethod==="tpe"?"TPE — Carte Bancaire":printD.payMethod==="convention"?"Convention mensuelle":printD.payMethod==="prepaid"?"Prépayé":"Convention"],
                   ["Opérateur",      users.find(u=>u.id===printD.opId)?.name||printD.opId||"—"],
                 ].map(([l,v])=>(
                   <div key={l} className="rr"><span>{l}</span><span style={{fontWeight:600}}>{v}</span></div>
@@ -2743,7 +2769,8 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
                       <option value="convention">📋 Convention</option>
                       <option value="credit">💳 Crédit</option>
                       <option value="prepaid">🎫 Bonus Prépayé</option>
-                      <option value="cash">💵 Cash</option>
+                      <option value="cash">💵 Espèces</option>
+                      <option value="tpe">💳 TPE — Carte Bancaire</option>
                     </select>
                   </div>
                   <div className="field"><label>Statut</label>
