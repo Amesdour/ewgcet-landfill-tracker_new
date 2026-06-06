@@ -1,4 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, createContext, useContext } from "react";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LANGUAGE CONTEXT
+═══════════════════════════════════════════════════════════════════════════ */
+const LangCtx = createContext("fr");
+function useT() {
+  const lang = useContext(LangCtx);
+  return (fr, ar) => lang === "ar" ? ar : fr;
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CONSTANTS
@@ -72,7 +81,7 @@ const DISCHARGES_INIT = [];
    STYLES
 ═══════════════════════════════════════════════════════════════════════════ */
 const STYLES = `
-@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=Share+Tech+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=Share+Tech+Mono&family=Cairo:wght@400;600;700;800&display=swap');
 
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -578,6 +587,29 @@ textarea.fi{resize:vertical;min-height:80px}
 .wf{width:100%}
 .dvdr{border:none;border-top:1px solid var(--bdr);margin:14px 0}
 .truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* RTL / Arabic */
+[dir="rtl"]{font-family:'Cairo',sans-serif}
+[dir="rtl"] .sidebar{border-right:none;border-left:1px solid var(--bdr)}
+[dir="rtl"] .sbl-title,[dir="rtl"] .sbl-sub{text-align:center}
+[dir="rtl"] .nav-lbl{text-align:right}
+[dir="rtl"] .nb{text-align:right;flex-direction:row-reverse}
+[dir="rtl"] .nb .ic{margin-left:10px;margin-right:0}
+[dir="rtl"] .sbf{text-align:right}
+[dir="rtl"] .role-lbl,[dir="rtl"] .role-name,[dir="rtl"] .role-detail{text-align:right}
+[dir="rtl"] .topbar{flex-direction:row-reverse}
+[dir="rtl"] .tb-right{flex-direction:row-reverse}
+[dir="rtl"] .ph{flex-direction:row-reverse}
+[dir="rtl"] .field label{text-align:right;display:block}
+[dir="rtl"] .fi{text-align:right}
+[dir="rtl"] .alrt{flex-direction:row-reverse;text-align:right}
+[dir="rtl"] th,[dir="rtl"] td{text-align:right}
+[dir="rtl"] .kpi{text-align:right}
+[dir="rtl"] .fx.aic.jsb{flex-direction:row-reverse}
+[dir="rtl"] .bdg{margin-left:0;margin-right:auto}
+[dir="rtl"] .logout-btn{width:100%}
+[dir="rtl"] .mbn-btn{flex-direction:column}
+[dir="rtl"] select.fi{background-position:left 10px center;padding-right:12px;padding-left:32px}
 `;
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -681,7 +713,8 @@ function PayProgress({inv, compact=false}) {
 /* ═══════════════════════════════════════════════════════════════════════════
    LOGIN SCREEN
 ═══════════════════════════════════════════════════════════════════════════ */
-function LoginScreen({onLogin, onRegister, company}) {
+function LoginScreen({onLogin, onRegister, company, lang, toggleLang}) {
+  const t = (fr, ar) => lang === "ar" ? ar : fr;
   const [email, setEmail]   = useState("");
   const [password, setPwd]  = useState("");
   const [error, setError]   = useState("");
@@ -707,32 +740,37 @@ function LoginScreen({onLogin, onRegister, company}) {
   };
 
   return (
-    <div className="login-shell">
+    <div className="login-shell" dir={lang==="ar"?"rtl":"ltr"} style={lang==="ar"?{fontFamily:"'Cairo',sans-serif"}:{}}>
       <div className="login-box">
+        <div style={{position:"absolute",top:16,right:16}}>
+          <button className="chip chip-dim" style={{cursor:"pointer"}} onClick={toggleLang}>
+            {lang==="ar"?"🇫🇷 FR":"🇩🇿 عر"}
+          </button>
+        </div>
         <div className="login-logo">
           <img src="/logo.png" alt="EPWGCET" className="login-logo-icon"/>
           <div className="login-company">{cof(company,'name')}</div>
           <div className="login-wilaya">{cof(company,'wilaya')}</div>
         </div>
-        <div className="login-title">Connexion</div>
+        <div className="login-title">{t("Connexion","تسجيل الدخول")}</div>
         {error && <div className="alrt ae mb3"><span>⚠</span><span>{error}</span></div>}
         <div className="fg" style={{gap:14}}>
           <div className="field">
-            <label>Adresse e-mail</label>
+            <label>{t("Adresse e-mail","البريد الإلكتروني")}</label>
             <input className="fi" type="email" placeholder="exemple@epwgcet-jijel.dz" value={email}
               onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
           </div>
           <div className="field">
-            <label>Mot de passe</label>
+            <label>{t("Mot de passe","كلمة المرور")}</label>
             <input className="fi" type="password" placeholder="••••••••" value={password}
               onChange={e=>setPwd(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
           </div>
           <button className="btn bp bfw" style={{marginTop:4}} onClick={handleLogin} disabled={loading||!email||!password}>
-            {loading?"Connexion...":"🔐 Se connecter"}
+            {loading?t("Connexion...","جارٍ الدخول..."):t("🔐 Se connecter","🔐 دخول")}
           </button>
         </div>
         <div className="login-switch">
-          Pas encore de compte ? <a onClick={onRegister}>Demander un accès opérateur</a>
+          {t("Pas encore de compte ?","ليس لديك حساب؟")} <a onClick={onRegister}>{t("Demander un accès opérateur","طلب وصول مشغل")}</a>
         </div>
       </div>
     </div>
@@ -742,7 +780,8 @@ function LoginScreen({onLogin, onRegister, company}) {
 /* ═══════════════════════════════════════════════════════════════════════════
    REGISTER SCREEN
 ═══════════════════════════════════════════════════════════════════════════ */
-function RegisterScreen({onBack, onRegistered, sites, company}) {
+function RegisterScreen({onBack, onRegistered, sites, company, lang, toggleLang}) {
+  const t = (fr, ar) => lang === "ar" ? ar : fr;
   const [form, setForm] = useState({name:"",email:"",password:"",phone:"",siteId:"CET-JIJ"});
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -779,82 +818,90 @@ function RegisterScreen({onBack, onRegistered, sites, company}) {
   };
 
   if (sent && verified) return (
-    <div className="login-shell">
+    <div className="login-shell" dir={lang==="ar"?"rtl":"ltr"} style={lang==="ar"?{fontFamily:"'Cairo',sans-serif"}:{}}>
       <div className="login-box" style={{textAlign:"center"}}>
         <div style={{fontSize:48,marginBottom:16}}>✅</div>
-        <div style={{fontFamily:"var(--head)",fontSize:20,fontWeight:800,marginBottom:10}}>E-mail vérifié !</div>
+        <div style={{fontFamily:"var(--head)",fontSize:20,fontWeight:800,marginBottom:10}}>{t("E-mail vérifié !","تم التحقق من البريد!")}</div>
         <p style={{color:"var(--muted)",fontSize:13,lineHeight:1.7,marginBottom:24}}>
-          Votre adresse e-mail a été confirmée. L'administrateur va maintenant valider votre compte.
+          {t("Votre adresse e-mail a été confirmée. L'administrateur va maintenant valider votre compte.",
+             "تم تأكيد بريدك الإلكتروني. سيقوم المسؤول الآن بالتحقق من حسابك.")}
         </p>
-        <button className="btn bp bfw" onClick={onBack}>← Retour à la connexion</button>
+        <button className="btn bp bfw" onClick={onBack}>{t("← Retour à la connexion","← العودة إلى تسجيل الدخول")}</button>
       </div>
     </div>
   );
 
   if (sent) return (
-    <div className="login-shell">
+    <div className="login-shell" dir={lang==="ar"?"rtl":"ltr"} style={lang==="ar"?{fontFamily:"'Cairo',sans-serif"}:{}}>
       <div className="login-box">
         <div className="login-logo">
           <img src="/logo.png" alt="EPWGCET" className="login-logo-icon"/>
           <div className="login-company">{cof(company,'short')}</div>
           <div className="login-wilaya">{cof(company,'wilaya')}</div>
         </div>
-        <div className="login-title">Vérification de l'e-mail</div>
+        <div className="login-title">{t("Vérification de l'e-mail","التحقق من البريد الإلكتروني")}</div>
         <div className="alrt ai mb3">
           <span>📬</span>
           <span style={{fontSize:12}}>
-            Demande envoyée. Contactez l'administrateur pour obtenir votre <strong>code de vérification à 6 chiffres</strong>, puis saisissez-le ci-dessous.
+            {t("Demande envoyée. Contactez l'administrateur pour obtenir votre ",
+               "تم إرسال الطلب. تواصل مع المسؤول للحصول على ")}<strong>{t("code de vérification à 6 chiffres","رمز التحقق المكون من 6 أرقام")}</strong>{t(", puis saisissez-le ci-dessous.",", ثم أدخله أدناه.")}
           </span>
         </div>
         {codeError && <div className="alrt ae mb3"><span>⚠</span><span>{codeError}</span></div>}
         <div className="fg" style={{gap:12}}>
           <div className="field">
-            <label>Code de vérification</label>
+            <label>{t("Code de vérification","رمز التحقق")}</label>
             <input className="fi" placeholder="123456" maxLength={6} value={codeInput}
               onChange={e=>setCodeInput(e.target.value.replace(/\D/g,''))}
               style={{letterSpacing:8,fontSize:20,textAlign:"center"}}/>
           </div>
-          <button className="btn bp bfw" onClick={handleVerifyCode}>✓ Confirmer le code</button>
-          <button className="btn bg bfw" onClick={onBack}>← Retour à la connexion</button>
+          <button className="btn bp bfw" onClick={handleVerifyCode}>{t("✓ Confirmer le code","✓ تأكيد الرمز")}</button>
+          <button className="btn bg bfw" onClick={onBack}>{t("← Retour à la connexion","← العودة إلى تسجيل الدخول")}</button>
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="login-shell">
+    <div className="login-shell" dir={lang==="ar"?"rtl":"ltr"} style={lang==="ar"?{fontFamily:"'Cairo',sans-serif"}:{}}>
       <div className="login-box">
+        <div style={{position:"absolute",top:16,right:16}}>
+          <button className="chip chip-dim" style={{cursor:"pointer"}} onClick={toggleLang}>
+            {lang==="ar"?"🇫🇷 FR":"🇩🇿 عر"}
+          </button>
+        </div>
         <div className="login-logo">
           <img src="/logo.png" alt="EPWGCET" className="login-logo-icon"/>
           <div className="login-company">{cof(company,'short')}</div>
           <div className="login-wilaya">{cof(company,'wilaya')}</div>
         </div>
-        <div className="login-title">Demande d'accès opérateur</div>
+        <div className="login-title">{t("Demande d'accès opérateur","طلب وصول مشغل")}</div>
         {error && <div className="alrt ae mb3"><span>⚠</span><span>{error}</span></div>}
         <div className="alrt ai mb3" style={{marginBottom:16}}>
           <span>ℹ️</span>
-          <span style={{fontSize:11}}>Votre compte sera créé après validation par l'administrateur. Remplissez vos informations complètes.</span>
+          <span style={{fontSize:11}}>{t("Votre compte sera créé après validation par l'administrateur. Remplissez vos informations complètes.",
+            "سيتم إنشاء حسابك بعد التحقق من قِبَل المسؤول. أدخل معلوماتك كاملةً.")}</span>
         </div>
         <div className="fg" style={{gap:12}}>
-          <div className="field"><label>Nom complet</label>
-            <input className="fi" placeholder="Prénom Nom" value={form.name} onChange={e=>set("name",e.target.value)}/>
+          <div className="field"><label>{t("Nom complet","الاسم الكامل")}</label>
+            <input className="fi" placeholder={t("Prénom Nom","الاسم الأول والأخير")} value={form.name} onChange={e=>set("name",e.target.value)}/>
           </div>
-          <div className="field"><label>Adresse e-mail professionnelle</label>
+          <div className="field"><label>{t("Adresse e-mail professionnelle","البريد الإلكتروني المهني")}</label>
             <input className="fi" type="email" placeholder="prenom.nom@epwgcet-jijel.dz" value={form.email} onChange={e=>set("email",e.target.value)}/>
           </div>
-          <div className="field"><label>Téléphone</label>
+          <div className="field"><label>{t("Téléphone","الهاتف")}</label>
             <input className="fi" placeholder="0770 00 00 00" value={form.phone} onChange={e=>set("phone",e.target.value)}/>
           </div>
-          <div className="field"><label>Site d'affectation souhaité</label>
+          <div className="field"><label>{t("Site d'affectation souhaité","الموقع المطلوب")}</label>
             <select className="fi" value={form.siteId} onChange={e=>set("siteId",e.target.value)}>
               {sites.map(s=><option key={s.id} value={s.id}>{s.name} — {s.region}</option>)}
             </select>
           </div>
-          <div className="field"><label>Mot de passe (min. 6 caractères)</label>
+          <div className="field"><label>{t("Mot de passe (min. 6 caractères)","كلمة المرور (6 أحرف على الأقل)")}</label>
             <input className="fi" type="password" placeholder="••••••••" value={form.password} onChange={e=>set("password",e.target.value)}/>
           </div>
-          <button className="btn bp bfw" style={{marginTop:4}} onClick={handleRegister}>📨 Envoyer la demande</button>
-          <button className="btn bg bfw" onClick={onBack}>← Retour</button>
+          <button className="btn bp bfw" style={{marginTop:4}} onClick={handleRegister}>{t("📨 Envoyer la demande","📨 إرسال الطلب")}</button>
+          <button className="btn bg bfw" onClick={onBack}>{t("← Retour","← رجوع")}</button>
         </div>
       </div>
     </div>
@@ -877,7 +924,10 @@ export default function App() {
   const [wasteTypes,  setWasteTypes]  = useState([]);
   const [online,      setOnline]      = useState(true);
   const [clock,       setClock]       = useState(new Date());
-  const [theme,       setTheme]       = useState(() => { try { return localStorage.getItem('theme') || 'light'; } catch { return 'light'; } });  const [loading,     setLoading]     = useState(true);
+  const [theme,       setTheme]       = useState(() => { try { return localStorage.getItem('theme') || 'light'; } catch { return 'light'; } });
+  const [lang,        setLang]        = useState(() => { try { return localStorage.getItem('lang') || 'fr'; } catch { return 'fr'; } });
+  const toggleLang = () => setLang(l => { const n = l==="ar"?"fr":"ar"; localStorage.setItem('lang',n); return n; });
+  const [loading,     setLoading]     = useState(true);
   const [invoices,    setInvoices]    = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [companyTrucks, setCompanyTrucks] = useState([]);
@@ -919,27 +969,32 @@ export default function App() {
   },[]);
 
   if (loading) return (
-    <><style>{STYLES}</style>
+    <LangCtx.Provider value={lang}>
+      <style>{STYLES}</style>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",background:"var(--bg)",flexDirection:"column",gap:16}}>
         <img src="/logo.png" alt="EPWGCET" style={{width:80,height:80,objectFit:"contain",marginBottom:4}}/>
-        <div style={{fontFamily:"var(--head)",fontSize:22,fontWeight:800,color:"var(--g)",letterSpacing:".04em"}}>Chargement…</div>
-        <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--muted)"}}>Connexion à la base de données…</div>
+        <div style={{fontFamily:"var(--head)",fontSize:22,fontWeight:800,color:"var(--g)",letterSpacing:".04em"}}>{lang==="ar"?"جارٍ التحميل…":"Chargement…"}</div>
+        <div style={{fontFamily:"var(--mono)",fontSize:11,color:"var(--muted)"}}>{lang==="ar"?"الاتصال بقاعدة البيانات…":"Connexion à la base de données…"}</div>
       </div>
-    </>
+    </LangCtx.Provider>
   );
 
   if (!authUser) {
     if (authScreen === "register") return (
-      <><style>{STYLES}</style>
+      <LangCtx.Provider value={lang}>
+        <style>{STYLES}</style>
         <RegisterScreen onBack={()=>setAuthScreen("login")} sites={sites}
-          onRegistered={u=>{ setUsers(p=>[...p,u]); setAuthScreen("login"); }} company={company}/>
-      </>
+          onRegistered={u=>{ setUsers(p=>[...p,u]); setAuthScreen("login"); }} company={company}
+          lang={lang} toggleLang={toggleLang}/>
+      </LangCtx.Provider>
     );
     return (
-      <><style>{STYLES}</style>
+      <LangCtx.Provider value={lang}>
+        <style>{STYLES}</style>
         <LoginScreen onLogin={u=>{setAuthUser(u);localStorage.setItem('authUser',JSON.stringify(u));const p=u.role==="admin"?"dashboard":"gate";localStorage.setItem('currentPage',p);setPage(p);}}
-          onRegister={()=>setAuthScreen("register")} company={company}/>
-      </>
+          onRegister={()=>setAuthScreen("register")} company={company}
+          lang={lang} toggleLang={toggleLang}/>
+      </LangCtx.Provider>
     );
   }
 
@@ -1031,26 +1086,26 @@ export default function App() {
   const alerts = flagged + pendingOps + pendingClients;
 
   const navAdmin = [
-    {id:"dashboard",  lbl:"Tableau de Bord",   ic:"📊"},
-    {id:"gate",       lbl:"Saisie Dépôt",       ic:"🚛"},
-    {id:"discharges", lbl:"Déchargements",      ic:"🗂", bdg:flagged||null},
-    {id:"clients",    lbl:"Clients",            ic:"🏢", bdg:pendingClients||null},
-    {id:"operators",  lbl:"Opérateurs",         ic:"👷", bdg:pendingOps||null},
-    {id:"invoice",    lbl:"Factures / Relevés", ic:"🧾"},
-    {id:"settings",   lbl:"Paramètres",         ic:"⚙️"},
+    {id:"dashboard",  lbl:lang==="ar"?"لوحة التحكم":"Tableau de Bord",   ic:"📊"},
+    {id:"gate",       lbl:lang==="ar"?"تسجيل إيداع":"Saisie Dépôt",       ic:"🚛"},
+    {id:"discharges", lbl:lang==="ar"?"التفريغات":"Déchargements",        ic:"🗂", bdg:flagged||null},
+    {id:"clients",    lbl:lang==="ar"?"العملاء":"Clients",                ic:"🏢", bdg:pendingClients||null},
+    {id:"operators",  lbl:lang==="ar"?"المشغلون":"Opérateurs",            ic:"👷", bdg:pendingOps||null},
+    {id:"invoice",    lbl:lang==="ar"?"الفواتير / الكشوف":"Factures / Relevés", ic:"🧾"},
+    {id:"settings",   lbl:lang==="ar"?"الإعدادات":"Paramètres",           ic:"⚙️"},
   ];
   const navOp = [
-    {id:"gate",       lbl:"Saisie Dépôt",       ic:"🚛"},
-    {id:"discharges", lbl:"Historique",          ic:"🗂"},
+    {id:"gate",       lbl:lang==="ar"?"تسجيل إيداع":"Saisie Dépôt",       ic:"🚛"},
+    {id:"discharges", lbl:lang==="ar"?"السجل":"Historique",                ic:"🗂"},
   ];
   const nav = isAdmin ? navAdmin : navOp;
   const pageTitle = [...navAdmin,...navOp].find(n=>n.id===page)?.lbl ?? "—";
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <>
+    <LangCtx.Provider value={lang}>
       <style>{STYLES}</style>
-      <div className="shell">
+      <div className="shell" dir={lang==="ar"?"rtl":"ltr"}>
         <div className={`sidebar-backdrop${sidebarOpen?" open":""}`} onClick={closeSidebar}/>
         <aside className={`sidebar${sidebarOpen?" open":""}`}>
           <div className="sbl">
@@ -1060,7 +1115,7 @@ export default function App() {
           </div>
           <nav>
             <div className="nav-grp">
-              <div className="nav-lbl">Navigation</div>
+              <div className="nav-lbl">{lang==="ar"?"التنقل":"Navigation"}</div>
               {nav.map(n=>(
                 <button key={n.id} className={`nb${page===n.id?" act":""}`} onClick={()=>{setPage(n.id);closeSidebar();}}>
                   <span className="ic">{n.ic}</span>{n.lbl}
@@ -1071,12 +1126,12 @@ export default function App() {
           </nav>
           <div className="sbf">
             <div className="role-card">
-              <div className="role-lbl">Connecté en tant que</div>
+              <div className="role-lbl">{lang==="ar"?"متصل بصفة":"Connecté en tant que"}</div>
               <div className="role-name">{authUser.name}</div>
-              <div className="role-detail">{isAdmin?"👔 Administrateur":"🦺 Opérateur"}{opSite?` · ${opSite.name}`:""}</div>
+              <div className="role-detail">{isAdmin?(lang==="ar"?"👔 مدير":"👔 Administrateur"):(lang==="ar"?"🦺 مشغل":"🦺 Opérateur")}{opSite?` · ${opSite.name}`:""}</div>
             </div>
             <button className="logout-btn" onClick={()=>{setAuthUser(null);localStorage.removeItem('authUser');localStorage.removeItem('currentPage');setAuthScreen("login");}}>
-                🚪 Déconnexion
+              🚪 {lang==="ar"?"تسجيل الخروج":"Déconnexion"}
             </button>
           </div>
         </aside>
@@ -1090,11 +1145,15 @@ export default function App() {
                 {clock.toLocaleTimeString("fr-DZ",{hour:"2-digit",minute:"2-digit"})}
               </span>
               <button className={`chip ${online?"chip-ok":"chip-warn"} chip-hide-mobile`} onClick={()=>setOnline(o=>!o)}>
-                {online?"🟢 En ligne":"🟡 Hors ligne"}
+                {online?(lang==="ar"?"🟢 متصل":"🟢 En ligne"):(lang==="ar"?"🟡 غير متصل":"🟡 Hors ligne")}
               </button>
               {alerts>0&&<span className="chip chip-err">⚠ {alerts}</span>}
+              <button className="chip chip-dim" style={{cursor:"pointer"}} onClick={toggleLang}
+                title={lang==="ar"?"Passer en Français":"التبديل إلى العربية"}>
+                {lang==="ar"?"🇫🇷 FR":"🇩🇿 عر"}
+              </button>
               <button className="chip chip-dim" style={{cursor:"pointer"}}
-onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.setItem('theme', next); return next; })}                title={theme==="dark"?"Passer en mode clair":"Passer en mode sombre"}>
+onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.setItem('theme', next); return next; })}                title={theme==="dark"?(lang==="ar"?"وضع فاتح":"Passer en mode clair"):(lang==="ar"?"وضع داكن":"Passer en mode sombre")}>
                 {theme==="dark"?"☀️":"🌙"}
               </button>
             </div>
@@ -1122,7 +1181,7 @@ onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.
           </nav>
         </main>
       </div>
-    </>
+    </LangCtx.Provider>
   );
 }
 
@@ -1130,6 +1189,7 @@ onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.
    DASHBOARD
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
+  const t = useT();
   const rotIds    = new Set(clients.filter(c=>c.type==="rotation").map(c=>c.id));
   const totalRev  = discharges.reduce((s,d)=>s+d.total,0);
   const totalTons = discharges.filter(d=>!rotIds.has(d.clientId)).reduce((s,d)=>s+d.net,0);
@@ -1150,7 +1210,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
         <div className="alrt ae mb4">
           <span style={{fontSize:18}}>🚨</span>
           <div>
-            <strong>{flagged.length} déchargement(s) avec dépassement de crédit</strong>
+            <strong>{flagged.length} {t("déchargement(s) avec dépassement de crédit","تفريغ(ات) تجاوزت حد الائتمان")}</strong>
             <div className="mt1">{flagged.map(d=>d.clientName).filter((v,i,a)=>a.indexOf(v)===i).join(", ")}</div>
           </div>
         </div>
@@ -1159,7 +1219,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
         <div className="alrt aw mb4">
           <span style={{fontSize:18}}>📋</span>
           <div>
-            <strong>{pendingC.length} client(s) convention en attente de validation</strong>
+            <strong>{pendingC.length} {t("client(s) convention en attente de validation","عميل(اء) اتفاقية في انتظار المصادقة")}</strong>
             <div className="mt1">{pendingC.map(c=>c.name).join(", ")}</div>
           </div>
         </div>
@@ -1167,10 +1227,10 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
 
       <div className="kpi-grid">
         {[
-          {kc:"var(--g)",    ic:"💰", l:"Recettes Totales",    v:fmt(totalRev),           s:"Cumul depuis le début de l'activité"},
-          {kc:"var(--info)", ic:"⚖️", l:"Tonnage Total",       v:fmtN(totalTons)+" t",    s:discharges.length+" déchargements"},
-          {kc:"var(--g2)",   ic:"💳", l:"Paiements Directs",    v:fmt(cashRev),             s:`${cashCount} espèces · ${tpeCount} TPE`},
-          {kc:"var(--warn)", ic:"🏭", l:"Sites Actifs",        v:String(sites.length),    s:"3 CET · 1 CDI · Wilaya Jijel"},
+          {kc:"var(--g)",    ic:"💰", l:t("Recettes Totales","الإيرادات الإجمالية"),    v:fmt(totalRev),           s:t("Cumul depuis le début de l'activité","مجموع منذ بدء النشاط")},
+          {kc:"var(--info)", ic:"⚖️", l:t("Tonnage Total","الحمولة الإجمالية"),          v:fmtN(totalTons)+" t",    s:discharges.length+" "+t("déchargements","تفريغ")},
+          {kc:"var(--g2)",   ic:"💳", l:t("Paiements Directs","المدفوعات المباشرة"),      v:fmt(cashRev),             s:`${cashCount} ${t("espèces","نقد")} · ${tpeCount} TPE`},
+          {kc:"var(--warn)", ic:"🏭", l:t("Sites Actifs","المواقع النشطة"),              v:String(sites.length),    s:"3 CET · 1 CDI · "+t("Wilaya Jijel","ولاية جيجل")},
         ].map(k=>(
           <div key={k.l} className="kpi" style={{"--kc":k.kc}}>
             <div className="kpi-i">{k.ic}</div>
@@ -1184,20 +1244,20 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
       <div className="dash-2col" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
         <div className="panel">
           <div className="ph">
-            <span className="pt">Derniers Déchargements</span>
-            <button className="btn bg bsm" onClick={()=>setPage("discharges")}>Voir tout →</button>
+            <span className="pt">{t("Derniers Déchargements","آخر التفريغات")}</span>
+            <button className="btn bg bsm" onClick={()=>setPage("discharges")}>{t("Voir tout →","عرض الكل →")}</button>
           </div>
           <div className="tw">
             <table>
-              <thead><tr><th>Camion</th><th>Client</th><th>Opération</th><th>Net(t)</th><th>Total</th><th>Statut</th></tr></thead>
+              <thead><tr><th>{t("Camion","الشاحنة")}</th><th>{t("Client","العميل")}</th><th>{t("Opération","العملية")}</th><th>{t("Net(t)","الصافي(ط)")}</th><th>{t("Total","المجموع")}</th><th>{t("Statut","الحالة")}</th></tr></thead>
               <tbody>
                 {discharges.slice(0,6).map(d=>(
                   <tr key={d.id}>
                     <td><span className="mn">{d.truck}</span></td>
                     <td style={{maxWidth:110}} className="truncate">{d.clientName}</td>
                     <td>{d.opType==="collect"
-                      ?<span className="badge" style={{background:"rgba(139,92,246,.12)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:9,whiteSpace:"nowrap"}}>🚛 Collecte</span>
-                      :<span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:9,whiteSpace:"nowrap"}}>🏭 Traitement</span>
+                      ?<span className="badge" style={{background:"rgba(139,92,246,.12)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:9,whiteSpace:"nowrap"}}>{t("🚛 Collecte","🚛 جمع")}</span>
+                      :<span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:9,whiteSpace:"nowrap"}}>{t("🏭 Traitement","🏭 معالجة")}</span>
                     }</td>
                     <td><span className="mn">{fmtN(d.net)}</span></td>
                     <td><span className="mn tg">{fmt(d.total)}</span></td>
@@ -1211,7 +1271,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
 
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div className="panel">
-            <div className="ph"><span className="pt">Capacité des Sites</span></div>
+            <div className="ph"><span className="pt">{t("Capacité des Sites","طاقة المواقع")}</span></div>
             <div style={{padding:"14px 18px",display:"flex",flexDirection:"column",gap:14}}>
               {sites.map(s=>{
                 const pct=Math.round((s.used/s.capacity)*100);
@@ -1245,13 +1305,13 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
           </div>
 
           <div className="panel">
-            <div className="ph"><span className="pt">Répartition par Type</span></div>
+            <div className="ph"><span className="pt">{t("Répartition par Type","التوزيع حسب النوع")}</span></div>
             <div style={{padding:"10px 18px",display:"flex",flexDirection:"column",gap:8}}>
               {byWaste.filter(w=>w.count>0).map(w=>(
                 <div key={w.id} className="fx aic jsb">
                   <div>
                     <span style={{fontSize:12,fontWeight:600}}>{w.label}</span>
-                    <span className="tsm tmu" style={{marginLeft:8}}>{w.count} dépôts</span>
+                    <span className="tsm tmu" style={{marginLeft:8}}>{w.count} {t("dépôts","إيداع")}</span>
                   </div>
                   <span className="mn tsm tg">{fmtN(w.tons)} t</span>
                 </div>
@@ -1262,10 +1322,10 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
       </div>
 
       <div className="panel">
-        <div className="ph"><span className="pt">Clients Compte — Quotas, Crédit & Prépayé</span></div>
+        <div className="ph"><span className="pt">{t("Clients Compte — Quotas, Crédit & Prépayé","حسابات العملاء — الحصص، الائتمان والمدفوع مسبقاً")}</span></div>
         <div className="tw">
           <table>
-            <thead><tr><th>Client</th><th>Type</th><th>Mode</th><th>Limite</th><th>Utilisé</th><th>Progression</th><th>Statut</th></tr></thead>
+            <thead><tr><th>{t("Client","العميل")}</th><th>{t("Type","النوع")}</th><th>{t("Mode","الوضع")}</th><th>{t("Limite","الحد")}</th><th>{t("Utilisé","المستخدم")}</th><th>{t("Progression","التقدم")}</th><th>{t("Statut","الحالة")}</th></tr></thead>
             <tbody>
               {clients.filter(c=>c.type==="convention"||c.type==="rotation"||c.type==="credit"||c.type==="prepaid").map(c=>{
                 const yr = new Date().getFullYear().toString();
@@ -1289,30 +1349,30 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
                     <td style={{fontWeight:600}}>{c.name}</td>
                     <td>
                       {isPrepaid
-                        ?<span className="badge b-info">🎫 Prépayé</span>
+                        ?<span className="badge b-info">🎫 {t("Prépayé","مدفوع مسبقاً")}</span>
                         :isRotation
-                          ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Rotation</span>
-                          :<span className={`badge ${c.clientType==="state"?"b-purple":"b-info"}`}>{c.clientType==="state"?"🏛 État":"🏢 Privé"}</span>}
+                          ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 {t("Rotation","دوراني")}</span>
+                          :<span className={`badge ${c.clientType==="state"?"b-purple":"b-info"}`}>{c.clientType==="state"?t("🏛 État","🏛 دولة"):t("🏢 Privé","🏢 خاص")}</span>}
                     </td>
                     <td>
                       {isPrepaid
-                        ?<span className="badge b-info">🎫 Solde Prépayé</span>
+                        ?<span className="badge b-info">🎫 {t("Solde Prépayé","رصيد مدفوع مسبقاً")}</span>
                         :c.creditEnabled
-                          ?<span className="badge b-purple">💳 Crédit DA</span>
+                          ?<span className="badge b-purple">💳 {t("Crédit DA","ائتمان دج")}</span>
                           :isRotation
-                            ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>{c.payFrequency==="monthly"?"🔄 Rotations/mois":"🔄 Rotations/an"}</span>
-                            :<span className="badge b-info">{c.payFrequency==="monthly"?"⚖️ Tonnage/mois":"⚖️ Tonnage/an"}</span>}
+                            ?<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>{c.payFrequency==="monthly"?t("🔄 Rotations/mois","🔄 دورات/شهر"):t("🔄 Rotations/an","🔄 دورات/سنة")}</span>
+                            :<span className="badge b-info">{c.payFrequency==="monthly"?t("⚖️ Tonnage/mois","⚖️ طن/شهر"):t("⚖️ Tonnage/an","⚖️ طن/سنة")}</span>}
                     </td>
                     <td><span className="mn">{c.status==="approved"?(isPrepaid?fmt(c.creditLimit):c.creditEnabled?fmt(c.creditLimit):c.weightLimitYear?(isRotation?c.weightLimitYear+" rot.":(fmtN(c.weightLimitYear)+" t")):"—"):"—"}</span></td>
                     <td>{c.status==="approved"?(isPrepaid?(
                       c.consumed>c.creditLimit
-                        ?<span className="mn" style={{color:"var(--err)",fontWeight:700}}>⚠ {fmt(c.consumed-c.creditLimit)} <span style={{fontSize:9,fontWeight:400,color:"var(--err)"}}>dépassement</span></span>
+                        ?<span className="mn" style={{color:"var(--err)",fontWeight:700}}>⚠ {fmt(c.consumed-c.creditLimit)} <span style={{fontSize:9,fontWeight:400,color:"var(--err)"}}>{t("dépassement","تجاوز")}</span></span>
                         :<span className="mn">{fmt(c.consumed)}</span>
                     ):c.creditEnabled?(
                       c.consumed>c.creditLimit
-                        ?<span className="mn" style={{color:"var(--err)",fontWeight:700}}>⚠ {fmt(c.consumed-c.creditLimit)} <span style={{fontSize:9,fontWeight:400,color:"var(--err)"}}>dette</span></span>
+                        ?<span className="mn" style={{color:"var(--err)",fontWeight:700}}>⚠ {fmt(c.consumed-c.creditLimit)} <span style={{fontSize:9,fontWeight:400,color:"var(--err)"}}>{t("dette","دين")}</span></span>
                         :<span className="mn">{fmt(c.consumed)}</span>
-                    ):isRotation?<span className="mn">{usedRot+" rot."}</span>:<span className="mn">{fmtN(usedW)+" t"}</span>):<span className="mn">—</span>}</td>
+                    ):isRotation?<span className="mn">{usedRot+" "+t("rot.","دورة")}</span>:<span className="mn">{fmtN(usedW)+" t"}</span>):<span className="mn">—</span>}</td>
                     <td style={{minWidth:120}}>
                       {c.status==="approved"&&(isPrepaid?c.creditLimit:(c.creditEnabled?c.creditLimit:c.weightLimitYear))>0?(
                         <div className="fx aic g2">
@@ -1337,6 +1397,7 @@ function PageDashboard({discharges,clients,sites,wasteTypes,setPage}) {
    GATE — SAISIE OPÉRATEUR
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharges, authUser, company, companyTrucks}) {
+  const t = useT();
   const isAdmin = authUser.role === "admin";
   const defaultSite = isAdmin ? sites[0]?.id : authUser.siteId;
 
@@ -1547,7 +1608,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
       <div style={{maxWidth:460,margin:"0 auto"}}>
         <div className="alrt ao mb4">
           <span style={{fontSize:20}}>🟢</span>
-          <div><strong>Barrière Ouverte — Déchargement autorisé</strong><div className="mt1 tsm">Reçu #{lastEntry.id}</div></div>
+          <div><strong>{t("Barrière Ouverte — Déchargement autorisé","الحاجز مفتوح — التفريغ مأذون")}</strong><div className="mt1 tsm">{t("Reçu","إيصال")} #{lastEntry.id}</div></div>
         </div>
         <div className="rcpt-print-area">
           <div className="rcpt">
@@ -1556,26 +1617,26 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
               <div className="tmu" style={{marginTop:3,fontSize:11}}>{recSite?.name} — {recSite?.region}</div>
               <div className="tmu" style={{fontSize:10}}>{fmtTs(lastEntry.ts)} · #{lastEntry.id}</div>
             </div>
-            {[["Client",lastEntry.clientName],
+            {[[t("Client","العميل"),lastEntry.clientName],
               ...(clients.find(c=>c.id===lastEntry.clientId)?.nif ? [["N° CIN/NIF",clients.find(c=>c.id===lastEntry.clientId).nif]] : []),
-              ["Camion",lastEntry.truck],
-              ["Type déchets",wasteTypes.find(w=>w.id===lastEntry.wasteType)?.label],
-              ["Poids brut",fmtN(lastEntry.gross)+" t"],["Tare",fmtN(lastEntry.tare)+" t"],
-              ["Poids net",fmtN(lastEntry.net)+" t"],
-              ...(lastEntry.payMethod!=="rotation"?[["Tarif",fmt(lastEntry.unitPrice)+"/t"]]:[]),
+              [t("Camion","الشاحنة"),lastEntry.truck],
+              [t("Type déchets","نوع النفايات"),wasteTypes.find(w=>w.id===lastEntry.wasteType)?.label],
+              [t("Poids brut","الوزن الإجمالي"),fmtN(lastEntry.gross)+" t"],[t("Tare","التار"),fmtN(lastEntry.tare)+" t"],
+              [t("Poids net","الوزن الصافي"),fmtN(lastEntry.net)+" t"],
+              ...(lastEntry.payMethod!=="rotation"?[[t("Tarif","التعريفة"),fmt(lastEntry.unitPrice)+"/t"]]:[]),
             ].map(([l,v])=><div key={l} className="rr"><span>{l}</span><span>{v}</span></div>)}
             {lastEntry.payMethod==="rotation"
-              ?<div className="rrttl" style={{color:"var(--orange)"}}><span>ROTATIONS</span><span>+1 rotation</span></div>
-              :<div className="rrttl"><span>TOTAL</span><span>{fmt(lastEntry.total)}</span></div>}
+              ?<div className="rrttl" style={{color:"var(--orange)"}}><span>{t("ROTATIONS","الدورات")}</span><span>+1 {t("rotation","دورة")}</span></div>
+              :<div className="rrttl"><span>{t("TOTAL","المجموع")}</span><span>{fmt(lastEntry.total)}</span></div>}
             <div style={{textAlign:"center",marginTop:12,color:"var(--muted)",fontSize:10}}>
-              {lastEntry.payMethod==="cash"?"💵 Payé en espèces":lastEntry.payMethod==="tpe"?"💳 Payé par TPE":lastEntry.payMethod==="rotation"?"🔄 Convention Rotation":"📋 Crédit compte mensuel"}<br/>
+              {lastEntry.payMethod==="cash"?t("💵 Payé en espèces","💵 مدفوع نقداً"):lastEntry.payMethod==="tpe"?t("💳 Payé par TPE","💳 مدفوع بـTPE"):lastEntry.payMethod==="rotation"?t("🔄 Convention Rotation","🔄 اتفاقية دوراني"):t("📋 Crédit compte mensuel","📋 ائتمان حساب شهري")}<br/>
               {cof(company,'wilaya')}
             </div>
           </div>
           <div className="rcpt-actions fx g3 mt4">
-            <button className="btn bg" style={{flex:1}} onClick={()=>alert("📱 SMS/WhatsApp envoyé (simulation)")}>📤 Envoyer SMS</button>
-            <button className="btn bi" style={{flex:1}} onClick={()=>window.print()}>🖨 Imprimer</button>
-            <button className="btn bp" style={{flex:1}} onClick={reset}>➕ Nouveau Dépôt</button>
+            <button className="btn bg" style={{flex:1}} onClick={()=>alert(t("📱 SMS/WhatsApp envoyé (simulation)","📱 تم إرسال الرسالة (محاكاة)"))}>{t("📤 Envoyer SMS","📤 إرسال SMS")}</button>
+            <button className="btn bi" style={{flex:1}} onClick={()=>window.print()}>{t("🖨 Imprimer","🖨 طباعة")}</button>
+            <button className="btn bp" style={{flex:1}} onClick={reset}>{t("➕ Nouveau Dépôt","➕ إيداع جديد")}</button>
           </div>
         </div>
       </div>
@@ -1586,7 +1647,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
     <div style={{maxWidth:700,margin:"0 auto"}}>
       {/* Steps */}
       <div className="fx aic g3 mb4" style={{fontSize:12,fontFamily:"var(--mono)"}}>
-        {["1 · Identification","2 · Pesée","3 · Validation"].map((s,i)=>(
+        {[t("1 · Identification","1 · التعريف"),t("2 · Pesée","2 · الوزن"),t("3 · Validation","3 · التأكيد")].map((s,i)=>(
           <div key={i} className="fx aic g3">
             {i>0&&<span style={{color:"var(--dim)"}}>——</span>}
             <span style={{color:step===i+1?"var(--g)":step>i+1?"var(--g2)":"var(--muted)",fontWeight:step===i+1?700:400}}>
@@ -1598,7 +1659,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
 
       {/* Operation type toggle — always visible */}
       <div className="gate-mode">
-        <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>Type d'opération</div>
+        <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>{t("Type d'opération","نوع العملية")}</div>
         <div className="seg">
           <button className={`seg-btn${opType==="treatment"?" active":""}`}
             onClick={()=>{setOpType("treatment");set("clientId","");setHint(null);}}>
@@ -1615,7 +1676,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
       {/* Mode toggle (treatment only) */}
       {opType==="treatment"&&(
       <div className="gate-mode">
-        <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>Type de client</div>
+        <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>{t("Type de client","نوع العميل")}</div>
         <div className="seg">
           <button className={`seg-btn${mode==="convention"?" active":""}`} onClick={()=>{setMode("convention");set("clientId","");setHint(null);}}>
             📋 Convention Tonnes
@@ -1640,7 +1701,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
       {/* Sub-type toggle (collect mode only) */}
       {opType==="collect"&&(
       <div className="gate-mode">
-        <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>Type de facturation</div>
+        <div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:".12em"}}>{t("Type de facturation","نوع الفوترة")}</div>
         <div className="seg">
           <button className={`seg-btn${collectMode==="tonnage"?" active":""}`}
             onClick={()=>{setCollectMode("tonnage");set("clientId","");}}
@@ -2301,6 +2362,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
    DISCHARGES HISTORY
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients,invoices,updateClient,updateDischarge,isAdmin,authUser,company}) {
+  const t = useT();
   const opSiteId = (!isAdmin && authUser?.siteId && authUser.siteId!=="all") ? authUser.siteId : null;
   const [filter,  setFilter]  = useState("all");
   const [search,  setSearch]  = useState("");
@@ -2402,38 +2464,38 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
   return (
     <>
       <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"flex-end"}}>
-        <input className="fi" style={{width:200}} placeholder="🔍 Camion ou client..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        <input className="fi" style={{width:200}} placeholder={t("🔍 Camion ou client...","🔍 شاحنة أو عميل...")} value={search} onChange={e=>setSearch(e.target.value)}/>
         {opSiteId ? (
           <span className="badge b-info" style={{padding:"6px 12px",fontSize:11}}>
             🏭 {sites.find(s=>s.id===opSiteId)?.name||opSiteId}
           </span>
         ) : (
           <select className="fi" style={{width:160}} value={siteF} onChange={e=>setSiteF(e.target.value)}>
-            <option value="all">Tous les sites</option>
+            <option value="all">{t("Tous les sites","كل المواقع")}</option>
             {sites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         )}
         {/* Date range */}
         <div className="field" style={{margin:0}}>
-          <label style={{fontFamily:"var(--mono)",fontSize:8,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".12em"}}>Du</label>
+          <label style={{fontFamily:"var(--mono)",fontSize:8,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".12em"}}>{t("Du","من")}</label>
           <input className="fi" type="date" style={{width:140}} value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/>
         </div>
         <div className="field" style={{margin:0}}>
-          <label style={{fontFamily:"var(--mono)",fontSize:8,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".12em"}}>Au</label>
+          <label style={{fontFamily:"var(--mono)",fontSize:8,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".12em"}}>{t("Au","إلى")}</label>
           <input className="fi" type="date" style={{width:140}} value={dateTo} onChange={e=>setDateTo(e.target.value)}/>
         </div>
         {(dateFrom||dateTo)&&(
           <button className="btn bg bsm" style={{alignSelf:"flex-end"}} onClick={()=>{setDateFrom("");setDateTo("");}}>✕ Reset</button>
         )}
         <div className="fx aic g2" style={{alignSelf:"flex-end"}}>
-          {[["all","Tous"],["cash","💵 Cash"],["convention","📋 Convention"],["flagged",`⚠ Alertes${flaggedCount>0?` (${flaggedCount})`:""}`]].map(([f,l])=>(
+          {[["all",t("Tous","الكل")],["cash","💵 Cash"],["convention","📋 Convention"],["flagged",`⚠ ${t("Alertes","تنبيهات")}${flaggedCount>0?` (${flaggedCount})`:""}`]].map(([f,l])=>(
             <button key={f} className={`btn bsm ${filter===f?f==="flagged"?"bw":"bp":"bg"}`} onClick={()=>setFilter(f)}>{l}</button>
           ))}
         </div>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"flex-end",gap:10}}>
           <div style={{textAlign:"right"}}>
             <div className="mn tsm tg">{fmt(totalFiltered)}</div>
-            <div className="tsm tmu">{filtered.length} entrées · {fmtN(tonsFiltered)} t</div>
+            <div className="tsm tmu">{filtered.length} {t("entrées","سجل")} · {fmtN(tonsFiltered)} t</div>
           </div>
           <button className="btn bg bsm" onClick={exportCSV} disabled={filtered.length===0}
             title="Exporter en CSV (Excel)" style={{whiteSpace:"nowrap"}}>
@@ -2445,40 +2507,40 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
       {/* ── Second filter row ── */}
       <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
         <select className="fi" style={{width:180}} value={clientF} onChange={e=>setClientF(e.target.value)}>
-          <option value="all">👤 Tous les clients</option>
+          <option value="all">{t("👤 Tous les clients","👤 كل العملاء")}</option>
           {[...new Map(discharges.map(d=>[d.clientId,d.clientName])).entries()]
             .sort((a,b)=>a[1].localeCompare(b[1]))
             .map(([id,name])=><option key={id} value={id}>{name}</option>)}
         </select>
         <select className="fi" style={{width:175}} value={wasteF} onChange={e=>setWasteF(e.target.value)}>
-          <option value="all">♻️ Type de déchet</option>
+          <option value="all">{t("♻️ Type de déchet","♻️ نوع النفايات")}</option>
           {wasteTypes.map(w=><option key={w.id} value={w.id}>{w.label}</option>)}
         </select>
         <select className="fi" style={{width:160}} value={opTypeF} onChange={e=>setOpTypeF(e.target.value)}>
-          <option value="all">⚙️ Opération</option>
-          <option value="treatment">Traitement</option>
-          <option value="rotation">Rotation</option>
-          <option value="collect">Collecte</option>
+          <option value="all">{t("⚙️ Opération","⚙️ العملية")}</option>
+          <option value="treatment">{t("Traitement","معالجة")}</option>
+          <option value="rotation">{t("Rotation","دوراني")}</option>
+          <option value="collect">{t("Collecte","جمع")}</option>
         </select>
         <select className="fi" style={{width:155}} value={modeF} onChange={e=>setModeF(e.target.value)}>
-          <option value="all">💳 Mode paiement</option>
-          <option value="cash">Espèces</option>
-          <option value="tpe">TPE — Carte</option>
-          <option value="convention">Convention</option>
-          <option value="credit">Crédit</option>
-          <option value="prepaid">Prépayé</option>
-          <option value="rotation">Rotation</option>
+          <option value="all">{t("💳 Mode paiement","💳 طريقة الدفع")}</option>
+          <option value="cash">{t("Espèces","نقد")}</option>
+          <option value="tpe">TPE — {t("Carte","بطاقة")}</option>
+          <option value="convention">{t("Convention","اتفاقية")}</option>
+          <option value="credit">{t("Crédit","ائتمان")}</option>
+          <option value="prepaid">{t("Prépayé","مدفوع مسبقاً")}</option>
+          <option value="rotation">{t("Rotation","دوراني")}</option>
         </select>
         <select className="fi" style={{width:140}} value={statusF} onChange={e=>setStatusF(e.target.value)}>
-          <option value="all">📋 Statut</option>
+          <option value="all">{t("📋 Statut","📋 الحالة")}</option>
           <option value="ok">OK</option>
-          <option value="paid">Payé</option>
-          <option value="settled">Réglé</option>
-          <option value="flagged">⚠ Alerte</option>
-          <option value="cancelled">Annulé</option>
+          <option value="paid">{t("Payé","مدفوع")}</option>
+          <option value="settled">{t("Réglé","مُسوَّى")}</option>
+          <option value="flagged">{t("⚠ Alerte","⚠ تنبيه")}</option>
+          <option value="cancelled">{t("Annulé","ملغى")}</option>
         </select>
         <select className="fi" style={{width:145}} value={truckF} onChange={e=>setTruckF(e.target.value)}>
-          <option value="all">🚛 Camion</option>
+          <option value="all">{t("🚛 Camion","🚛 الشاحنة")}</option>
           {[...new Set(discharges.map(d=>d.truck).filter(Boolean))].sort()
             .map(t=><option key={t} value={t}>{t}</option>)}
         </select>
@@ -2493,8 +2555,8 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
         <div className="alrt ae mb4" style={{cursor:"pointer"}} onClick={()=>setFilter("flagged")}>
           <span style={{fontSize:18}}>🚨</span>
           <div>
-            <strong>{flaggedCount} déchargement(s) nécessitent une régularisation de crédit</strong>
-            <div className="mt1" style={{fontSize:11}}>Cliquez pour afficher · Bouton "Régulariser" disponible sur chaque ligne</div>
+            <strong>{flaggedCount} {t("déchargement(s) nécessitent une régularisation de crédit","تفريغ(ات) تتطلب تسوية ائتمانية")}</strong>
+            <div className="mt1" style={{fontSize:11}}>{t("Cliquez pour afficher · Bouton \"Régulariser\" disponible sur chaque ligne","اضغط للعرض · زر «تسوية» متاح في كل سطر")}</div>
           </div>
         </div>
       )}
@@ -2504,8 +2566,8 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
           <table>
             <thead>
               <tr>
-                <th>ID</th><th>Date/Heure</th><th>Site</th><th>Camion</th><th>Client</th>
-                <th>Type</th><th>Opération</th><th>Net(t)</th><th>Tarif</th><th>Total HT</th><th>Net à payer</th><th>Mode</th><th>Statut</th><th>Op.</th><th>Action</th>
+                <th>ID</th><th>{t("Date/Heure","التاريخ/الوقت")}</th><th>{t("Site","الموقع")}</th><th>{t("Camion","الشاحنة")}</th><th>{t("Client","العميل")}</th>
+                <th>{t("Type","النوع")}</th><th>{t("Opération","العملية")}</th><th>{t("Net(t)","الصافي(ط)")}</th><th>{t("Tarif","التعريفة")}</th><th>{t("Total HT","المجموع")}</th><th>{t("Net à payer","الصافي للدفع")}</th><th>{t("Mode","الوضع")}</th><th>{t("Statut","الحالة")}</th><th>{t("Op.","المشغل")}</th><th>{t("Action","الإجراء")}</th>
               </tr>
             </thead>
             <tbody>
@@ -2536,8 +2598,8 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
                     </td>
                     <td><span className="badge b-purple">{wt?.label.split(" ")[0]}</span></td>
                     <td>{d.opType==="collect"
-                      ?<span className="badge" style={{background:"rgba(139,92,246,.12)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:9,whiteSpace:"nowrap"}}>🚛 Collecte</span>
-                      :<span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:9,whiteSpace:"nowrap"}}>🏭 Traitement</span>
+                      ?<span className="badge" style={{background:"rgba(139,92,246,.12)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:9,whiteSpace:"nowrap"}}>{t("🚛 Collecte","🚛 جمع")}</span>
+                      :<span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:9,whiteSpace:"nowrap"}}>{t("🏭 Traitement","🏭 معالجة")}</span>
                     }</td>
                     <td><span className="mn">{fmtN(d.net)}</span></td>
                     <td><span className="mn tmu">{fmt(d.unitPrice)}{d.payMethod==="rotation"?<span style={{fontSize:9,marginLeft:2}}>/rot.</span>:<span style={{fontSize:9,marginLeft:2}}>/t</span>}</span></td>
@@ -2803,6 +2865,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
    CLIENTS
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageClients({clients,discharges,updateClient,addClient,deleteClient,isAdmin,docTypes,sites,company,wasteTypes}) {
+  const t = useT();
   const [tab,   setTab]   = useState("convention");
   const [sel,   setSel]   = useState(null);
   const [modal, setModal] = useState(false);
@@ -2924,19 +2987,19 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
     <>
       <div className="fx aic jsb mb4">
         <div className="tabs" style={{margin:0}}>
-          {[["convention","Convention Tonnes"],["rotation","🔄 Conv. Rotation"],["prepaid","Bonus Prépayé"],["cash","Cash"]].map(([t,l])=>(
-            <button key={t} className={`tab${tab===t?" active":""}`} onClick={()=>{setTab(t);setSel(null);}}>{l}</button>
+          {[["convention",t("Convention Tonnes","اتفاقية أطنان")],["rotation",t("🔄 Conv. Rotation","🔄 اتفاقية دوراني")],["prepaid",t("Bonus Prépayé","مدفوع مسبقاً")],["cash","Cash"]].map(([tab_id,l])=>(
+            <button key={tab_id} className={`tab${tab===tab_id?" active":""}`} onClick={()=>{setTab(tab_id);setSel(null);}}>{l}</button>
           ))}
         </div>
         <div className="fx aic g2">
           {tab==="convention"&&(
-            <button className="btn bp bsm" onClick={()=>setModal("add_client")}>➕<span className="btn-lbl"> Nouveau client convention</span></button>
+            <button className="btn bp bsm" onClick={()=>setModal("add_client")}>➕<span className="btn-lbl"> {t("Nouveau client convention","عميل اتفاقية جديد")}</span></button>
           )}
           {tab==="rotation"&&(
-            <button className="btn bp bsm" style={{background:"var(--orange)",borderColor:"var(--orange)"}} onClick={()=>setModal("add_rotation")}>➕<span className="btn-lbl"> Nouveau client rotations</span></button>
+            <button className="btn bp bsm" style={{background:"var(--orange)",borderColor:"var(--orange)"}} onClick={()=>setModal("add_rotation")}>➕<span className="btn-lbl"> {t("Nouveau client rotations","عميل دوراني جديد")}</span></button>
           )}
           {tab==="prepaid"&&(
-            <button className="btn bp bsm" onClick={()=>setModal("add_prepaid")}>➕<span className="btn-lbl"> Nouveau client prépayé</span></button>
+            <button className="btn bp bsm" onClick={()=>setModal("add_prepaid")}>➕<span className="btn-lbl"> {t("Nouveau client prépayé","عميل مدفوع مسبقاً جديد")}</span></button>
           )}
         </div>
       </div>
@@ -2944,7 +3007,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       <div style={{display:"grid",gridTemplateColumns:"300px 1fr",gap:16}}>
         <div className="panel" style={{height:"fit-content"}}>
           <div className="ph">
-            <span className="pt">{tab==="convention"?"Institutions Convention Tonnes":tab==="rotation"?"Conventions par Rotation":tab==="prepaid"?"Bonus Prépayé":"Clients Cash"}</span>
+            <span className="pt">{tab==="convention"?t("Institutions Convention Tonnes","مؤسسات اتفاقية أطنان"):tab==="rotation"?t("Conventions par Rotation","اتفاقيات دوراني"):tab==="prepaid"?t("Bonus Prépayé","مدفوع مسبقاً"):t("Clients Cash","عملاء نقداً")}</span>
             <span className="mn tsm tmu">{(tab==="convention"?convClients:tab==="rotation"?rotationClients:tab==="prepaid"?prepaidClients:cashClients).length}</span>
           </div>
           <div style={{padding:"10px 10px",display:"flex",flexDirection:"column",gap:5}}>
@@ -2986,7 +3049,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       <div className="tsm tmu mt1" style={{fontSize:10}}>
                         {cl.type==="prepaid"
                           ?<span style={{color:col,fontWeight:pct>=70?700:400}}>
-                            {pct>=100?"🔴 Solde épuisé":pct>=90?"🔴 Solde critique: "+fmt(Math.max(0,cl.creditLimit-cl.consumed)):pct>=70?"🟠 Solde bas: "+fmt(Math.max(0,cl.creditLimit-cl.consumed)):"Solde: "+fmt(Math.max(0,cl.creditLimit-cl.consumed))}
+                            {pct>=100?t("🔴 Solde épuisé","🔴 رصيد منتهٍ"):pct>=90?t("🔴 Solde critique: ","🔴 رصيد حرج: ")+fmt(Math.max(0,cl.creditLimit-cl.consumed)):pct>=70?t("🟠 Solde bas: ","🟠 رصيد منخفض: ")+fmt(Math.max(0,cl.creditLimit-cl.consumed)):t("Solde: ","الرصيد: ")+fmt(Math.max(0,cl.creditLimit-cl.consumed))}
                           </span>
                           :cl.creditEnabled&&cl.consumed>cl.creditLimit
                             ?<span style={{color:"var(--err)",fontWeight:700}}>⚠ Dette: {fmt(cl.consumed-cl.creditLimit)}</span>
@@ -2996,12 +3059,12 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     </>
                   )}
                   {isAccountType&&cl.status!=="approved"&&(
-                    <div style={{fontSize:10,color:"var(--muted)",marginTop:3}}>{cl.clientType==="state"?"🏛 Etat":"🏢 Privé"} · Dossier en cours</div>
+                    <div style={{fontSize:10,color:"var(--muted)",marginTop:3}}>{cl.clientType==="state"?t("🏛 Etat","🏛 الدولة"):t("🏢 Privé","🏢 خاص")} · {t("Dossier en cours","الملف قيد الدراسة")}</div>
                   )}
                   {(cl.serviceType==="treat_and_collect"||cl.serviceType==="both")&&(
                     <div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap"}}>
-                      {cl.serviceType==="both"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)"}}>🏭 Traitement</span>}
-                      <span style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:"rgba(139,92,246,.1)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)"}}>🚛 Collecte et Traitement</span>
+                      {cl.serviceType==="both"&&<span style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)"}}>🏭 {t("Traitement","معالجة")}</span>}
+                      <span style={{fontSize:9,padding:"1px 5px",borderRadius:4,background:"rgba(139,92,246,.1)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)"}}>🚛 {t("Collecte et Traitement","جمع ومعالجة")}</span>
                     </div>
                   )}
                   {tab==="cash"&&(
@@ -3025,26 +3088,26 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   <div className="fx aic g2">
                     {c.type==="convention"&&(
                       <span className={`badge ${c.clientType==="state"?"b-purple":"b-info"}`}>
-                        {c.clientType==="state"?"🏛 Institution État":"🏢 Entreprise Privée"}
+                        {c.clientType==="state"?t("🏛 Institution État","🏛 مؤسسة دولة"):t("🏢 Entreprise Privée","🏢 مؤسسة خاصة")}
                       </span>
                     )}
-                    {c.type==="prepaid"&&<span className="badge b-info">🎫 Bonus Prépayé</span>}
-                    {c.type==="daily"&&<span className="badge b-cash">💵 Client Cash</span>}
-                    {c.type==="rotation"&&<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 Convention Rotation</span>}
+                    {c.type==="prepaid"&&<span className="badge b-info">🎫 {t("Bonus Prépayé","مدفوع مسبقاً")}</span>}
+                    {c.type==="daily"&&<span className="badge b-cash">💵 {t("Client Cash","عميل نقداً")}</span>}
+                    {c.type==="rotation"&&<span className="badge" style={{background:"rgba(251,146,60,.12)",color:"var(--orange)",border:"1px solid rgba(251,146,60,.3)"}}>🔄 {t("Convention Rotation","اتفاقية دوراني")}</span>}
                     {c.type==="rotation"&&<ClientStatusBadge s={c.status}/>}
                     {c.type==="convention"&&<ClientStatusBadge s={c.status}/>}
-                    {c.serviceType==="treatment_only"&&<span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:10}}>🏭 Traitement</span>}
-                    {c.serviceType==="treat_and_collect"&&<span className="badge" style={{background:"rgba(139,92,246,.1)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:10}}>🚛 Collecte et Traitement</span>}
-                    {c.serviceType==="both"&&<><span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:10}}>🏭 Traitement</span><span className="badge" style={{background:"rgba(139,92,246,.1)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:10}}>🚛 Collecte et Traitement</span></>}
+                    {c.serviceType==="treatment_only"&&<span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:10}}>🏭 {t("Traitement","معالجة")}</span>}
+                    {c.serviceType==="treat_and_collect"&&<span className="badge" style={{background:"rgba(139,92,246,.1)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:10}}>🚛 {t("Collecte et Traitement","جمع ومعالجة")}</span>}
+                    {c.serviceType==="both"&&<><span className="badge" style={{background:"rgba(46,201,92,.1)",color:"var(--g)",border:"1px solid rgba(46,201,92,.3)",fontSize:10}}>🏭 {t("Traitement","معالجة")}</span><span className="badge" style={{background:"rgba(139,92,246,.1)",color:"var(--purple)",border:"1px solid rgba(139,92,246,.3)",fontSize:10}}>🚛 {t("Collecte et Traitement","جمع ومعالجة")}</span></>}
                     {isAdmin&&(
                       <div className="fx aic g2">
                         <button className="btn bg bsm" style={{fontSize:10,padding:"3px 8px"}}
                           onClick={()=>{setEditClientForm({...c});setModal("edit_client");}}>
-                          ✏️ Modifier
+                          ✏️ {t("Modifier","تعديل")}
                         </button>
                         <button className="btn be bsm" style={{fontSize:10,padding:"3px 8px"}}
                           onClick={()=>setDeleteConfirm(c.id)}>
-                          🗑 Supprimer
+                          🗑 {t("Supprimer","حذف")}
                         </button>
                       </div>
                     )}
@@ -3052,15 +3115,15 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 </div>
 
                 <div className="fg fg3 mb3">
-                  {[["Téléphone",c.phone||"—"],["Adresse",c.address||"—"],["NIF",c.nif||"—"]].map(([l,v])=>(
+                  {[[t("Téléphone","الهاتف"),c.phone||"—"],[t("Adresse","العنوان"),c.address||"—"],["NIF",c.nif||"—"]].map(([l,v])=>(
                     <div key={l} className="card-sm"><div style={{fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>{l}</div><div style={{marginTop:4,fontSize:12,fontWeight:600}}>{v}</div></div>
                   ))}
                   <div className="card-sm">
-                    <div style={{fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>Régime TVA</div>
+                    <div style={{fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>{t("Régime TVA","نظام TVA")}</div>
                     <div style={{marginTop:4}}>
                       {c.vatSubject
-                        ? <span className="badge b-warn" style={{fontSize:10}}>✅ Assujetti TVA</span>
-                        : <span className="badge" style={{background:"rgba(100,116,139,.1)",color:"var(--muted)",border:"1px solid var(--bdr)",fontSize:10}}>🚫 Non assujetti</span>
+                        ? <span className="badge b-warn" style={{fontSize:10}}>✅ {t("Assujetti TVA","خاضع للضريبة")}</span>
+                        : <span className="badge" style={{background:"rgba(100,116,139,.1)",color:"var(--muted)",border:"1px solid var(--bdr)",fontSize:10}}>🚫 {t("Non assujetti","غير خاضع")}</span>
                       }
                     </div>
                   </div>
@@ -3068,8 +3131,8 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
 
                 {/* Authorized waste types */}
                 <div style={{marginBottom:14}}>
-                  <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>♻️ Types de déchets autorisés
-                    {isAdmin&&<span style={{fontWeight:400,fontSize:10,color:"var(--muted)",marginLeft:8}}>définis par l'admin</span>}
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>♻️ {t("Types de déchets autorisés","أنواع النفايات المسموحة")}
+                    {isAdmin&&<span style={{fontWeight:400,fontSize:10,color:"var(--muted)",marginLeft:8}}>{t("définis par l'admin","محددة من الأدمن")}</span>}
                   </div>
                   {(c.allowedWasteTypes||[]).length>0
                     ? <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -3080,8 +3143,8 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       </div>
                     : <div className="alrt aw" style={{padding:"8px 12px",fontSize:11}}>
                         <span>⚠️</span>
-                        <div>Aucun type de déchet autorisé défini pour ce client.
-                          {isAdmin&&<button className="btn bg bsm" style={{fontSize:10,marginLeft:8}} onClick={()=>{setEditClientForm({...c});setModal("edit_client");}}>Définir maintenant</button>}
+                        <div>{t("Aucun type de déchet autorisé défini pour ce client.","لم يُحدَّد أي نوع نفايات مسموح به لهذا العميل.")}
+                          {isAdmin&&<button className="btn bg bsm" style={{fontSize:10,marginLeft:8}} onClick={()=>{setEditClientForm({...c});setModal("edit_client");}}>{t("Définir maintenant","تحديد الآن")}</button>}
                         </div>
                       </div>
                   }
@@ -3098,26 +3161,26 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       {isDepleted&&(
                         <div className="alrt ae mb3" style={{padding:"10px 14px"}}>
                           <span style={{fontSize:16}}>🔴</span>
-                          <div><strong>Solde épuisé !</strong> Ce client a consommé la totalité de son dépôt prépayé. Aucune nouvelle décharge n'est possible jusqu'au rechargement du solde.</div>
+                          <div><strong>{t("Solde épuisé !","الرصيد منتهٍ!")}</strong> {t("Ce client a consommé la totalité de son dépôt prépayé. Aucune nouvelle décharge n'est possible jusqu'au rechargement du solde.","استنفذ هذا العميل كامل رصيده المدفوع مسبقاً. لا يمكن إجراء أي تفريغ جديد حتى إعادة الشحن.")}</div>
                         </div>
                       )}
                       {isCritical&&(
                         <div className="alrt ae mb3" style={{padding:"10px 14px"}}>
                           <span style={{fontSize:16}}>🔴</span>
-                          <div><strong>Solde critique !</strong> Il reste seulement <strong>{fmt(remaining)} DA</strong> ({100-pp}% du dépôt). Contacter le client pour un rechargement urgent.</div>
+                          <div><strong>{t("Solde critique !","رصيد حرج!")}</strong> {t("Il reste seulement","تبقى فقط")} <strong>{fmt(remaining)} DA</strong> ({100-pp}% {t("du dépôt","من الرصيد")}). {t("Contacter le client pour un rechargement urgent.","تواصل مع العميل لإعادة الشحن عاجلاً.")}</div>
                         </div>
                       )}
                       {isLow&&(
                         <div className="alrt aw mb3" style={{padding:"10px 14px"}}>
                           <span style={{fontSize:16}}>🟠</span>
-                          <div><strong>Solde bas :</strong> Il reste <strong>{fmt(remaining)} DA</strong> ({100-pp}% du dépôt initial). Pensez à prévenir le client pour un rechargement.</div>
+                          <div><strong>{t("Solde bas :","رصيد منخفض:")}</strong> {t("Il reste","تبقى")} <strong>{fmt(remaining)} DA</strong> ({100-pp}% {t("du dépôt initial","من الرصيد الأولي")}). {t("Pensez à prévenir le client pour un rechargement.","تذكّر إخطار العميل بضرورة إعادة الشحن.")}</div>
                         </div>
                       )}
                       <div className="fg fg3 mb3">
                         {[
-                          ["Solde Total (DA)",  fmt(c.creditLimit),    "var(--muted)"],
-                          ["Consommé",          fmt(c.consumed),       creditColor(pp)],
-                          ["Solde Disponible",  fmt(remaining),        isDepleted?"var(--err)":isCritical?"var(--err)":isLow?"var(--warn)":"var(--g)"],
+                          [t("Solde Total (DA)","الرصيد الإجمالي (دج)"),  fmt(c.creditLimit),    "var(--muted)"],
+                          [t("Consommé","المستهلك"),          fmt(c.consumed),       creditColor(pp)],
+                          [t("Solde Disponible","الرصيد المتاح"),  fmt(remaining),        isDepleted?"var(--err)":isCritical?"var(--err)":isLow?"var(--warn)":"var(--g)"],
                         ].map(([l,v,col])=>(
                           <div key={l} className="card-sm" style={{borderTop:`2px solid ${col}`}}>
                             <div style={{fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",textTransform:"uppercase",letterSpacing:".1em"}}>{l}</div>
@@ -3145,17 +3208,17 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       const periodLbl = isMonthly ? now.toLocaleString("fr-DZ",{month:"long",year:"numeric"}) : String(now.getFullYear());
                       const isOverCredit = c.creditEnabled && c.consumed > c.creditLimit;
                       const rows = c.creditEnabled ? [
-                        ["Limite Crédit (DA)", fmt(c.creditLimit),                                       "var(--muted)"],
-                        ["Consommé",           fmt(c.consumed),                                          creditColor(creditPct(c))],
-                        [isOverCredit?"Dette":"Disponible", fmt(Math.abs(c.creditLimit-c.consumed)), isOverCredit?"var(--err)":"var(--g)"],
+                        [t("Limite Crédit (DA)","حد الائتمان (دج)"), fmt(c.creditLimit),                                       "var(--muted)"],
+                        [t("Consommé","المستهلك"),           fmt(c.consumed),                                          creditColor(creditPct(c))],
+                        [isOverCredit?t("Dette","دين"):t("Disponible","المتاح"), fmt(Math.abs(c.creditLimit-c.consumed)), isOverCredit?"var(--err)":"var(--g)"],
                       ] : isRotation ? [
-                        [isMonthly?"Quota Mensuel (rot.)":"Quota Annuel (rot.)", c.weightLimitYear+" rot.", "var(--muted)"],
-                        [isMonthly?"Rotations ce mois":"Rotations cette année",  usedPeriod+" rot.",        creditColor(pct)],
-                        ["Restant",                                               Math.max(0,c.weightLimitYear-usedPeriod)+" rot.", "var(--g)"],
+                        [isMonthly?t("Quota Mensuel (rot.)","الحصة الشهرية (دورة)"):t("Quota Annuel (rot.)","الحصة السنوية (دورة)"), c.weightLimitYear+" rot.", "var(--muted)"],
+                        [isMonthly?t("Rotations ce mois","الدورات هذا الشهر"):t("Rotations cette année","الدورات هذا العام"),  usedPeriod+" rot.",        creditColor(pct)],
+                        [t("Restant","المتبقي"),                                               Math.max(0,c.weightLimitYear-usedPeriod)+" rot.", "var(--g)"],
                       ] : [
-                        [isMonthly?"Quota Mensuel (t)":"Quota Annuel (t)", fmtN(c.weightLimitYear)+" t", "var(--muted)"],
-                        [isMonthly?"Mois en cours":"Année en cours",       fmtN(usedPeriod)+" t",        creditColor(pct)],
-                        ["Restant",                                         fmtN(Math.max(0,c.weightLimitYear-usedPeriod))+" t", "var(--g)"],
+                        [isMonthly?t("Quota Mensuel (t)","الحصة الشهرية (ط)"):t("Quota Annuel (t)","الحصة السنوية (ط)"), fmtN(c.weightLimitYear)+" t", "var(--muted)"],
+                        [isMonthly?t("Mois en cours","الشهر الحالي"):t("Année en cours","السنة الحالية"),       fmtN(usedPeriod)+" t",        creditColor(pct)],
+                        [t("Restant","المتبقي"),                                         fmtN(Math.max(0,c.weightLimitYear-usedPeriod))+" t", "var(--g)"],
                       ];
                       return (<>
                         {rows.map(([l,v,c2])=>(
@@ -3168,7 +3231,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                           <div style={{gridColumn:"1/-1",marginTop:-4}}>
                             <div className="cbt" style={{height:6}}><div className="cbf" style={{width:`${Math.min(pct,100)}%`,background:col}}/></div>
                             <div className="fx jsb mt1">
-                              <span className="tsm tmu">Progression {periodLbl}</span>
+                              <span className="tsm tmu">{t("Progression","التقدم")} {periodLbl}</span>
                               <span className="mn tsm" style={{color:col}}>{pct}%</span>
                             </div>
                           </div>
@@ -3180,7 +3243,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
 
                 {(c.assignedSites&&c.assignedSites.length>0)&&(
                   <div className="fx aic g2 mb2" style={{fontSize:11,flexWrap:"wrap"}}>
-                    <span style={{color:"var(--muted)"}}>📍 Centres autorisés :</span>
+                    <span style={{color:"var(--muted)"}}>📍 {t("Centres autorisés :","المراكز المخوّلة:")}</span>
                     {c.assignedSites.map(sid=>{
                       const s=(sites||[]).find(x=>x.id===sid);
                       return(
@@ -3194,16 +3257,16 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 )}
                 {(c.type==="convention"||c.type==="rotation")&&c.payFrequency&&(
                   <div className="fx aic g3 mb3" style={{fontSize:11,color:"var(--muted)"}}>
-                    <span>📅 Facturation: <strong style={{color:"var(--txt)"}}>{c.payFrequency==="monthly"?"Mensuelle":"Annuelle"}</strong></span>
-                    {c.type==="convention"&&<span>💳 Instrument: <strong style={{color:"var(--txt)"}}>{c.payInstrument==="bank"?"Virement bancaire":"Chèque"}</strong></span>}
+                    <span>📅 {t("Facturation:","الفوترة:")} <strong style={{color:"var(--txt)"}}>{c.payFrequency==="monthly"?t("Mensuelle","شهرية"):t("Annuelle","سنوية")}</strong></span>
+                    {c.type==="convention"&&<span>💳 {t("Instrument:","الوسيلة:")} <strong style={{color:"var(--txt)"}}>{c.payInstrument==="bank"?t("Virement bancaire","تحويل بنكي"):t("Chèque","شيك")}</strong></span>}
                   </div>
                 )}
 
                 {/* Documents section for convention / rotation / prepaid clients */}
                 {(c.type==="convention"||c.type==="rotation"||c.type==="prepaid")&&(
                   <div>
-                    <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>📄 Documents requis
-                      {isAdmin&&<span style={{fontWeight:400,fontSize:10,color:"var(--muted)",marginLeft:8}}>Cliquez pour marquer reçu/manquant</span>}
+                    <div style={{fontWeight:700,fontSize:13,marginBottom:10}}>📄 {t("Documents requis","الوثائق المطلوبة")}
+                      {isAdmin&&<span style={{fontWeight:400,fontSize:10,color:"var(--muted)",marginLeft:8}}>{t("Cliquez pour marquer reçu/manquant","اضغط للتعليم كمستلم/مفقود")}</span>}
                     </div>
                     <div style={{marginBottom:12}}>
                       {requiredDocs.map(doc=>{
@@ -3216,7 +3279,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                             onClick={()=>isAdmin&&toggleDoc(doc)}>
                             <span style={{fontSize:16}}>{submitted?"✅":"⬜"}</span>
                             <span style={{flex:1,fontSize:12}}>{doc}</span>
-                            {submitted?<span className="badge b-ok" style={{fontSize:8}}>Reçu</span>:<span className="badge b-warn" style={{fontSize:8}}>Manquant</span>}
+                            {submitted?<span className="badge b-ok" style={{fontSize:8}}>{t("Reçu","مُستلم")}</span>:<span className="badge b-warn" style={{fontSize:8}}>{t("Manquant","مفقود")}</span>}
                           </div>
                         );
                       })}
@@ -3235,27 +3298,27 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                           else{setCreditInput("500000");}
                           setModal("approve");
                         }}>
-                          ✓ Approuver le dossier
+                          ✓ {t("Approuver le dossier","الموافقة على الملف")}
                         </button>
                         <button className="btn be bsm" onClick={()=>setModal("reject")}>
-                          ✗ Rejeter
+                          ✗ {t("Rejeter","رفض")}
                         </button>
                       </div>
                     )}
                     {c.status==="approved"&&(
                       <div className="fx aic g2" style={{flexWrap:"wrap"}}>
-                        <span className="badge b-ok">✓ Dossier validé</span>
+                        <span className="badge b-ok">✓ {t("Dossier validé","الملف مُعتمد")}</span>
                         <button className="btn bsm bg" style={{fontSize:10}} onClick={()=>{
                           if(c.type==="rotation"){setApproveMode("rotation");setRotationInput(String(c.weightLimitYear||0));setQuotaPeriod(c.payFrequency==="monthly"?"month":"year");}
                           else if(c.creditEnabled){setApproveMode("credit");setCreditInput(String(c.creditLimit));}
                           else{setApproveMode("weight");setWeightInput(String(c.weightLimitYear));setQuotaPeriod(c.payFrequency==="monthly"?"month":"year");}
                           setModal("approve");
                         }}>
-                          ✏️ Modifier conditions
+                          ✏️ {t("Modifier conditions","تعديل الشروط")}
                         </button>
                         {isAdmin&&(
                           <button className="btn be bsm" style={{fontSize:10}} onClick={()=>{setNote("");setModal("reject");}}>
-                            ✗ Révoquer
+                            ✗ {t("Révoquer","إلغاء الاعتماد")}
                           </button>
                         )}
                         <button className="btn bsm" style={{fontSize:10,background:"var(--info)",color:"#fff",borderColor:"var(--info)"}} onClick={()=>{
@@ -3270,7 +3333,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                           document.body.removeChild(a);
                           URL.revokeObjectURL(url);
                         }}>
-                          📄 Modèle vierge (.doc)
+                          📄 {t("Modèle vierge (.doc)","نموذج فارغ (.doc)")}
                         </button>
                       </div>
                     )}
@@ -3279,7 +3342,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                         <div className="alrt ae" style={{marginBottom:0,padding:"8px 12px"}}>
                           <span>✗</span>
                           <div style={{fontSize:11}}>
-                            <strong>Dossier rejeté</strong>
+                            <strong>{t("Dossier rejeté","الملف مرفوض")}</strong>
                             {c.note&&<div style={{marginTop:2,color:"var(--muted)"}}>{c.note}</div>}
                           </div>
                         </div>
@@ -3292,10 +3355,10 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                               else{setApproveMode("weight");setWeightInput(String(c.weightLimitYear||0));setQuotaPeriod(c.payFrequency==="monthly"?"month":"year");}
                               setModal("approve");
                             }}>
-                              ✓ Réapprouver
+                              ✓ {t("Réapprouver","إعادة الاعتماد")}
                             </button>
                             <button className="btn bw bsm" style={{fontSize:10}} onClick={()=>{setNote(c.note||"");setModal("reject");}}>
-                              ✏️ Modifier motif
+                              ✏️ {t("Modifier motif","تعديل السبب")}
                             </button>
                           </div>
                         )}
@@ -3309,16 +3372,16 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
               {deleteConfirm===c.id&&(
                 <div className="ov">
                   <div className="modal">
-                    <div className="mh"><span className="mh-title">🗑 Supprimer le client</span><button className="btn bg bsm" onClick={()=>setDeleteConfirm(null)}>✕</button></div>
+                    <div className="mh"><span className="mh-title">🗑 {t("Supprimer le client","حذف العميل")}</span><button className="btn bg bsm" onClick={()=>setDeleteConfirm(null)}>✕</button></div>
                     <div className="mb2">
                       <div className="alrt ae mb3">
                         <span>⚠</span>
-                        <div><strong>Supprimer {c.name} ?</strong><div style={{fontSize:11,marginTop:4}}>Cette action est irréversible. L'historique des dépôts sera conservé.</div></div>
+                        <div><strong>{t("Supprimer","حذف")} {c.name} ?</strong><div style={{fontSize:11,marginTop:4}}>{t("Cette action est irréversible. L'historique des dépôts sera conservé.","هذا الإجراء لا يمكن التراجع عنه. سيتم الاحتفاظ بسجل التفريغ.")}</div></div>
                       </div>
                     </div>
                     <div className="mf">
-                      <button className="btn bg" onClick={()=>setDeleteConfirm(null)}>Annuler</button>
-                      <button className="btn be" onClick={()=>doDeleteClient(c.id)}>🗑 Confirmer la suppression</button>
+                      <button className="btn bg" onClick={()=>setDeleteConfirm(null)}>{t("Annuler","إلغاء")}</button>
+                      <button className="btn be" onClick={()=>doDeleteClient(c.id)}>🗑 {t("Confirmer la suppression","تأكيد الحذف")}</button>
                     </div>
                   </div>
                 </div>
@@ -3326,10 +3389,10 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
 
               {cd.length > 0 && (
                 <div className="panel">
-                  <div className="ph"><span className="pt">Historique des dépôts</span><span className="tsm tmu">{cd.length} entrées</span></div>
+                  <div className="ph"><span className="pt">{t("Historique des dépôts","سجل التفريغ")}</span><span className="tsm tmu">{cd.length} {t("entrées","سجل")}</span></div>
                   <div className="tw">
                     <table>
-                      <thead><tr><th>Date</th><th>Site</th><th>Camion</th><th>Net(t)</th><th>Total</th><th>Statut</th></tr></thead>
+                      <thead><tr><th>{t("Date","التاريخ")}</th><th>{t("Site","الموقع")}</th><th>{t("Camion","الشاحنة")}</th><th>{t("Net(t)","الصافي(ط)")}</th><th>{t("Total","المجموع")}</th><th>{t("Statut","الحالة")}</th></tr></thead>
                       <tbody>
                         {cd.map(d=>(
                           <tr key={d.id}>
@@ -3359,26 +3422,26 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       {modal==="approve"&&c&&(
         <div className="ov">
           <div className="modal">
-            <div className="mh"><span className="mh-title">✓ Approuver le dossier</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
+            <div className="mh"><span className="mh-title">✓ {t("Approuver le dossier","الموافقة على الملف")}</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
             <div className="mb2">
               <div className="alrt ao mb3" style={{marginBottom:14}}>
-                <span>✅</span><span>Approbation du dossier de <strong>{c.name}</strong>.</span>
+                <span>✅</span><span>{t("Approbation du dossier de","الموافقة على ملف")} <strong>{c.name}</strong>.</span>
               </div>
               <div className="field mb2" style={{marginBottom:14}}>
-                <label>Mode de facturation</label>
+                <label>{t("Mode de facturation","طريقة الفوترة")}</label>
                 <div className="seg" style={{marginTop:6}}>
                   {c.type==="rotation"?(
                     <button className={`seg-btn${approveMode==="rotation"?" active":""}`}
                       style={{background:"var(--orange)",color:"#fff",borderColor:"var(--orange)"}}>
-                      🔄 Quota Conv. Rotation
+                      🔄 {t("Quota Conv. Rotation","حصة اتفاقية دوراني")}
                     </button>
                   ):(
                     <>
                       <button className={`seg-btn${approveMode==="weight"?" active":""}`} onClick={()=>setApproveMode("weight")}>
-                        ⚖️ Quota Tonnage
+                        ⚖️ {t("Quota Tonnage","حصة الأطنان")}
                       </button>
                       <button className={`seg-btn${approveMode==="credit"?" active":""}`} onClick={()=>setApproveMode("credit")}>
-                        💳 Crédit DA (désigné admin)
+                        💳 {t("Crédit DA (désigné admin)","ائتمان دج (من الأدمن)")}
                       </button>
                     </>
                   )}
@@ -3387,52 +3450,52 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   <span>ℹ️</span>
                   <span>{approveMode==="weight"
                     ?(quotaPeriod==="month"
-                      ?"Quota mensuel : le client peut décharger jusqu'à ce seuil par mois calendaire."
-                      :"Quota annuel : le client peut décharger jusqu'à ce seuil par année civile.")
+                      ?t("Quota mensuel : le client peut décharger jusqu'à ce seuil par mois calendaire.","الحصة الشهرية: يمكن للعميل التفريغ حتى هذا الحد شهرياً.")
+                      :t("Quota annuel : le client peut décharger jusqu'à ce seuil par année civile.","الحصة السنوية: يمكن للعميل التفريغ حتى هذا الحد سنوياً."))
                     :approveMode==="rotation"
                     ?(quotaPeriod==="month"
-                      ?"Quota mensuel par rotations : chaque passage de camion = 1 rotation. Limite mensuelle."
-                      :"Quota annuel par rotations : chaque passage de camion = 1 rotation. Limite annuelle.")
-                    :"Crédit DA : uniquement pour les clients désignés par l'admin. La limite est exprimée en Dinars Algériens."}</span>
+                      ?t("Quota mensuel par rotations : chaque passage de camion = 1 rotation. Limite mensuelle.","الحصة الشهرية بالدورات: كل مرور شاحنة = دورة واحدة. حد شهري.")
+                      :t("Quota annuel par rotations : chaque passage de camion = 1 rotation. Limite annuelle.","الحصة السنوية بالدورات: كل مرور شاحنة = دورة واحدة. حد سنوي."))
+                    :t("Crédit DA : uniquement pour les clients désignés par l'admin. La limite est exprimée en Dinars Algériens.","ائتمان بالدينار الجزائري: للعملاء المعيّنين من الأدمن فقط. الحد معبّر عنه بالدينار.")}</span>
                 </div>
               </div>
               <div className="fg" style={{gap:12}}>
                 {(approveMode==="weight"||approveMode==="rotation")?(
                   <>
                     <div className="field">
-                      <label>Périodicité du quota</label>
+                      <label>{t("Périodicité du quota","دورية الحصة")}</label>
                       <div className="seg" style={{marginTop:6}}>
                         <button className={`seg-btn${quotaPeriod==="year"?" active":""}`} onClick={()=>setQuotaPeriod("year")}>
-                          📅 Annuel
+                          📅 {t("Annuel","سنوي")}
                         </button>
                         <button className={`seg-btn${quotaPeriod==="month"?" active":""}`} onClick={()=>setQuotaPeriod("month")}>
-                          🗓 Mensuel
+                          🗓 {t("Mensuel","شهري")}
                         </button>
                       </div>
                     </div>
                     {approveMode==="weight"?(
                       <div className="field">
-                        <label>Quota {quotaPeriod==="month"?"mensuel (tonnes/mois)":"annuel (tonnes/an)"}</label>
+                        <label>{t("Quota","حصة")} {quotaPeriod==="month"?t("mensuel (tonnes/mois)","شهرية (طن/شهر)"):t("annuel (tonnes/an)","سنوية (طن/سنة)")}</label>
                         <input className="fi" type="number" value={weightInput} onChange={e=>setWeightInput(e.target.value)} placeholder={quotaPeriod==="month"?"ex: 500":"ex: 5000"}/>
                       </div>
                     ):(
                       <div className="field">
-                        <label>Quota {quotaPeriod==="month"?"mensuel (rotations/mois)":"annuel (rotations/an)"}</label>
+                        <label>{t("Quota","حصة")} {quotaPeriod==="month"?t("mensuel (rotations/mois)","شهرية (دورة/شهر)"):t("annuel (rotations/an)","سنوية (دورة/سنة)")}</label>
                         <input className="fi" type="number" step="1" min="0" value={rotationInput} onChange={e=>setRotationInput(e.target.value)} placeholder={quotaPeriod==="month"?"ex: 30":"ex: 360"}/>
                       </div>
                     )}
                   </>
                 ):(
-                  <div className="field"><label>Limite de crédit (DA)</label>
+                  <div className="field"><label>{t("Limite de crédit (DA)","حد الائتمان (دج)")}</label>
                     <input className="fi" type="number" value={creditInput} onChange={e=>setCreditInput(e.target.value)} placeholder="ex: 500000"/>
                   </div>
                 )}
-                <div className="field"><label>Remarques (optionnel)</label>
-                  <textarea className="fi" value={note} onChange={e=>setNote(e.target.value)} placeholder="Conditions particulières, observations..."/>
+                <div className="field"><label>{t("Remarques (optionnel)","ملاحظات (اختياري)")}</label>
+                  <textarea className="fi" value={note} onChange={e=>setNote(e.target.value)} placeholder={t("Conditions particulières, observations...","شروط خاصة، ملاحظات...")}/>
                 </div>
               </div>
             </div>
-            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>Annuler</button><button className="btn bp" onClick={doApprove}>✓ Confirmer l'approbation</button></div>
+            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>{t("Annuler","إلغاء")}</button><button className="btn bp" onClick={doApprove}>✓ {t("Confirmer l'approbation","تأكيد الموافقة")}</button></div>
           </div>
         </div>
       )}
@@ -3441,14 +3504,14 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       {modal==="reject"&&c&&(
         <div className="ov">
           <div className="modal">
-            <div className="mh"><span className="mh-title">✗ Rejeter le dossier</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
+            <div className="mh"><span className="mh-title">✗ {t("Rejeter le dossier","رفض الملف")}</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
             <div className="mb2">
-              <div className="alrt ae mb3" style={{marginBottom:14}}><span>⚠</span><span>Vous allez rejeter la demande de convention de <strong>{c.name}</strong>.</span></div>
-              <div className="field"><label>Motif du rejet *</label>
-                <textarea className="fi" value={note} onChange={e=>setNote(e.target.value)} placeholder="Ex: Documents manquants, dossier incomplet..."/>
+              <div className="alrt ae mb3" style={{marginBottom:14}}><span>⚠</span><span>{t("Vous allez rejeter la demande de convention de","ستقوم برفض طلب اتفاقية")} <strong>{c.name}</strong>.</span></div>
+              <div className="field"><label>{t("Motif du rejet *","سبب الرفض *")}</label>
+                <textarea className="fi" value={note} onChange={e=>setNote(e.target.value)} placeholder={t("Ex: Documents manquants, dossier incomplet...","مثال: وثائق ناقصة، ملف غير مكتمل...")}/>
               </div>
             </div>
-            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>Annuler</button><button className="btn be" disabled={!note} onClick={doReject}>✗ Confirmer le rejet</button></div>
+            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>{t("Annuler","إلغاء")}</button><button className="btn be" disabled={!note} onClick={doReject}>✗ {t("Confirmer le rejet","تأكيد الرفض")}</button></div>
           </div>
         </div>
       )}
@@ -3457,55 +3520,55 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       {modal==="add_client"&&(
         <div className="ov">
           <div className="modal modal-lg">
-            <div className="mh"><span className="mh-title">➕ Nouveau client Convention Tonnes</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
+            <div className="mh"><span className="mh-title">➕ {t("Nouveau client Convention Tonnes","عميل اتفاقية أطنان جديد")}</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
             <div className="mb2">
               <div className="alrt ai mb3" style={{marginBottom:16}}>
-                <span>ℹ️</span><span style={{fontSize:11}}>Le dossier sera créé avec le statut "Documents manquants". L'institution devra fournir les pièces justificatives requises avant approbation.</span>
+                <span>ℹ️</span><span style={{fontSize:11}}>{t("Le dossier sera créé avec le statut \"Documents manquants\". L'institution devra fournir les pièces justificatives requises avant approbation.","سيُنشأ الملف بحالة «وثائق ناقصة». يجب على المؤسسة تقديم المستندات المطلوبة قبل الاعتماد.")}</span>
               </div>
               <div className="fg" style={{gap:12}}>
                 <div className="fg fg2">
-                  <div className="field"><label>Nom / Raison sociale *</label>
-                    <input className="fi" value={addForm.name} onChange={e=>setAddForm(f=>({...f,name:e.target.value}))} placeholder="Commune de ..., SPA ..., etc."/>
+                  <div className="field"><label>{t("Nom / Raison sociale *","الاسم / التسمية التجارية *")}</label>
+                    <input className="fi" value={addForm.name} onChange={e=>setAddForm(f=>({...f,name:e.target.value}))} placeholder={t("Commune de ..., SPA ..., etc.","بلدية ..., ش.ذ.م.م., إلخ")}/>
                   </div>
-                  <div className="field"><label>Type d'institution</label>
+                  <div className="field"><label>{t("Type d'institution","نوع المؤسسة")}</label>
                     <select className="fi" value={addForm.clientType} onChange={e=>setAddForm(f=>({...f,clientType:e.target.value}))}>
-                      <option value="state">🏛 Institution d'État</option>
-                      <option value="private">🏢 Entreprise Privée</option>
+                      <option value="state">🏛 {t("Institution d'État","مؤسسة حكومية")}</option>
+                      <option value="private">🏢 {t("Entreprise Privée","مؤسسة خاصة")}</option>
                     </select>
                   </div>
                 </div>
                 <div className="fg fg2">
-                  <div className="field"><label>Téléphone</label>
+                  <div className="field"><label>{t("Téléphone","الهاتف")}</label>
                     <input className="fi" value={addForm.phone} onChange={e=>setAddForm(f=>({...f,phone:e.target.value}))} placeholder="034 00 00 00"/>
                   </div>
-                  <div className="field"><label>Adresse</label>
-                    <input className="fi" value={addForm.address} onChange={e=>setAddForm(f=>({...f,address:e.target.value}))} placeholder="Commune, wilaya"/>
+                  <div className="field"><label>{t("Adresse","العنوان")}</label>
+                    <input className="fi" value={addForm.address} onChange={e=>setAddForm(f=>({...f,address:e.target.value}))} placeholder={t("Commune, wilaya","البلدية، الولاية")}/>
                   </div>
                 </div>
                 <div className="fg fg2">
                   <div className="field"><label>NIF</label>
                     <input className="fi" value={addForm.nif} onChange={e=>setAddForm(f=>({...f,nif:e.target.value}))} placeholder="099..."/>
                   </div>
-                  <div className="field"><label>Registre de Commerce (Privé)</label>
+                  <div className="field"><label>{t("Registre de Commerce (Privé)","السجل التجاري (خاص)")}</label>
                     <input className="fi" value={addForm.rc} onChange={e=>setAddForm(f=>({...f,rc:e.target.value}))} placeholder="18/00-0000000B18"/>
                   </div>
                 </div>
                 <div className="fg fg2">
-                  <div className="field"><label>Fréquence de facturation</label>
+                  <div className="field"><label>{t("Fréquence de facturation","دورية الفوترة")}</label>
                     <select className="fi" value={addForm.payFrequency||"monthly"} onChange={e=>setAddForm(f=>({...f,payFrequency:e.target.value}))}>
-                      <option value="monthly">📅 Mensuelle</option>
-                      <option value="annual">📆 Annuelle</option>
+                      <option value="monthly">📅 {t("Mensuelle","شهرية")}</option>
+                      <option value="annual">📆 {t("Annuelle","سنوية")}</option>
                     </select>
                   </div>
-                  <div className="field"><label>Mode de paiement</label>
+                  <div className="field"><label>{t("Mode de paiement","وسيلة الدفع")}</label>
                     <select className="fi" value={addForm.payInstrument||"cheque"} onChange={e=>setAddForm(f=>({...f,payInstrument:e.target.value}))}>
-                      <option value="cheque">💳 Chèque</option>
-                      <option value="bank">🏦 Virement bancaire</option>
+                      <option value="cheque">💳 {t("Chèque","شيك")}</option>
+                      <option value="bank">🏦 {t("Virement bancaire","تحويل بنكي")}</option>
                     </select>
                   </div>
                 </div>
                 <div className="field">
-                  <label>📍 Centres d'enfouissement autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <label>📍 {t("Centres d'enfouissement autorisés","مراكز الطمر المخوّلة")} <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>({t("plusieurs choix possibles","اختيارات متعددة ممكنة")})</span></label>
                   <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
                     {(sites||[]).filter(s=>s.status==="active").map(s=>{
                       const checked=(addForm.assignedSites||[]).includes(s.id);
@@ -3522,22 +3585,23 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     {(sites||[]).filter(s=>s.status==="active").length===0&&<span className="tsm tmu">Aucun centre actif</span>}
                   </div>
                 </div>
-                <div className="field"><label>Note initiale</label>
-                  <textarea className="fi" value={addForm.note} onChange={e=>setAddForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
+                <div className="field">
+                  <label>{t("Note initiale","ملاحظة أولية")}</label>
+                  <textarea className="fi" value={addForm.note} onChange={e=>setAddForm(f=>({...f,note:e.target.value}))} placeholder={t("Observations...","ملاحظات...")}/>
                 </div>
                 <div className="field">
-                  <label>Régime TVA</label>
+                  <label>{t("Régime TVA","نظام TVA")}</label>
                   <div className="seg" style={{marginTop:6}}>
                     <button className={`seg-btn${addForm.vatSubject===false?" active":""}`} onClick={()=>setAddForm(f=>({...f,vatSubject:false}))}>
-                      🚫 Non assujetti à la TVA
+                      🚫 {t("Non assujetti à la TVA","غير خاضع للضريبة")}
                     </button>
                     <button className={`seg-btn${addForm.vatSubject===true?" active":""}`} onClick={()=>setAddForm(f=>({...f,vatSubject:true}))}>
-                      ✅ Assujetti à la TVA
+                      ✅ {t("Assujetti à la TVA","خاضع للضريبة")}
                     </button>
                   </div>
                 </div>
                 <div style={{background:"var(--s2)",border:"1px solid var(--bdr)",borderRadius:8,padding:"12px 14px"}}>
-                  <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>📋 Documents requis :</div>
+                  <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>📋 {t("Documents requis :","الوثائق المطلوبة:")}</div>
                   {(addForm.clientType==="state"?(docTypes?.state||REQUIRED_DOCS_STATE):(docTypes?.private||REQUIRED_DOCS_PRIVATE)).map(d=>(
                     <div key={d} className="fx aic g2" style={{marginBottom:5,fontSize:11,color:"var(--muted)"}}>
                       <span style={{color:"var(--warn)"}}>⬜</span> {d}
@@ -3545,7 +3609,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   ))}
                 </div>
                 <div className="field">
-                  <label>♻️ Types de déchets autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <label>♻️ {t("Types de déchets autorisés","أنواع النفايات المسموحة")} <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>({t("plusieurs choix possibles","اختيارات متعددة ممكنة")})</span></label>
                   <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
                     {(wasteTypes||[]).map(w=>{
                       const checked=(addForm.allowedWasteTypes||[]).includes(w.id);
@@ -3561,7 +3625,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 </div>
               </div>
             </div>
-            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>Annuler</button><button className="btn bp" disabled={!addForm.name} onClick={doAddClient}>✓ Créer le dossier</button></div>
+            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>{t("Annuler","إلغاء")}</button><button className="btn bp" disabled={!addForm.name} onClick={doAddClient}>✓ {t("Créer le dossier","إنشاء الملف")}</button></div>
           </div>
         </div>
       )}
@@ -3570,47 +3634,47 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       {modal==="add_rotation"&&(
         <div className="ov">
           <div className="modal modal-lg">
-            <div className="mh"><span className="mh-title">🔄 Nouveau client Convention Rotation</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
+            <div className="mh"><span className="mh-title">🔄 {t("Nouveau client Convention Rotation","عميل اتفاقية دوراني جديد")}</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
             <div className="mb2">
               <div className="alrt ai mb3" style={{marginBottom:16}}>
-                <span>ℹ️</span><span style={{fontSize:11}}>Le dossier sera créé avec le statut "Documents manquants". Le quota en rotations sera défini lors de l'approbation.</span>
+                <span>ℹ️</span><span style={{fontSize:11}}>{t("Le dossier sera créé avec le statut \"Documents manquants\". Le quota en rotations sera défini lors de l'approbation.","سيُنشأ الملف بحالة «وثائق ناقصة». ستُحدَّد حصة الدورات عند الاعتماد.")}</span>
               </div>
               <div className="fg" style={{gap:12}}>
                 <div className="fg fg2">
-                  <div className="field"><label>Nom / Raison sociale *</label>
-                    <input className="fi" value={addRotForm.name} onChange={e=>setAddRotForm(f=>({...f,name:e.target.value}))} placeholder="Commune de ..., SPA ..., etc."/>
+                  <div className="field"><label>{t("Nom / Raison sociale *","الاسم / التسمية التجارية *")}</label>
+                    <input className="fi" value={addRotForm.name} onChange={e=>setAddRotForm(f=>({...f,name:e.target.value}))} placeholder={t("Commune de ..., SPA ..., etc.","بلدية ..., ش.ذ.م.م., إلخ")}/>
                   </div>
-                  <div className="field"><label>Type d'institution</label>
+                  <div className="field"><label>{t("Type d'institution","نوع المؤسسة")}</label>
                     <select className="fi" value={addRotForm.clientType} onChange={e=>setAddRotForm(f=>({...f,clientType:e.target.value}))}>
-                      <option value="state">🏛 Institution d'État</option>
-                      <option value="private">🏢 Entreprise Privée</option>
+                      <option value="state">🏛 {t("Institution d'État","مؤسسة حكومية")}</option>
+                      <option value="private">🏢 {t("Entreprise Privée","مؤسسة خاصة")}</option>
                     </select>
                   </div>
                 </div>
                 <div className="fg fg2">
-                  <div className="field"><label>Téléphone</label>
+                  <div className="field"><label>{t("Téléphone","الهاتف")}</label>
                     <input className="fi" value={addRotForm.phone} onChange={e=>setAddRotForm(f=>({...f,phone:e.target.value}))} placeholder="034 00 00 00"/>
                   </div>
-                  <div className="field"><label>Adresse</label>
-                    <input className="fi" value={addRotForm.address} onChange={e=>setAddRotForm(f=>({...f,address:e.target.value}))} placeholder="Commune, wilaya"/>
+                  <div className="field"><label>{t("Adresse","العنوان")}</label>
+                    <input className="fi" value={addRotForm.address} onChange={e=>setAddRotForm(f=>({...f,address:e.target.value}))} placeholder={t("Commune, wilaya","البلدية، الولاية")}/>
                   </div>
                 </div>
                 <div className="fg fg2">
                   <div className="field"><label>NIF</label>
                     <input className="fi" value={addRotForm.nif} onChange={e=>setAddRotForm(f=>({...f,nif:e.target.value}))} placeholder="099..."/>
                   </div>
-                  <div className="field"><label>Registre de Commerce (Privé)</label>
+                  <div className="field"><label>{t("Registre de Commerce (Privé)","السجل التجاري (خاص)")}</label>
                     <input className="fi" value={addRotForm.rc} onChange={e=>setAddRotForm(f=>({...f,rc:e.target.value}))} placeholder="18/00-0000000B18"/>
                   </div>
                 </div>
-                <div className="field"><label>Périodicité du quota</label>
+                <div className="field"><label>{t("Périodicité du quota","دورية الحصة")}</label>
                   <select className="fi" value={addRotForm.payFrequency} onChange={e=>setAddRotForm(f=>({...f,payFrequency:e.target.value}))}>
-                    <option value="monthly">🗓 Mensuelle (rotations/mois)</option>
-                    <option value="annual">📅 Annuelle (rotations/an)</option>
+                    <option value="monthly">🗓 {t("Mensuelle (rotations/mois)","شهرية (دورة/شهر)")}</option>
+                    <option value="annual">📅 {t("Annuelle (rotations/an)","سنوية (دورة/سنة)")}</option>
                   </select>
                 </div>
                 <div className="field">
-                  <label>📍 Centres d'enfouissement autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <label>📍 {t("Centres d'enfouissement autorisés","مراكز الطمر المخوّلة")} <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>({t("plusieurs choix possibles","اختيارات متعددة ممكنة")})</span></label>
                   <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
                     {(sites||[]).filter(s=>s.status==="active").map(s=>{
                       const checked=(addRotForm.assignedSites||[]).includes(s.id);
@@ -3626,22 +3690,22 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     })}
                   </div>
                 </div>
-                <div className="field"><label>Note initiale</label>
-                  <textarea className="fi" value={addRotForm.note} onChange={e=>setAddRotForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
+                <div className="field"><label>{t("Note initiale","ملاحظة أولية")}</label>
+                  <textarea className="fi" value={addRotForm.note} onChange={e=>setAddRotForm(f=>({...f,note:e.target.value}))} placeholder={t("Observations...","ملاحظات...")}/>
                 </div>
                 <div className="field">
-                  <label>Régime TVA</label>
+                  <label>{t("Régime TVA","نظام TVA")}</label>
                   <div className="seg" style={{marginTop:6}}>
                     <button className={`seg-btn${addRotForm.vatSubject===false?" active":""}`} onClick={()=>setAddRotForm(f=>({...f,vatSubject:false}))}>
-                      🚫 Non assujetti à la TVA
+                      🚫 {t("Non assujetti à la TVA","غير خاضع للضريبة")}
                     </button>
                     <button className={`seg-btn${addRotForm.vatSubject===true?" active":""}`} onClick={()=>setAddRotForm(f=>({...f,vatSubject:true}))}>
-                      ✅ Assujetti à la TVA
+                      ✅ {t("Assujetti à la TVA","خاضع للضريبة")}
                     </button>
                   </div>
                 </div>
                 <div style={{background:"var(--s2)",border:"1px solid var(--bdr)",borderRadius:8,padding:"12px 14px"}}>
-                  <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>📋 Documents requis :</div>
+                  <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>📋 {t("Documents requis :","الوثائق المطلوبة:")}</div>
                   {(addRotForm.clientType==="state"?(docTypes?.state||REQUIRED_DOCS_STATE):(docTypes?.private||REQUIRED_DOCS_PRIVATE)).map(d=>(
                     <div key={d} className="fx aic g2" style={{marginBottom:5,fontSize:11,color:"var(--muted)"}}>
                       <span style={{color:"var(--warn)"}}>⬜</span> {d}
@@ -3649,7 +3713,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   ))}
                 </div>
                 <div className="field">
-                  <label>♻️ Types de déchets autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <label>♻️ {t("Types de déchets autorisés","أنواع النفايات المسموحة")} <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>({t("plusieurs choix possibles","اختيارات متعددة ممكنة")})</span></label>
                   <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
                     {(wasteTypes||[]).map(w=>{
                       const checked=(addRotForm.allowedWasteTypes||[]).includes(w.id);
@@ -3665,7 +3729,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 </div>
               </div>
             </div>
-            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>Annuler</button><button className="btn bp" style={{background:"var(--orange)",borderColor:"var(--orange)"}} disabled={!addRotForm.name} onClick={doAddRotationClient}>✓ Créer le dossier rotations</button></div>
+            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>{t("Annuler","إلغاء")}</button><button className="btn bp" style={{background:"var(--orange)",borderColor:"var(--orange)"}} disabled={!addRotForm.name} onClick={doAddRotationClient}>✓ {t("Créer le dossier rotations","إنشاء ملف الدوراني")}</button></div>
           </div>
         </div>
       )}
@@ -3674,30 +3738,30 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       {modal==="add_prepaid"&&(
         <div className="ov">
           <div className="modal modal-lg">
-            <div className="mh"><span className="mh-title">🎫 Nouveau client bonus prépayé</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
+            <div className="mh"><span className="mh-title">🎫 {t("Nouveau client bonus prépayé","عميل مدفوع مسبقاً جديد")}</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
             <div className="mb2">
               <div className="alrt ai mb3" style={{marginBottom:16}}>
-                <span>ℹ️</span><span style={{fontSize:11}}>Un client prépayé dispose d'un solde en DA préchargé par l'admin. Chaque décharge consomme ce solde. Le compte est actif immédiatement.</span>
+                <span>ℹ️</span><span style={{fontSize:11}}>{t("Un client prépayé dispose d'un solde en DA préchargé par l'admin. Chaque décharge consomme ce solde. Le compte est actif immédiatement.","يمتلك العميل المدفوع مسبقاً رصيداً بالدينار الجزائري مشحوناً من قِبل الأدمن. كل تفريغ يستهلك من هذا الرصيد. الحساب نشط فوراً.")}</span>
               </div>
               <div className="fg" style={{gap:12}}>
                 <div className="fg fg2">
-                  <div className="field"><label>Nom / Raison sociale *</label>
-                    <input className="fi" value={prepaidForm.name} onChange={e=>setPrepaidForm(f=>({...f,name:e.target.value}))} placeholder="Nom du client"/>
+                  <div className="field"><label>{t("Nom / Raison sociale *","الاسم / التسمية التجارية *")}</label>
+                    <input className="fi" value={prepaidForm.name} onChange={e=>setPrepaidForm(f=>({...f,name:e.target.value}))} placeholder={t("Nom du client","اسم العميل")}/>
                   </div>
-                  <div className="field"><label>Solde initial (DA) *</label>
+                  <div className="field"><label>{t("Solde initial (DA) *","الرصيد الأولي (دج) *")}</label>
                     <input className="fi" type="number" value={prepaidForm.balance} onChange={e=>setPrepaidForm(f=>({...f,balance:e.target.value}))} placeholder="200000"/>
                   </div>
                 </div>
                 <div className="fg fg2">
-                  <div className="field"><label>Téléphone</label>
+                  <div className="field"><label>{t("Téléphone","الهاتف")}</label>
                     <input className="fi" value={prepaidForm.phone} onChange={e=>setPrepaidForm(f=>({...f,phone:e.target.value}))} placeholder="0770 00 00 00"/>
                   </div>
-                  <div className="field"><label>Adresse</label>
-                    <input className="fi" value={prepaidForm.address} onChange={e=>setPrepaidForm(f=>({...f,address:e.target.value}))} placeholder="Commune, wilaya"/>
+                  <div className="field"><label>{t("Adresse","العنوان")}</label>
+                    <input className="fi" value={prepaidForm.address} onChange={e=>setPrepaidForm(f=>({...f,address:e.target.value}))} placeholder={t("Commune, wilaya","البلدية، الولاية")}/>
                   </div>
                 </div>
                 <div className="field">
-                  <label>📍 Centres d'enfouissement autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <label>📍 {t("Centres d'enfouissement autorisés","مراكز الطمر المخوّلة")} <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>({t("plusieurs choix possibles","اختيارات متعددة ممكنة")})</span></label>
                   <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
                     {(sites||[]).filter(s=>s.status==="active").map(s=>{
                       const checked=(prepaidForm.assignedSites||[]).includes(s.id);
@@ -3713,22 +3777,22 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     })}
                   </div>
                 </div>
-                <div className="field"><label>Note</label>
-                  <textarea className="fi" value={prepaidForm.note} onChange={e=>setPrepaidForm(f=>({...f,note:e.target.value}))} placeholder="Observations..."/>
+                <div className="field"><label>{t("Note","ملاحظة")}</label>
+                  <textarea className="fi" value={prepaidForm.note} onChange={e=>setPrepaidForm(f=>({...f,note:e.target.value}))} placeholder={t("Observations...","ملاحظات...")}/>
                 </div>
                 <div className="field">
-                  <label>Régime TVA</label>
+                  <label>{t("Régime TVA","نظام TVA")}</label>
                   <div className="seg" style={{marginTop:6}}>
                     <button className={`seg-btn${prepaidForm.vatSubject===false?" active":""}`} onClick={()=>setPrepaidForm(f=>({...f,vatSubject:false}))}>
-                      🚫 Non assujetti à la TVA
+                      🚫 {t("Non assujetti à la TVA","غير خاضع للضريبة")}
                     </button>
                     <button className={`seg-btn${prepaidForm.vatSubject===true?" active":""}`} onClick={()=>setPrepaidForm(f=>({...f,vatSubject:true}))}>
-                      ✅ Assujetti à la TVA
+                      ✅ {t("Assujetti à la TVA","خاضع للضريبة")}
                     </button>
                   </div>
                 </div>
                 <div style={{background:"var(--s2)",border:"1px solid var(--bdr)",borderRadius:8,padding:"12px 14px"}}>
-                  <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>📋 Pièces justificatives à fournir :</div>
+                  <div style={{fontWeight:700,fontSize:12,marginBottom:8}}>📋 {t("Pièces justificatives à fournir :","الوثائق الواجب تقديمها:")}</div>
                   {(docTypes?.prepaid||REQUIRED_DOCS_PREPAID).map(d=>(
                     <div key={d} className="fx aic g2" style={{marginBottom:5,fontSize:11,color:"var(--muted)"}}>
                       <span style={{color:"var(--warn)"}}>⬜</span> {d}
@@ -3736,7 +3800,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   ))}
                 </div>
                 <div className="field">
-                  <label>♻️ Types de déchets autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                  <label>♻️ {t("Types de déchets autorisés","أنواع النفايات المسموحة")} <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>({t("plusieurs choix possibles","اختيارات متعددة ممكنة")})</span></label>
                   <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
                     {(wasteTypes||[]).map(w=>{
                       const checked=(prepaidForm.allowedWasteTypes||[]).includes(w.id);
@@ -3752,7 +3816,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 </div>
               </div>
             </div>
-            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>Annuler</button><button className="btn bp" disabled={!prepaidForm.name||!prepaidForm.balance} onClick={doPrepaidAdd}>✓ Créer le compte prépayé</button></div>
+            <div className="mf"><button className="btn bg" onClick={()=>setModal(false)}>{t("Annuler","إلغاء")}</button><button className="btn bp" disabled={!prepaidForm.name||!prepaidForm.balance} onClick={doPrepaidAdd}>✓ {t("Créer le compte prépayé","إنشاء الحساب المدفوع مسبقاً")}</button></div>
           </div>
         </div>
       )}
@@ -3761,17 +3825,17 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
       {modal==="edit_client"&&editClientForm&&(
         <div className="ov">
           <div className="modal modal-lg">
-            <div className="mh"><span className="mh-title">✏️ Modifier le profil client</span><button className="btn bg bsm" onClick={()=>{setModal(false);setEditClientForm(null);}}>✕</button></div>
+            <div className="mh"><span className="mh-title">✏️ {t("Modifier le profil client","تعديل ملف العميل")}</span><button className="btn bg bsm" onClick={()=>{setModal(false);setEditClientForm(null);}}>✕</button></div>
             <div className="mb2">
               <div className="fg" style={{gap:12}}>
-                <div className="field"><label>Nom / Raison sociale *</label>
+                <div className="field"><label>{t("Nom / Raison sociale *","الاسم / التسمية التجارية *")}</label>
                   <input className="fi" value={editClientForm.name} onChange={e=>setEditClientForm(f=>({...f,name:e.target.value}))}/>
                 </div>
                 <div className="fg fg2">
-                  <div className="field"><label>Téléphone</label>
+                  <div className="field"><label>{t("Téléphone","الهاتف")}</label>
                     <input className="fi" value={editClientForm.phone||""} onChange={e=>setEditClientForm(f=>({...f,phone:e.target.value}))}/>
                   </div>
-                  <div className="field"><label>Adresse</label>
+                  <div className="field"><label>{t("Adresse","العنوان")}</label>
                     <input className="fi" value={editClientForm.address||""} onChange={e=>setEditClientForm(f=>({...f,address:e.target.value}))}/>
                   </div>
                 </div>
@@ -3779,39 +3843,39 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   <div className="field"><label>NIF</label>
                     <input className="fi" value={editClientForm.nif||""} onChange={e=>setEditClientForm(f=>({...f,nif:e.target.value}))} placeholder="099..."/>
                   </div>
-                  <div className="field"><label>Registre de Commerce</label>
+                  <div className="field"><label>{t("Registre de Commerce","السجل التجاري")}</label>
                     <input className="fi" value={editClientForm.rc||""} onChange={e=>setEditClientForm(f=>({...f,rc:e.target.value}))} placeholder="18/00-0000000B18"/>
                   </div>
                 </div>
                 <div className="field">
-                  <label>Régime TVA</label>
+                  <label>{t("Régime TVA","نظام TVA")}</label>
                   <div className="seg" style={{marginTop:6}}>
                     <button className={`seg-btn${editClientForm.vatSubject===false?" active":""}`} onClick={()=>setEditClientForm(f=>({...f,vatSubject:false}))}>
-                      🚫 Non assujetti à la TVA
+                      🚫 {t("Non assujetti à la TVA","غير خاضع للضريبة")}
                     </button>
                     <button className={`seg-btn${editClientForm.vatSubject===true?" active":""}`} onClick={()=>setEditClientForm(f=>({...f,vatSubject:true}))}>
-                      ✅ Assujetti à la TVA
+                      ✅ {t("Assujetti à la TVA","خاضع للضريبة")}
                     </button>
                   </div>
                 </div>
                 {editClientForm.type==="convention"&&(
                   <>
                     <div className="fg fg2">
-                      <div className="field"><label>Fréquence de facturation</label>
+                      <div className="field"><label>{t("Fréquence de facturation","دورية الفوترة")}</label>
                         <select className="fi" value={editClientForm.payFrequency||"monthly"} onChange={e=>setEditClientForm(f=>({...f,payFrequency:e.target.value}))}>
-                          <option value="monthly">📅 Mensuelle</option>
-                          <option value="annual">📆 Annuelle</option>
+                          <option value="monthly">📅 {t("Mensuelle","شهرية")}</option>
+                          <option value="annual">📆 {t("Annuelle","سنوية")}</option>
                         </select>
                       </div>
-                      <div className="field"><label>Mode de paiement</label>
+                      <div className="field"><label>{t("Mode de paiement","طريقة الدفع")}</label>
                         <select className="fi" value={editClientForm.payInstrument||"cheque"} onChange={e=>setEditClientForm(f=>({...f,payInstrument:e.target.value}))}>
-                          <option value="cheque">💳 Chèque</option>
-                          <option value="bank">🏦 Virement bancaire</option>
+                          <option value="cheque">💳 {t("Chèque","شيك")}</option>
+                          <option value="bank">🏦 {t("Virement bancaire","تحويل بنكي")}</option>
                         </select>
                       </div>
                     </div>
                     <div className="field">
-                      <label>🔄 Quota de rotations <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(optionnel — 0 = pas de limite)</span></label>
+                      <label>🔄 {t("Quota de rotations","حصة الدورات")} <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>({t("optionnel — 0 = pas de limite","اختياري — 0 = بلا حد")})</span></label>
                       <input className="fi" type="number" step="1" min="0"
                         value={editClientForm.rotationLimit||0}
                         onChange={e=>setEditClientForm(f=>({...f,rotationLimit:parseInt(e.target.value)||0}))}
@@ -3820,21 +3884,21 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   </>
                 )}
                 {editClientForm.type==="prepaid"&&(
-                  <div className="field"><label>Solde total (DA)</label>
+                  <div className="field"><label>{t("Solde total (DA)","الرصيد الإجمالي (دج)")}</label>
                     <input className="fi" type="number" value={editClientForm.creditLimit||0} onChange={e=>setEditClientForm(f=>({...f,creditLimit:parseFloat(e.target.value)||0}))}/>
                   </div>
                 )}
                 {editClientForm.type==="rotation"&&(
                   <div className="fg fg2">
                     <div className="field">
-                      <label>Périodicité du quota</label>
+                      <label>{t("Périodicité du quota","دورية الحصة")}</label>
                       <select className="fi" value={editClientForm.payFrequency||"monthly"} onChange={e=>setEditClientForm(f=>({...f,payFrequency:e.target.value}))}>
-                        <option value="monthly">🗓 Mensuelle (rotations/mois)</option>
-                        <option value="annual">📅 Annuelle (rotations/an)</option>
+                        <option value="monthly">🗓 {t("Mensuelle (rotations/mois)","شهرية (دورة/شهر)")}</option>
+                        <option value="annual">📅 {t("Annuelle (rotations/an)","سنوية (دورة/سنة)")}</option>
                       </select>
                     </div>
                     <div className="field">
-                      <label>Quota de rotations {editClientForm.payFrequency==="annual"?"(rotations/an)":"(rotations/mois)"}</label>
+                      <label>{t("Quota de rotations","حصة الدورات")} {editClientForm.payFrequency==="annual"?t("(rotations/an)","(دورة/سنة)"):t("(rotations/mois)","(دورة/شهر)")}</label>
                       <input className="fi" type="number" step="1" min="0"
                         value={editClientForm.weightLimitYear||0}
                         onChange={e=>setEditClientForm(f=>({...f,weightLimitYear:parseInt(e.target.value)||0}))}
@@ -3843,7 +3907,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   </div>
                 )}
                 <div className="field">
-                  <label>📍 Centres d'enfouissement autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(admin — plusieurs choix)</span></label>
+                  <label>📍 {t("Centres d'enfouissement autorisés","مراكز الطمر المخوّلة")} <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>({t("admin — plusieurs choix","أدمن — اختيارات متعددة")})</span></label>
                   <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
                     {(sites||[]).filter(s=>s.status==="active").map(s=>{
                       const checked=(editClientForm.assignedSites||[]).includes(s.id);
@@ -3859,14 +3923,14 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                     })}
                   </div>
                 </div>
-                <div className="field"><label>Note</label>
+                <div className="field"><label>{t("Note","ملاحظة")}</label>
                   <textarea className="fi" value={editClientForm.note||""} onChange={e=>setEditClientForm(f=>({...f,note:e.target.value}))} rows={2}/>
                 </div>
                 {isAdmin&&(
                   <>
                     <hr className="dvdr"/>
                     <div className="field">
-                      <label>🚛 Type de service EPWGCET <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(admin)</span></label>
+                      <label>🚛 {t("Type de service EPWGCET","نوع الخدمة EWGCET")} <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(admin)</span></label>
                       <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:8}}>
                         <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}}>
                           <input type="checkbox" checked={editClientForm.serviceType==="treatment_only"||editClientForm.serviceType==="both"}
@@ -3875,7 +3939,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                               const hasTraitement = e.target.checked;
                               setEditClientForm(f=>({...f,serviceType:hasTraitement&&hasCollect?"both":hasTraitement?"treatment_only":hasCollect?"treat_and_collect":"treatment_only"}));
                             }}/>
-                          🏭 Traitement
+                          🏭 {t("Traitement","المعالجة")}
                         </label>
                         <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}}>
                           <input type="checkbox" checked={editClientForm.serviceType==="treat_and_collect"||editClientForm.serviceType==="both"}
@@ -3884,30 +3948,30 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                               const hasCollect = e.target.checked;
                               setEditClientForm(f=>({...f,serviceType:hasTraitement&&hasCollect?"both":hasCollect?"treat_and_collect":hasTraitement?"treatment_only":"treatment_only"}));
                             }}/>
-                          🚛 Collecte et Traitement
+                          🚛 {t("Collecte et Traitement","الجمع والمعالجة")}
                         </label>
                       </div>
                     </div>
                     {(editClientForm.serviceType==="treat_and_collect"||editClientForm.serviceType==="both")&&(
                       <div className="field">
-                        <label>Mode de facturation pour la collecte</label>
+                        <label>{t("Mode de facturation pour la collecte","طريقة فوترة الجمع")}</label>
                         <div className="seg" style={{marginTop:6}}>
                           <button className={`seg-btn${editClientForm.collectBillingMode!=="rotation"?" active":""}`}
                             onClick={()=>setEditClientForm(f=>({...f,collectBillingMode:"tonnage"}))}>
-                            ⚖️ Tonnage (prix/tonne)
+                            ⚖️ {t("Tonnage (prix/tonne)","طنية (سعر/طن)")}
                           </button>
                           <button className={`seg-btn${editClientForm.collectBillingMode==="rotation"?" active":""}`}
                             onClick={()=>setEditClientForm(f=>({...f,collectBillingMode:"rotation"}))}
                             style={editClientForm.collectBillingMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)",color:"#fff"}:{}}>
-                            🔄 Rotation (prix fixe/passage)
+                            🔄 {t("Rotation (prix fixe/passage)","دوراني (سعر ثابت/مرور)")}
                           </button>
                         </div>
                       </div>
                     )}
                     <div className="field">
-                      <label>♻️ Types de déchets autorisés <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>(plusieurs choix possibles)</span></label>
+                      <label>♻️ {t("Types de déchets autorisés","أنواع النفايات المسموحة")} <span style={{fontWeight:400,color:"var(--muted)",fontSize:10}}>({t("plusieurs choix possibles","اختيارات متعددة ممكنة")})</span></label>
                       <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:6}}>
-                        {(wasteTypes||[]).length===0&&<span style={{fontSize:11,color:"var(--muted)"}}>Aucun type de déchet configuré.</span>}
+                        {(wasteTypes||[]).length===0&&<span style={{fontSize:11,color:"var(--muted)"}}>{t("Aucun type de déchet configuré.","لم يُهيأ أي نوع نفايات.")}</span>}
                         {(wasteTypes||[]).map(w=>{
                           const checked=(editClientForm.allowedWasteTypes||[]).includes(w.id);
                           return(
@@ -3924,7 +3988,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                 )}
               </div>
             </div>
-            <div className="mf"><button className="btn bg" onClick={()=>{setModal(false);setEditClientForm(null);}}>Annuler</button><button className="btn bp" disabled={!editClientForm.name} onClick={doEditClient}>✓ Enregistrer</button></div>
+            <div className="mf"><button className="btn bg" onClick={()=>{setModal(false);setEditClientForm(null);}}>{t("Annuler","إلغاء")}</button><button className="btn bp" disabled={!editClientForm.name} onClick={doEditClient}>✓ {t("Enregistrer","حفظ")}</button></div>
           </div>
         </div>
       )}
@@ -3936,6 +4000,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
    OPERATORS
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
+  const t = useT();
   const [modal,     setModal]     = useState(false);
   const [editOp,    setEditOp]    = useState(null);
   const [editForm,  setEditForm]  = useState({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CET-JIJ"});
@@ -3983,20 +4048,20 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
       <div className="fx aic jsb mb4">
         <div className="tabs" style={{margin:0}}>
           <button className={`tab${tab==="active"?" active":""}`} onClick={()=>setTab("active")}>
-            Opérateurs ({activeOps.length})
+            {t("Opérateurs","العمال")} ({activeOps.length})
           </button>
           <button className={`tab${tab==="pending"?" active":""}`} onClick={()=>setTab("pending")}>
-            Demandes en attente {pendingOps.length>0&&<span className="badge b-warn" style={{marginLeft:6,fontSize:8}}>{pendingOps.length}</span>}
+            {t("Demandes en attente","الطلبات المعلقة")} {pendingOps.length>0&&<span className="badge b-warn" style={{marginLeft:6,fontSize:8}}>{pendingOps.length}</span>}
           </button>
         </div>
-        <button className="btn bp bsm" onClick={()=>setModal(true)}>➕<span className="btn-lbl"> Nouvel opérateur</span></button>
+        <button className="btn bp bsm" onClick={()=>setModal(true)}>➕<span className="btn-lbl"> {t("Nouvel opérateur","عامل جديد")}</span></button>
       </div>
 
       {tab==="active"&&(
         <>
           {/* Admin card */}
           <div style={{marginBottom:16}}>
-            <div className="nav-lbl" style={{padding:"0 0 8px"}}>Administrateur</div>
+            <div className="nav-lbl" style={{padding:"0 0 8px"}}>{t("Administrateur","المدير")}</div>
             {users.filter(u=>u.role==="admin").map(u=>(
               <div key={u.id} className="op-card" style={{display:"flex",gap:14,alignItems:"flex-start",marginBottom:8}}>
                 <div className="op-avatar op-av-admin">👔</div>
@@ -4008,7 +4073,7 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
                   <div className="mn tsm tmu mt1">{u.email}</div>
                   <div className="fx aic g3 mt2">
                     <span className="tsm tmu">📞 {u.phone}</span>
-                    <span className="tsm tmu">🏭 Tous les sites</span>
+                    <span className="tsm tmu">🏭 {t("Tous les sites","كل المواقع")}</span>
                     <span className="mn tsm tmu">{u.matricule}</span>
                   </div>
                 </div>
@@ -4016,10 +4081,10 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
             ))}
           </div>
 
-          <div className="nav-lbl" style={{padding:"0 0 8px"}}>Agents de poste</div>
+          <div className="nav-lbl" style={{padding:"0 0 8px"}}>{t("Agents de poste","عمال المناوبة")}</div>
           <div className="op-grid">
             {activeOps.length===0?(
-              <div className="card" style={{color:"var(--muted)",textAlign:"center",padding:32}}>Aucun opérateur actif</div>
+              <div className="card" style={{color:"var(--muted)",textAlign:"center",padding:32}}>{t("Aucun opérateur actif","لا يوجد عامل نشط")}</div>
             ):activeOps.map(u=>(
               <div key={u.id} className="op-card">
                 <div className="fx aic jsb mb3">
@@ -4036,8 +4101,8 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
                   <div className="fx aic g2">
                     <span>📧</span><span className="tmu truncate">{u.email}</span>
                     {u.emailVerified
-                      ? <span className="badge b-ok" style={{fontSize:9,marginLeft:2}}>✓ vérifié</span>
-                      : <span className="badge b-warn" style={{fontSize:9,marginLeft:2}}>non vérifié</span>
+                      ? <span className="badge b-ok" style={{fontSize:9,marginLeft:2}}>✓ {t("vérifié","موثق")}</span>
+                      : <span className="badge b-warn" style={{fontSize:9,marginLeft:2}}>{t("non vérifié","غير موثق")}</span>
                     }
                   </div>
                   <div className="fx aic g2"><span>📞</span><span className="tmu">{u.phone||"—"}</span></div>
@@ -4047,14 +4112,14 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
                 {u.id !== authUser.id && (
                   <div className="fx g2">
                     <button className="btn bg bsm" style={{flex:1}} onClick={()=>{setEditOp(u);setEditForm({name:u.name,email:u.email,password:"",phone:u.phone||"",matricule:u.matricule||"",siteId:u.siteId||"CET-JIJ"});}}>
-                      ✏️ Modifier
+                      ✏️ {t("Modifier","تعديل")}
                     </button>
                     <button className={`btn bsm ${u.status==="active"?"be":"bp"}`}
                       onClick={()=>toggleStatus(u)}>
                       {u.status==="active"?"🔒":"🔓"}
                     </button>
-                    <button className="btn bg bsm" title="Supprimer"
-                      onClick={()=>{ if(window.confirm(`Supprimer l'opérateur ${u.name} ?`)) deleteUser(u.id); }}>
+                    <button className="btn bg bsm" title={t("Supprimer","حذف")}
+                      onClick={()=>{ if(window.confirm(t(`Supprimer l'opérateur ${u.name} ?`,`حذف العامل ${u.name}؟`))) deleteUser(u.id); }}>
                       🗑
                     </button>
                   </div>
@@ -4069,7 +4134,7 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
         pendingOps.length===0?(
           <div className="card" style={{color:"var(--muted)",textAlign:"center",padding:40}}>
             <div style={{fontSize:32,marginBottom:10}}>✅</div>
-            <div>Aucune demande en attente</div>
+            <div>{t("Aucune demande en attente","لا توجد طلبات معلقة")}</div>
           </div>
         ):(
           <div className="op-grid">
@@ -4082,35 +4147,35 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
                     <div className="op-avatar op-av-op">👤</div>
                     <div>
                       <div style={{fontWeight:700,fontSize:13}}>{u.name}</div>
-                      <span className="badge b-warn">En attente</span>
+                      <span className="badge b-warn">{t("En attente","قيد الانتظار")}</span>
                     </div>
                   </div>
                   {u.emailVerified
-                    ? <span className="badge b-ok" style={{fontSize:9}}>✓ e-mail vérifié</span>
-                    : <span className="badge b-warn" style={{fontSize:9}}>e-mail non vérifié</span>
+                    ? <span className="badge b-ok" style={{fontSize:9}}>✓ {t("e-mail vérifié","بريد موثق")}</span>
+                    : <span className="badge b-warn" style={{fontSize:9}}>{t("e-mail non vérifié","بريد غير موثق")}</span>
                   }
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:5,fontSize:12,marginBottom:12}}>
                   <div className="fx aic g2"><span>📧</span><span className="tmu truncate">{u.email}</span></div>
                   <div className="fx aic g2"><span>📞</span><span className="tmu">{u.phone||"—"}</span></div>
-                  <div className="fx aic g2"><span>🏭</span><span className="tmu">Demandé: {siteLabel(u.siteId)}</span></div>
+                  <div className="fx aic g2"><span>🏭</span><span className="tmu">{t("Demandé:","مطلوب:")} {siteLabel(u.siteId)}</span></div>
                   <div className="fx aic g2"><span>📅</span><span className="tmu">{u.createdAt}</span></div>
                 </div>
                 {!u.emailVerified && (
                   <div style={{background:"rgba(46,204,88,.07)",border:"1px solid rgba(46,204,88,.25)",borderRadius:8,padding:"10px 12px",marginBottom:10}}>
-                    <div style={{fontSize:10,color:"var(--g)",marginBottom:6,fontWeight:600}}>🔑 CODE DE VÉRIFICATION (à communiquer à l'opérateur)</div>
+                    <div style={{fontSize:10,color:"var(--g)",marginBottom:6,fontWeight:600}}>🔑 {t("CODE DE VÉRIFICATION (à communiquer à l'opérateur)","رمز التحقق (يُسلَّم للعامل)")}</div>
                     <div className="fx aic g2">
                       <span style={{fontFamily:"monospace",fontSize:22,fontWeight:800,letterSpacing:6,color:"var(--g)"}}>
                         {code||"—"}
                       </span>
-                      {code&&<button className="btn bg bsm" title="Copier" onClick={()=>copyCode(code)}>📋</button>}
-                      <button className="btn bg bsm" title="Nouveau code" onClick={()=>regenerateCode(u)}>🔄</button>
+                      {code&&<button className="btn bg bsm" title={t("Copier","نسخ")} onClick={()=>copyCode(code)}>📋</button>}
+                      <button className="btn bg bsm" title={t("Nouveau code","رمز جديد")} onClick={()=>regenerateCode(u)}>🔄</button>
                     </div>
                   </div>
                 )}
                 <div className="fg fg2">
-                  <button className="btn bp bsm" onClick={()=>approveOp(u)}>✓ Approuver</button>
-                  <button className="btn be bsm" onClick={()=>rejectOp(u)}>✗ Refuser</button>
+                  <button className="btn bp bsm" onClick={()=>approveOp(u)}>✓ {t("Approuver","قبول")}</button>
+                  <button className="btn be bsm" onClick={()=>rejectOp(u)}>✗ {t("Refuser","رفض")}</button>
                 </div>
               </div>
               );
@@ -4123,40 +4188,40 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
       {modal&&(
         <div className="ov">
           <div className="modal modal-lg">
-            <div className="mh"><span className="mh-title">➕ Créer un compte opérateur</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
+            <div className="mh"><span className="mh-title">➕ {t("Créer un compte opérateur","إنشاء حساب عامل")}</span><button className="btn bg bsm" onClick={()=>setModal(false)}>✕</button></div>
             <div className="mb2">
               <div className="fg" style={{gap:14}}>
                 <div className="fg fg2">
-                  <div className="field"><label>Nom complet *</label>
-                    <input className="fi" value={form.name} onChange={e=>set("name",e.target.value)} placeholder="Prénom Nom"/>
+                  <div className="field"><label>{t("Nom complet *","الاسم الكامل *")}</label>
+                    <input className="fi" value={form.name} onChange={e=>set("name",e.target.value)} placeholder={t("Prénom Nom","الاسم واللقب")}/>
                   </div>
-                  <div className="field"><label>Matricule</label>
+                  <div className="field"><label>{t("Matricule","الرقم الوظيفي")}</label>
                     <input className="fi" value={form.matricule} onChange={e=>set("matricule",e.target.value)} placeholder={`OP-${new Date().getFullYear()}-00${operators.length+1}`}/>
                   </div>
                 </div>
                 <div className="fg fg2">
-                  <div className="field"><label>Adresse e-mail *</label>
+                  <div className="field"><label>{t("Adresse e-mail *","البريد الإلكتروني *")}</label>
                     <input className="fi" type="email" value={form.email} onChange={e=>set("email",e.target.value)} placeholder="prenom.nom@epwgcet-jijel.dz"/>
                   </div>
-                  <div className="field"><label>Téléphone</label>
+                  <div className="field"><label>{t("Téléphone","الهاتف")}</label>
                     <input className="fi" value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="0770 00 00 00"/>
                   </div>
                 </div>
                 <div className="fg fg2">
-                  <div className="field"><label>Site d'affectation</label>
+                  <div className="field"><label>{t("Site d'affectation","الموقع المُعيَّن إليه")}</label>
                     <select className="fi" value={form.siteId} onChange={e=>set("siteId",e.target.value)}>
                       {sites.map(s=><option key={s.id} value={s.id}>{s.name} — {s.region}</option>)}
                     </select>
                   </div>
-                  <div className="field"><label>Mot de passe temporaire *</label>
-                    <input className="fi" type="password" value={form.password} onChange={e=>set("password",e.target.value)} placeholder="Min. 6 caractères"/>
+                  <div className="field"><label>{t("Mot de passe temporaire *","كلمة مرور مؤقتة *")}</label>
+                    <input className="fi" type="password" value={form.password} onChange={e=>set("password",e.target.value)} placeholder={t("Min. 6 caractères","6 أحرف على الأقل")}/>
                   </div>
                 </div>
               </div>
             </div>
             <div className="mf">
-              <button className="btn bg" onClick={()=>setModal(false)}>Annuler</button>
-              <button className="btn bp" disabled={!form.name||!form.email||!form.password} onClick={handleAdd}>✓ Créer le compte</button>
+              <button className="btn bg" onClick={()=>setModal(false)}>{t("Annuler","إلغاء")}</button>
+              <button className="btn bp" disabled={!form.name||!form.email||!form.password} onClick={handleAdd}>✓ {t("Créer le compte","إنشاء الحساب")}</button>
             </div>
           </div>
         </div>
@@ -4166,43 +4231,43 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
       {editOp&&(
         <div className="ov">
           <div className="modal modal-lg">
-            <div className="mh"><span className="mh-title">✏️ Modifier l'opérateur</span><button className="btn bg bsm" onClick={()=>setEditOp(null)}>✕</button></div>
+            <div className="mh"><span className="mh-title">✏️ {t("Modifier l'opérateur","تعديل العامل")}</span><button className="btn bg bsm" onClick={()=>setEditOp(null)}>✕</button></div>
             <div className="mb2">
               <div className="fg" style={{gap:14}}>
                 <div className="fg fg2">
-                  <div className="field"><label>Nom complet *</label>
+                  <div className="field"><label>{t("Nom complet *","الاسم الكامل *")}</label>
                     <input className="fi" value={editForm.name} onChange={e=>setEd("name",e.target.value)}/>
                   </div>
-                  <div className="field"><label>Matricule</label>
+                  <div className="field"><label>{t("Matricule","الرقم الوظيفي")}</label>
                     <input className="fi" value={editForm.matricule} onChange={e=>setEd("matricule",e.target.value)}/>
                   </div>
                 </div>
                 <div className="fg fg2">
-                  <div className="field"><label>Adresse e-mail *</label>
+                  <div className="field"><label>{t("Adresse e-mail *","البريد الإلكتروني *")}</label>
                     <input className="fi" type="email" value={editForm.email} onChange={e=>setEd("email",e.target.value)}/>
                   </div>
-                  <div className="field"><label>Téléphone</label>
+                  <div className="field"><label>{t("Téléphone","الهاتف")}</label>
                     <input className="fi" value={editForm.phone} onChange={e=>setEd("phone",e.target.value)}/>
                   </div>
                 </div>
                 <div className="fg fg2">
-                  <div className="field"><label>Site d'affectation</label>
+                  <div className="field"><label>{t("Site d'affectation","الموقع المُعيَّن إليه")}</label>
                     <select className="fi" value={editForm.siteId} onChange={e=>setEd("siteId",e.target.value)}>
                       {sites.map(s=><option key={s.id} value={s.id}>{s.name} — {s.region}</option>)}
                     </select>
                   </div>
-                  <div className="field"><label>Nouveau mot de passe (laisser vide = inchangé)</label>
-                    <input className="fi" type="password" value={editForm.password} onChange={e=>setEd("password",e.target.value)} placeholder="Laisser vide pour ne pas changer"/>
+                  <div className="field"><label>{t("Nouveau mot de passe (laisser vide = inchangé)","كلمة مرور جديدة (اتركها فارغة = بدون تغيير)")}</label>
+                    <input className="fi" type="password" value={editForm.password} onChange={e=>setEd("password",e.target.value)} placeholder={t("Laisser vide pour ne pas changer","اترك فارغاً للإبقاء على نفس كلمة المرور")}/>
                   </div>
                 </div>
               </div>
             </div>
             <div className="mf">
-              <button className="btn bg" onClick={()=>setEditOp(null)}>Annuler</button>
+              <button className="btn bg" onClick={()=>setEditOp(null)}>{t("Annuler","إلغاء")}</button>
               <button className="btn bp" disabled={!editForm.name||!editForm.email} onClick={()=>{
                 updateUser({...editOp,name:editForm.name,email:editForm.email,password:editForm.password||"",phone:editForm.phone,matricule:editForm.matricule,siteId:editForm.siteId});
                 setEditOp(null);
-              }}>✓ Enregistrer</button>
+              }}>✓ {t("Enregistrer","حفظ")}</button>
             </div>
           </div>
         </div>
@@ -4961,6 +5026,7 @@ function generateEmptyBillHTML(c, company) {
    INVOICE / RELEVÉ MENSUEL
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,updateInvoice,updateDischarge,company}) {
+  const t = useT();
   const now = new Date();
          const findBestDischarges = (budget, discharges) => {
   const sorted = [...discharges].sort((a, b) => (b.total||0) - (a.total||0));
@@ -6529,6 +6595,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
    SETTINGS
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,setAuthUser,docTypes,updateDocTypes,company,updateCompany,companyTrucks,addCompanyTruck,updateCompanyTruck,deleteCompanyTruck}) {
+  const t = useT();
   const isAdmin = authUser.role==="admin";
   const [tab, setTab] = useState("general");
   const [editWT, setEditWT] = useState(null);
