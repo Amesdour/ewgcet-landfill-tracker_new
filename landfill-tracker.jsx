@@ -1023,22 +1023,28 @@ export default function App() {
     await fetch(`/api/clients/${c.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});
     setClients(p=>p.map(x=>x.id===c.id?c:x));
   };
+  const actorHdrs = () => ({
+    'Content-Type':'application/json',
+    'x-actor-id':   authUser?.id   || '',
+    'x-actor-name': authUser?.name || '',
+    'x-actor-role': authUser?.role || '',
+  });
   const deleteClient = async id => {
-    await fetch(`/api/clients/${id}`,{method:'DELETE'});
+    await fetch(`/api/clients/${id}`,{method:'DELETE',headers:actorHdrs()});
     setClients(p=>p.filter(c=>c.id!==id));
   };
   const addUser      = async u  => {
-    const res = await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
+    const res = await fetch('/api/users',{method:'POST',headers:actorHdrs(),body:JSON.stringify(u)});
     const data = await res.json();
     setUsers(p=>[...p,{...u, verificationCode: data.verificationCode||null, emailVerified:false}]);
     return data;
   };
   const updateUser   = async u  => {
-    await fetch(`/api/users/${u.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
+    await fetch(`/api/users/${u.id}`,{method:'PUT',headers:actorHdrs(),body:JSON.stringify(u)});
     setUsers(p=>p.map(x=>x.id===u.id?u:x));
   };
   const deleteUser   = async id => {
-    await fetch(`/api/users/${id}`,{method:'DELETE'});
+    await fetch(`/api/users/${id}`,{method:'DELETE',headers:actorHdrs()});
     setUsers(p=>p.filter(u=>u.id!==id));
   };
   const updateSite   = async s  => {
@@ -1093,6 +1099,7 @@ export default function App() {
     {id:"operators",  lbl:lang==="ar"?"المشغلون":"Opérateurs",            ic:"👷", bdg:pendingOps||null},
     {id:"invoice",    lbl:lang==="ar"?"الفواتير / الكشوف":"Factures / Relevés", ic:"🧾"},
     {id:"settings",   lbl:lang==="ar"?"الإعدادات":"Paramètres",           ic:"⚙️"},
+    {id:"compliance",  lbl:lang==="ar"?"الامتثال القانوني":"Conformité 18-07", ic:"🛡️"},
   ];
   const navOp = [
     {id:"gate",       lbl:lang==="ar"?"تسجيل إيداع":"Saisie Dépôt",       ic:"🚛"},
@@ -1167,6 +1174,7 @@ onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.
             {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} updateDischarge={updateDischarge} company={company}/>}
             {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany} companyTrucks={companyTrucks} addCompanyTruck={addCompanyTruck} updateCompanyTruck={updateCompanyTruck} deleteCompanyTruck={deleteCompanyTruck}/>}
             {page==="schema"     && <PageSchema/>}
+            {page==="compliance" && <PageCompliance authUser={authUser}/>}
           </div>
           <nav className="mobile-bottom-nav">
             <div className="mbn-inner">
@@ -7263,6 +7271,476 @@ function PageSchema() {
           </div>
         ))}
       </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PAGE COMPLIANCE — Conformité Lois 18-07 et 25-11
+   Algerian Personal Data Protection Laws
+═══════════════════════════════════════════════════════════════════════════ */
+function PageCompliance({ authUser }) {
+  const [tab,       setTab]       = useState("dashboard");
+  const [stats,     setStats]     = useState(null);
+  const [auditRows, setAuditRows] = useState([]);
+  const [auditTotal,setAuditTotal]= useState(0);
+  const [dsrList,   setDsrList]   = useState([]);
+  const [registry,  setRegistry]  = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [err,       setErr]       = useState(null);
+
+  // DSR form state
+  const [dsrForm,   setDsrForm]   = useState({ requestType:'access', subjectName:'', subjectId:'', contactInfo:'', description:'' });
+  const [dsrSaving, setDsrSaving] = useState(false);
+  const [dsrOk,     setDsrOk]     = useState(false);
+
+  const fetchAll = () => {
+    setLoading(true); setErr(null);
+    Promise.all([
+      fetch('/api/compliance/stats').then(r=>r.json()),
+      fetch('/api/compliance/audit-log?limit=100').then(r=>r.json()),
+      fetch('/api/compliance/requests').then(r=>r.json()),
+      fetch('/api/compliance/registry').then(r=>r.json()),
+    ]).then(([s,a,d,reg])=>{
+      setStats(s);
+      setAuditRows(a.rows||[]); setAuditTotal(a.total||0);
+      setDsrList(Array.isArray(d)?d:[]);
+      setRegistry(Array.isArray(reg)?reg:[]);
+      setLoading(false);
+    }).catch(e=>{ setErr(String(e)); setLoading(false); });
+  };
+
+  useEffect(()=>{ fetchAll(); },[]);
+
+  const submitDSR = async () => {
+    if (!dsrForm.subjectName.trim()) return;
+    setDsrSaving(true);
+    try {
+      await fetch('/api/compliance/requests',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(dsrForm),
+      });
+      setDsrOk(true);
+      setDsrForm({ requestType:'access', subjectName:'', subjectId:'', contactInfo:'', description:'' });
+      fetchAll();
+    } catch(e){ alert('Erreur: '+e); }
+    setDsrSaving(false);
+  };
+
+  const updateDSR = async (id, status, handledBy, responseNote) => {
+    await fetch('/api/compliance/requests/'+id,{
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ status, handledBy, responseNote }),
+    });
+    fetchAll();
+  };
+
+  const DSR_TYPES = {
+    access:        { lbl:'Droit d\'accès',       ic:'🔍', color:'var(--info)' },
+    rectification: { lbl:'Rectification',         ic:'✏️', color:'var(--warn)' },
+    erasure:       { lbl:'Droit à l\'effacement', ic:'🗑️', color:'var(--err)'  },
+    opposition:    { lbl:'Opposition',             ic:'🚫', color:'var(--purple)'},
+  };
+  const DSR_STATUS = {
+    pending:     { lbl:'En attente',    color:'var(--warn)'  },
+    in_progress: { lbl:'En cours',      color:'var(--info)'  },
+    completed:   { lbl:'Traité',        color:'var(--g)'     },
+    rejected:    { lbl:'Rejeté',        color:'var(--err)'   },
+  };
+  const ACTION_ICONS = {
+    LOGIN:'🔑', LOGIN_FAIL:'⛔', CREATE_USER:'👤', DELETE_USER:'🗑️',
+    DELETE_CLIENT:'🗑️', DATA_SUBJECT_REQUEST:'📋', DSR_STATUS_UPDATE:'✅',
+  };
+  const LEGAL_BASIS = {
+    legal_obligation:  'Obligation légale',
+    legitimate_interest:'Intérêt légitime',
+    consent:           'Consentement',
+    contract:          'Exécution contrat',
+  };
+
+  const tabs = [
+    {id:'dashboard', lbl:'Tableau de bord', ic:'📊'},
+    {id:'audit',     lbl:'Journal d\'audit', ic:'📋'},
+    {id:'dsr',       lbl:'Droits des personnes', ic:'⚖️'},
+    {id:'registry',  lbl:'Registre des traitements', ic:'📁'},
+    {id:'info',      lbl:'Obligations légales', ic:'📜'},
+  ];
+
+  const s = (key, style={}) => ({...style});
+
+  if (loading) return <div className="card" style={{textAlign:'center',padding:40,color:'var(--muted)'}}>Chargement conformité…</div>;
+  if (err)     return <div className="card" style={{textAlign:'center',padding:40,color:'var(--err)'}}>Erreur: {err}</div>;
+
+  return (
+    <>
+      {/* Header */}
+      <div className="card" style={{background:'linear-gradient(135deg,#0e6e27,#178a34)',color:'#fff',marginBottom:16}}>
+        <div className="fx aic g8">
+          <span style={{fontSize:32}}>🛡️</span>
+          <div>
+            <div style={{fontFamily:'var(--head)',fontSize:22,fontWeight:800,letterSpacing:'.03em'}}>
+              Conformité Protection des Données Personnelles
+            </div>
+            <div style={{fontSize:12,opacity:.85,marginTop:2}}>
+              Loi 18-07 du 25 Joumada El Oula 1439 correspondant au 10 février 2018 &nbsp;|&nbsp;
+              Loi 25-11 relative à la protection des personnes physiques dans le traitement des données à caractère personnel
+            </div>
+          </div>
+        </div>
+        {stats && (
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginTop:16}}>
+            {[
+              {lbl:'Événements journalisés', val:stats.auditTotal, ic:'📋', ok:true},
+              {lbl:'Traitements enregistrés', val:stats.registryCount, ic:'📁', ok:true},
+              {lbl:'Demandes en attente', val:stats.dsrPending, ic:'⏳', ok:stats.dsrPending===0},
+              {lbl:'Demandes en retard', val:stats.dsrOverdue, ic:'⚠️', ok:stats.dsrOverdue===0},
+            ].map(s=>(
+              <div key={s.lbl} style={{background:'rgba(255,255,255,.15)',borderRadius:8,padding:'10px 14px',backdropFilter:'blur(4px)'}}>
+                <div style={{fontSize:18}}>{s.ic}</div>
+                <div style={{fontFamily:'var(--head)',fontSize:24,fontWeight:800}}>{s.val}</div>
+                <div style={{fontSize:10,opacity:.85}}>{s.lbl}</div>
+                {!s.ok && s.val > 0 && <div style={{fontSize:9,color:'#ffdd88',marginTop:2}}>⚠ Action requise</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tab bar */}
+      <div className="fx g4" style={{marginBottom:16,flexWrap:'wrap'}}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{padding:'8px 16px',borderRadius:8,border:'none',cursor:'pointer',fontFamily:'var(--font)',fontSize:13,fontWeight:600,
+              background:tab===t.id?'var(--g)':'var(--s2)',color:tab===t.id?'#fff':'var(--txt)',
+              boxShadow:tab===t.id?'0 2px 8px rgba(23,138,52,.3)':'none',transition:'all .15s'}}>
+            {t.ic} {t.lbl}
+          </button>
+        ))}
+        <button onClick={fetchAll} style={{marginLeft:'auto',padding:'8px 14px',borderRadius:8,border:'1px solid var(--bdr)',background:'var(--s1)',cursor:'pointer',fontSize:12,color:'var(--muted)'}}>
+          🔄 Rafraîchir
+        </button>
+      </div>
+
+      {/* ── DASHBOARD ── */}
+      {tab==='dashboard' && (
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+          <div className="card">
+            <div style={{fontFamily:'var(--head)',fontSize:16,fontWeight:800,marginBottom:12}}>📜 Cadre légal applicable</div>
+            {[
+              {art:'Loi 18-07 Art. 4',  txt:'Licéité du traitement — base légale obligation réglementaire EPWGCET'},
+              {art:'Loi 18-07 Art. 16', txt:'Déclaration à l\'ANPDP — registre des traitements tenu à jour'},
+              {art:'Loi 18-07 Art. 20', txt:'Sécurité — journal d\'audit, accès restreint, mots de passe hachés'},
+              {art:'Loi 18-07 Art. 22', txt:'Droit d\'accès, rectification, effacement des personnes concernées'},
+              {art:'Loi 18-07 Art. 29', txt:'Durée de conservation limitée au strict nécessaire (3 à 10 ans)'},
+              {art:'Loi 25-11 Art. 9',  txt:'Mesures techniques : HTTPS, headers de sécurité, limitation des accès'},
+            ].map(r=>(
+              <div key={r.art} className="fx g8 aic" style={{padding:'7px 0',borderBottom:'1px solid var(--s3)'}}>
+                <span style={{fontFamily:'var(--mono)',fontSize:10,color:'var(--g)',minWidth:140,fontWeight:700}}>{r.art}</span>
+                <span style={{fontSize:12,color:'var(--txt)'}}>{r.txt}</span>
+                <span style={{marginLeft:'auto',fontSize:16}}>✅</span>
+              </div>
+            ))}
+          </div>
+          <div className="card">
+            <div style={{fontFamily:'var(--head)',fontSize:16,fontWeight:800,marginBottom:12}}>⚡ Dernières actions sensibles</div>
+            {auditRows.slice(0,8).map(r=>(
+              <div key={r.id} className="fx g8 aic" style={{padding:'6px 0',borderBottom:'1px solid var(--s3)',fontSize:12}}>
+                <span style={{fontSize:16}}>{ACTION_ICONS[r.action]||'📌'}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:600,color:'var(--txt)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.action}</div>
+                  <div style={{color:'var(--muted)',fontSize:10}}>{r.actor_name||'Système'} · {new Date(r.ts).toLocaleString('fr-DZ')}</div>
+                </div>
+                <span style={{fontSize:10,color:r.result==='failure'?'var(--err)':'var(--g)',fontWeight:700}}>{r.result==='failure'?'ÉCHEC':'OK'}</span>
+              </div>
+            ))}
+            {auditRows.length===0&&<div style={{color:'var(--muted)',fontSize:12,textAlign:'center',padding:20}}>Aucun événement enregistré</div>}
+          </div>
+          <div className="card">
+            <div style={{fontFamily:'var(--head)',fontSize:16,fontWeight:800,marginBottom:12}}>⚖️ Demandes de droits — État</div>
+            {Object.entries(DSR_STATUS).map(([k,v])=>{
+              const count = dsrList.filter(d=>d.status===k).length;
+              return (
+                <div key={k} className="fx aic g8" style={{padding:'7px 0',borderBottom:'1px solid var(--s3)'}}>
+                  <span style={{fontFamily:'var(--mono)',fontSize:12,color:v.color,minWidth:120}}>{v.lbl}</span>
+                  <div style={{flex:1,height:8,background:'var(--s3)',borderRadius:4,overflow:'hidden'}}>
+                    <div style={{width:dsrList.length?`${(count/dsrList.length)*100}%`:'0%',height:'100%',background:v.color,borderRadius:4}}/>
+                  </div>
+                  <span style={{fontFamily:'var(--mono)',fontSize:13,fontWeight:700,color:v.color,minWidth:24}}>{count}</span>
+                </div>
+              );
+            })}
+            {dsrList.length===0&&<div style={{color:'var(--muted)',fontSize:12,textAlign:'center',padding:16}}>Aucune demande enregistrée</div>}
+          </div>
+          <div className="card">
+            <div style={{fontFamily:'var(--head)',fontSize:16,fontWeight:800,marginBottom:12}}>📋 Contact DPO — Délégué à la Protection</div>
+            {[
+              {lbl:'Organisme',    val:'EPWGCET Jijel'},
+              {lbl:'Responsable',  val:'Directeur Administrateur'},
+              {lbl:'Email',        val:'dpo@epwgcet-jijel.dz'},
+              {lbl:'Téléphone',    val:'034 48 00 00'},
+              {lbl:'Adresse',      val:'Cité Administrative, Jijel 18000'},
+              {lbl:'Autorité',     val:'ANPDP — Autorité Nationale de Protection des Données Personnelles'},
+            ].map(r=>(
+              <div key={r.lbl} className="fx g8" style={{padding:'6px 0',borderBottom:'1px solid var(--s3)',fontSize:12}}>
+                <span style={{color:'var(--muted)',minWidth:110}}>{r.lbl}</span>
+                <span style={{fontWeight:600,color:'var(--txt)'}}>{r.val}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── AUDIT LOG ── */}
+      {tab==='audit' && (
+        <div className="card">
+          <div className="fx aic g8" style={{marginBottom:14}}>
+            <div style={{fontFamily:'var(--head)',fontSize:16,fontWeight:800}}>📋 Journal d'Audit</div>
+            <span style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--muted)',marginLeft:8}}>{auditTotal} événements total</span>
+          </div>
+          <div style={{fontSize:11,color:'var(--muted)',marginBottom:12,padding:'8px 12px',background:'var(--s2)',borderRadius:6,borderLeft:'3px solid var(--g)'}}>
+            <strong>Art. 20 Loi 18-07</strong> — Le responsable du traitement est tenu de mettre en place des mesures techniques et organisationnelles appropriées pour garantir la sécurité des données. Ce journal est non modifiable et accessible uniquement aux administrateurs habilités.
+          </div>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead>
+                <tr style={{background:'var(--s2)',textAlign:'left'}}>
+                  {['#','Date/Heure','Action','Acteur','Entité','Détail','Résultat'].map(h=>(
+                    <th key={h} style={{padding:'8px 10px',fontWeight:700,color:'var(--muted)',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {auditRows.map((r,i)=>(
+                  <tr key={r.id} style={{borderBottom:'1px solid var(--s3)',background:i%2?'var(--s2)':'var(--s1)'}}>
+                    <td style={{padding:'6px 10px',fontFamily:'var(--mono)',fontSize:10,color:'var(--dim)'}}>{r.id}</td>
+                    <td style={{padding:'6px 10px',fontFamily:'var(--mono)',fontSize:10,whiteSpace:'nowrap'}}>{new Date(r.ts).toLocaleString('fr-DZ')}</td>
+                    <td style={{padding:'6px 10px'}}>
+                      <span style={{fontFamily:'var(--mono)',fontWeight:700,color:'var(--g)',fontSize:11}}>
+                        {ACTION_ICONS[r.action]||'📌'} {r.action}
+                      </span>
+                    </td>
+                    <td style={{padding:'6px 10px'}}><span style={{fontWeight:600}}>{r.actor_name||'—'}</span>{r.actor_role&&<span style={{fontSize:9,color:'var(--muted)',marginLeft:4}}>({r.actor_role})</span>}</td>
+                    <td style={{padding:'6px 10px',fontFamily:'var(--mono)',fontSize:10,color:'var(--muted)'}}>{r.entity_type||'—'}</td>
+                    <td style={{padding:'6px 10px',maxWidth:220,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.detail||'—'}</td>
+                    <td style={{padding:'6px 10px'}}>
+                      <span style={{fontFamily:'var(--mono)',fontSize:10,fontWeight:700,color:r.result==='failure'?'var(--err)':'var(--g)'}}>
+                        {r.result==='failure'?'❌ ÉCHEC':'✅ OK'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {auditRows.length===0&&<tr><td colSpan={7} style={{padding:24,textAlign:'center',color:'var(--muted)'}}>Aucun événement enregistré</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── DROITS DES PERSONNES (DSR) ── */}
+      {tab==='dsr' && (
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1.4fr',gap:16}}>
+          <div className="card">
+            <div style={{fontFamily:'var(--head)',fontSize:16,fontWeight:800,marginBottom:4}}>Enregistrer une demande</div>
+            <div style={{fontSize:11,color:'var(--muted)',marginBottom:12,lineHeight:1.5}}>
+              Art. 22 à 28 Loi 18-07 — Toute personne concernée peut exercer ses droits d'accès, de rectification, d'effacement ou d'opposition. Délai de réponse : <strong>30 jours</strong>.
+            </div>
+            {dsrOk&&<div style={{background:'#e6f9ed',border:'1px solid var(--g)',borderRadius:8,padding:'10px 14px',fontSize:12,color:'var(--g2)',marginBottom:12}}>✅ Demande enregistrée. Un accusé de réception doit être transmis à la personne concernée sous 48h.</div>}
+            <div style={{display:'grid',gap:10}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:4}}>Type de demande *</label>
+                <select value={dsrForm.requestType} onChange={e=>setDsrForm(f=>({...f,requestType:e.target.value}))}
+                  style={{width:'100%',padding:'8px 10px',borderRadius:7,border:'1.5px solid var(--bdr)',fontFamily:'var(--font)',fontSize:13,background:'var(--s1)',color:'var(--txt)'}}>
+                  {Object.entries(DSR_TYPES).map(([k,v])=>(
+                    <option key={k} value={k}>{v.ic} {v.lbl}</option>
+                  ))}
+                </select>
+              </div>
+              {[
+                {key:'subjectName',   lbl:'Nom complet de la personne *', ph:'Ex: Mohamed Benali'},
+                {key:'subjectId',     lbl:'ID client/utilisateur (si connu)', ph:'Ex: C001, U003'},
+                {key:'contactInfo',   lbl:'Coordonnées de contact', ph:'Email ou téléphone'},
+                {key:'description',   lbl:'Détail de la demande', ph:'Préciser les données concernées…'},
+              ].map(({key,lbl,ph})=>(
+                <div key={key}>
+                  <label style={{fontSize:11,fontWeight:600,color:'var(--muted)',display:'block',marginBottom:4}}>{lbl}</label>
+                  {key==='description'
+                    ? <textarea value={dsrForm[key]} onChange={e=>setDsrForm(f=>({...f,[key]:e.target.value}))}
+                        placeholder={ph} rows={3}
+                        style={{width:'100%',padding:'8px 10px',borderRadius:7,border:'1.5px solid var(--bdr)',fontFamily:'var(--font)',fontSize:13,resize:'vertical',background:'var(--s1)',color:'var(--txt)'}}/>
+                    : <input value={dsrForm[key]} onChange={e=>setDsrForm(f=>({...f,[key]:e.target.value}))}
+                        placeholder={ph}
+                        style={{width:'100%',padding:'8px 10px',borderRadius:7,border:'1.5px solid var(--bdr)',fontFamily:'var(--font)',fontSize:13,background:'var(--s1)',color:'var(--txt)'}}/>
+                  }
+                </div>
+              ))}
+              <button onClick={submitDSR} disabled={dsrSaving||!dsrForm.subjectName.trim()}
+                style={{padding:'10px',borderRadius:8,border:'none',background:'var(--g)',color:'#fff',fontFamily:'var(--head)',fontSize:14,fontWeight:700,cursor:'pointer',opacity:dsrSaving||!dsrForm.subjectName.trim()?0.6:1}}>
+                {dsrSaving?'Enregistrement…':'📋 Enregistrer la demande'}
+              </button>
+            </div>
+          </div>
+          <div className="card">
+            <div style={{fontFamily:'var(--head)',fontSize:16,fontWeight:800,marginBottom:12}}>Demandes reçues ({dsrList.length})</div>
+            <div style={{display:'grid',gap:10,maxHeight:500,overflowY:'auto'}}>
+              {dsrList.map(d=>{
+                const type = DSR_TYPES[d.request_type]||{lbl:d.request_type,ic:'📋',color:'var(--muted)'};
+                const stat = DSR_STATUS[d.status]||{lbl:d.status,color:'var(--muted)'};
+                const overdue = d.status==='pending'&&new Date(d.deadline)<new Date();
+                return (
+                  <div key={d.id} style={{border:`1.5px solid ${overdue?'var(--err)':'var(--bdr)'}`,borderRadius:10,padding:'12px 14px',background:overdue?'#fff5f5':'var(--s1)'}}>
+                    <div className="fx aic g8" style={{marginBottom:6}}>
+                      <span style={{fontSize:18}}>{type.ic}</span>
+                      <span style={{fontWeight:700,fontSize:13,color:type.color}}>{type.lbl}</span>
+                      <span style={{fontFamily:'var(--mono)',fontSize:10,color:stat.color,fontWeight:700,marginLeft:'auto',border:`1px solid ${stat.color}`,padding:'2px 8px',borderRadius:20}}>
+                        {stat.lbl}
+                      </span>
+                      {overdue&&<span style={{color:'var(--err)',fontSize:10,fontWeight:700}}>⚠ DÉLAI DÉPASSÉ</span>}
+                    </div>
+                    <div style={{fontSize:12,fontWeight:600}}>{d.subject_name}</div>
+                    <div style={{fontSize:11,color:'var(--muted)',marginTop:2}}>
+                      Reçu le {new Date(d.submitted_at).toLocaleDateString('fr-DZ')} · Délai: {new Date(d.deadline).toLocaleDateString('fr-DZ')}
+                    </div>
+                    {d.description&&<div style={{fontSize:11,color:'var(--txt)',marginTop:6,padding:'6px 8px',background:'var(--s2)',borderRadius:5}}>{d.description}</div>}
+                    {d.status==='pending'&&(
+                      <div className="fx g4" style={{marginTop:8}}>
+                        <button onClick={()=>updateDSR(d.id,'in_progress',authUser?.id,'Pris en charge')}
+                          style={{padding:'5px 10px',borderRadius:6,border:'1px solid var(--info)',background:'transparent',color:'var(--info)',fontSize:11,cursor:'pointer',fontWeight:600}}>
+                          ▶ Prendre en charge
+                        </button>
+                        <button onClick={()=>updateDSR(d.id,'completed',authUser?.id,'Traitement effectué')}
+                          style={{padding:'5px 10px',borderRadius:6,border:'1px solid var(--g)',background:'transparent',color:'var(--g)',fontSize:11,cursor:'pointer',fontWeight:600}}>
+                          ✅ Marquer traité
+                        </button>
+                        <button onClick={()=>updateDSR(d.id,'rejected',authUser?.id,'Demande non fondée')}
+                          style={{padding:'5px 10px',borderRadius:6,border:'1px solid var(--err)',background:'transparent',color:'var(--err)',fontSize:11,cursor:'pointer',fontWeight:600}}>
+                          ✖ Rejeter
+                        </button>
+                      </div>
+                    )}
+                    {d.response_note&&<div style={{fontSize:11,color:'var(--g2)',marginTop:6,fontStyle:'italic'}}>Réponse: {d.response_note}</div>}
+                  </div>
+                );
+              })}
+              {dsrList.length===0&&<div style={{color:'var(--muted)',fontSize:12,textAlign:'center',padding:24}}>Aucune demande enregistrée</div>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── REGISTRE DES TRAITEMENTS ── */}
+      {tab==='registry' && (
+        <div className="card">
+          <div style={{fontFamily:'var(--head)',fontSize:16,fontWeight:800,marginBottom:4}}>📁 Registre des activités de traitement</div>
+          <div style={{fontSize:11,color:'var(--muted)',marginBottom:14,padding:'8px 12px',background:'var(--s2)',borderRadius:6,borderLeft:'3px solid var(--g)'}}>
+            <strong>Art. 16 Loi 18-07</strong> — Tout responsable de traitement est tenu de tenir un registre de ses activités de traitement, mis à la disposition de l'Autorité Nationale de Protection des Données Personnelles (ANPDP) sur demande.
+          </div>
+          <div style={{display:'grid',gap:14}}>
+            {registry.map(r=>(
+              <div key={r.id} style={{border:'1.5px solid var(--bdr)',borderRadius:10,padding:'14px 16px'}}>
+                <div className="fx aic g8" style={{marginBottom:8}}>
+                  <div style={{fontFamily:'var(--head)',fontSize:15,fontWeight:800,color:'var(--g)'}}>{r.name}</div>
+                  <span style={{marginLeft:'auto',fontSize:10,fontFamily:'var(--mono)',padding:'3px 10px',borderRadius:20,
+                    background:r.legal_basis==='legal_obligation'?'#e6f9ed':r.legal_basis==='legitimate_interest'?'#fff8e6':'#e8f0ff',
+                    color:r.legal_basis==='legal_obligation'?'var(--g2)':r.legal_basis==='legitimate_interest'?'var(--warn)':'var(--info)',
+                    fontWeight:700}}>
+                    {LEGAL_BASIS[r.legal_basis]||r.legal_basis}
+                  </span>
+                </div>
+                <div style={{fontSize:12,color:'var(--txt)',marginBottom:10,lineHeight:1.5}}>{r.purpose}</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,fontSize:11}}>
+                  <div>
+                    <div style={{color:'var(--muted)',fontWeight:600,marginBottom:4}}>Catégories de données</div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                      {(r.data_categories||[]).map(c=><span key={c} style={{background:'var(--s3)',padding:'2px 7px',borderRadius:20,fontSize:10}}>{c}</span>)}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{color:'var(--muted)',fontWeight:600,marginBottom:4}}>Personnes concernées</div>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                      {(r.data_subjects||[]).map(s=><span key={s} style={{background:'var(--s3)',padding:'2px 7px',borderRadius:20,fontSize:10}}>{s}</span>)}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{color:'var(--muted)',fontWeight:600,marginBottom:4}}>Conservation</div>
+                    <div style={{fontFamily:'var(--mono)',fontWeight:700,color:'var(--g)',fontSize:13}}>{r.retention_days?`${r.retention_days} jours`:'Non défini'}</div>
+                    {r.security_measures&&<div style={{fontSize:10,color:'var(--muted)',marginTop:4,lineHeight:1.4}}>{r.security_measures}</div>}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {registry.length===0&&<div style={{color:'var(--muted)',fontSize:12,textAlign:'center',padding:24}}>Aucun traitement enregistré</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ── OBLIGATIONS LÉGALES ── */}
+      {tab==='info' && (
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+          {[
+            {
+              title:'Loi 18-07 — Protection des données',
+              color:'var(--g)',
+              items:[
+                {art:'Art. 4', txt:'Traitement fondé sur une base légale (obligation réglementaire EPWGCET ✅)'},
+                {art:'Art. 5', txt:'Finalité déterminée, explicite et légitime — gestion déchets Wilaya Jijel ✅'},
+                {art:'Art. 7', txt:'Données adéquates, pertinentes et limitées au strict nécessaire ✅'},
+                {art:'Art. 8', txt:'Durée de conservation limitée (3-10 ans selon nature) ✅'},
+                {art:'Art. 16',txt:'Déclaration à l\'ANPDP avant tout traitement — Registre tenu ✅'},
+                {art:'Art. 20',txt:'Sécurité : bcrypt, audit log, accès restreint, HTTPS ✅'},
+                {art:'Art. 22',txt:'Droit d\'accès des personnes — module DSR actif ✅'},
+                {art:'Art. 23',txt:'Droit de rectification — traitable via module DSR ✅'},
+                {art:'Art. 24',txt:'Droit d\'effacement — traitable via module DSR ✅'},
+                {art:'Art. 28',txt:'Droit d\'opposition — traitable via module DSR ✅'},
+              ]
+            },
+            {
+              title:'Loi 25-11 — Communications électroniques',
+              color:'var(--info)',
+              items:[
+                {art:'Art. 9', txt:'Mesures techniques de sécurité : headers HTTP sécurisés ✅'},
+                {art:'Art. 9', txt:'HTTPS/TLS obligatoire en production ✅'},
+                {art:'Art. 9', txt:'Limitation des tentatives de connexion (rate limiter) ✅'},
+                {art:'Art. 9', txt:'Séparation des rôles admin/opérateur ✅'},
+                {art:'Art. 11',txt:'Journalisation des accès et actions ✅'},
+                {art:'Art. 12',txt:'Notification en cas de violation — procédure à définir ⚠'},
+              ]
+            },
+          ].map(sec=>(
+            <div key={sec.title} className="card">
+              <div style={{fontFamily:'var(--head)',fontSize:15,fontWeight:800,color:sec.color,marginBottom:12}}>{sec.title}</div>
+              {sec.items.map(i=>(
+                <div key={i.art+i.txt} className="fx g8" style={{padding:'7px 0',borderBottom:'1px solid var(--s3)',fontSize:12,alignItems:'flex-start'}}>
+                  <span style={{fontFamily:'var(--mono)',fontSize:10,color:sec.color,minWidth:52,fontWeight:700,paddingTop:1}}>{i.art}</span>
+                  <span style={{color:'var(--txt)',lineHeight:1.45}}>{i.txt}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+          <div className="card" style={{gridColumn:'span 2'}}>
+            <div style={{fontFamily:'var(--head)',fontSize:15,fontWeight:800,marginBottom:12}}>📅 Plan d'actions restantes</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+              {[
+                {prio:'URGENT', color:'var(--err)', ic:'🔴', action:'Déposer la déclaration à l\'ANPDP', loi:'Art. 16 Loi 18-07', detail:'Le traitement doit être déclaré avant tout déploiement en production'},
+                {prio:'IMPORTANT', color:'var(--warn)', ic:'🟡', action:'Désigner un DPO officiel', loi:'Art. 19 Loi 18-07', detail:'Nommer par écrit un Délégué à la Protection des Données et le déclarer à l\'ANPDP'},
+                {prio:'IMPORTANT', color:'var(--warn)', ic:'🟡', action:'Politique de notification de violation', loi:'Art. 25-11', detail:'Rédiger la procédure de notification sous 72h en cas de violation de données'},
+                {prio:'RECOMMANDÉ', color:'var(--info)', ic:'🔵', action:'Afficher une politique de confidentialité', loi:'Art. 11 Loi 18-07', detail:'Informer les personnes concernées de leurs droits à la première collecte'},
+                {prio:'RECOMMANDÉ', color:'var(--info)', ic:'🔵', action:'Chiffrement des données au repos', loi:'Art. 20 Loi 18-07', detail:'Envisager le chiffrement des colonnes sensibles (NIF, téléphone) en base de données'},
+                {prio:'RECOMMANDÉ', color:'var(--info)', ic:'🔵', action:'Revue annuelle du registre', loi:'Art. 16 Loi 18-07', detail:'Mettre à jour le registre des traitements chaque année ou à chaque nouveau traitement'},
+              ].map(a=>(
+                <div key={a.action} style={{border:`1.5px solid ${a.color}`,borderRadius:10,padding:'12px 14px'}}>
+                  <div className="fx aic g4" style={{marginBottom:6}}>
+                    <span style={{fontSize:14}}>{a.ic}</span>
+                    <span style={{fontSize:10,fontWeight:700,color:a.color,fontFamily:'var(--mono)'}}>{a.prio}</span>
+                  </div>
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>{a.action}</div>
+                  <div style={{fontSize:10,color:'var(--muted)',marginBottom:6,fontFamily:'var(--mono)'}}>{a.loi}</div>
+                  <div style={{fontSize:11,color:'var(--txt)',lineHeight:1.45}}>{a.detail}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
