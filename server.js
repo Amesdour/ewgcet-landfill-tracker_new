@@ -12,22 +12,8 @@ const app = express();
 const IS_PROD = process.env.NODE_ENV === 'production';
 const PORT = process.env.PORT || 3001;
 
-// ── Security headers (Law 25-11 Art. 9 — technical security measures) ──
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options',    'nosniff');
-  res.setHeader('X-Frame-Options',           'DENY');
-  res.setHeader('X-XSS-Protection',          '1; mode=block');
-  res.setHeader('Referrer-Policy',           'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy',        'camera=(), microphone=(), geolocation=()');
-  res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
-  next();
-});
-
-app.use(cors({
-  origin: (origin, cb) => cb(null, true), // Restrict to known origins in production via env var
-  credentials: true,
-}));
-app.use(express.json({ limit: '2mb' }));
+app.use(cors());
+app.use(express.json());
 
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
 const pool = new Pool({
@@ -172,20 +158,6 @@ const mapInvoice = r => ({
   generatedAt:r.generated_at, paidAt:r.paid_at||null, note:r.note||'',
 });
 
-
-/* ─── AUDIT LOG HELPER ────────────────────────────────────────────────────── */
-async function auditLog({ actorId, actorName, actorRole, action, entityType, entityId, detail, ip, result="success" }) {
-  try {
-    await pool.query(
-      `INSERT INTO audit_log(actor_id,actor_name,actor_role,action,entity_type,entity_id,detail,ip_address,result) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [actorId||null, actorName||null, actorRole||null, action, entityType||null, String(entityId||""), detail||null, ip||null, result]
-    );
-  } catch(e) { console.error("Audit log error:", e.message); }
-}
-function clientIP(req) {
-  return req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress || "unknown";
-}
-
 /* ─── DISCHARGES ──────────────────────────────────────────────────────────── */
 app.get('/api/discharges', async (req, res) => {
   try {
@@ -320,11 +292,7 @@ app.put('/api/clients/:id', async (req, res) => {
 
 app.delete('/api/clients/:id', async (req, res) => {
   try {
-    const { rows: old } = await q('SELECT name FROM clients WHERE id=$1',[req.params.id]);
     await q('DELETE FROM clients WHERE id=$1',[req.params.id]);
-    await auditLog({ actorId:req.headers['x-actor-id'], actorName:req.headers['x-actor-name'],
-      actorRole:req.headers['x-actor-role'], action:'DELETE_CLIENT', entityType:'clients',
-      entityId:req.params.id, detail:'Client supprimé: '+(old[0]?.name||req.params.id), ip:clientIP(req) });
     ok(res, { ok:true });
   } catch(e) { er(res,e); }
 });
@@ -351,9 +319,6 @@ app.post('/api/users', async (req, res) => {
        u.matricule||'',u.siteId||'all',u.createdAt||new Date().toISOString().slice(0,10),
        false, code, expires]
     );
-    await auditLog({ actorId:req.headers['x-actor-id'], actorName:req.headers['x-actor-name'],
-      actorRole:req.headers['x-actor-role'], action:'CREATE_USER', entityType:'users',
-      entityId:u.id, detail:'Utilisateur créé: '+u.name+' ('+u.role+')', ip:clientIP(req) });
     ok(res, { ok:true, verificationCode: code });
   } catch(e) { er(res,e); }
 });
@@ -417,11 +382,7 @@ app.put('/api/users/:id', async (req, res) => {
 
 app.delete('/api/users/:id', async (req, res) => {
   try {
-    const { rows: uo } = await q('SELECT name,role FROM users WHERE id=$1',[req.params.id]);
     await q('DELETE FROM users WHERE id=$1',[req.params.id]);
-    await auditLog({ actorId:req.headers['x-actor-id'], actorName:req.headers['x-actor-name'],
-      actorRole:req.headers['x-actor-role'], action:'DELETE_USER', entityType:'users',
-      entityId:req.params.id, detail:'Utilisateur supprimé: '+(uo[0]?.name||req.params.id)+' ('+( uo[0]?.role||'?')+')', ip:clientIP(req) });
     ok(res, { ok:true });
   } catch(e) { er(res,e); }
 });
@@ -507,18 +468,9 @@ app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
       'SELECT * FROM users WHERE email=$1 AND status=$2',
       [email, 'active']
     );
-    if (rows.length === 0) {
-      await auditLog({ action:'LOGIN_FAIL', entityType:'users', detail:'Email inconnu: '+email, ip:clientIP(req), result:'failure' });
-      return res.status(401).json({ error: 'Identifiants invalides ou compte inactif.' });
-    }
+    if (rows.length === 0) return res.status(401).json({ error: 'Identifiants invalides ou compte inactif.' });
     const match = await bcrypt.compare(password, rows[0].password);
-    if (!match) {
-      await auditLog({ actorId:rows[0].id, actorName:rows[0].name, actorRole:rows[0].role,
-        action:'LOGIN_FAIL', entityType:'users', entityId:rows[0].id, detail:'Mot de passe incorrect', ip:clientIP(req), result:'failure' });
-      return res.status(401).json({ error: 'Identifiants invalides ou compte inactif.' });
-    }
-    await auditLog({ actorId:rows[0].id, actorName:rows[0].name, actorRole:rows[0].role,
-      action:'LOGIN', entityType:'users', entityId:rows[0].id, detail:'Connexion réussie', ip:clientIP(req) });
+    if (!match) return res.status(401).json({ error: 'Identifiants invalides ou compte inactif.' });
     ok(res, mapUser(rows[0]));
   } catch(e) { er(res,e); }
 });
@@ -537,89 +489,6 @@ app.post('/api/auth/change-password', async (req, res) => {
     ok(res, { ok: true });
   } catch(e) { er(res,e); }
 });
-/* ─── COMPLIANCE ROUTES (Lois 18-07 et 25-11) ────────────────────────────── */
-app.get('/api/compliance/audit-log', async (req, res) => {
-  try {
-    const limit  = Math.min(parseInt(req.query.limit)  || 200, 1000);
-    const offset = parseInt(req.query.offset) || 0;
-    const params = [limit, offset];
-    const { rows } = await pool.query(
-      'SELECT * FROM audit_log ORDER BY ts DESC LIMIT  OFFSET ', params
-    );
-    const { rows: cnt } = await pool.query('SELECT COUNT(*) FROM audit_log');
-    ok(res, { rows, total: parseInt(cnt[0].count) });
-  } catch(e) { er(res,e); }
-});
-
-app.get('/api/compliance/requests', async (req, res) => {
-  try {
-    const { rows } = await pool.query('SELECT * FROM data_subject_requests ORDER BY submitted_at DESC');
-    ok(res, rows);
-  } catch(e) { er(res,e); }
-});
-
-app.post('/api/compliance/requests', async (req, res) => {
-  const { requestType, subjectName, subjectId, contactInfo, description } = req.body;
-  if (!requestType || !subjectName) return er(res, 'Type et nom requis', 400);
-  try {
-    const { rows } = await pool.query(
-      'INSERT INTO data_subject_requests(request_type,subject_name,subject_id,contact_info,description) VALUES(,,,,) RETURNING *',
-      [requestType, subjectName, subjectId||null, contactInfo||null, description||null]
-    );
-    await auditLog({ action:'DATA_SUBJECT_REQUEST', entityType:'data_subject_requests',
-      entityId:rows[0].id, detail:'Type: '+requestType+' — Sujet: '+subjectName, ip:clientIP(req) });
-    ok(res, rows[0]);
-  } catch(e) { er(res,e); }
-});
-
-app.put('/api/compliance/requests/:id', async (req, res) => {
-  const { status, handledBy, responseNote } = req.body;
-  try {
-    await pool.query(
-      'UPDATE data_subject_requests SET status=,handled_by=,handled_at=NOW(),response_note= WHERE id=',
-      [status, handledBy||null, responseNote||null, req.params.id]
-    );
-    await auditLog({ actorId:handledBy, action:'DSR_STATUS_UPDATE', entityType:'data_subject_requests',
-      entityId:req.params.id, detail:'Statut: '+status, ip:clientIP(req) });
-    ok(res, { ok:true });
-  } catch(e) { er(res,e); }
-});
-
-app.get('/api/compliance/registry', async (req, res) => {
-  try {
-    const { rows } = await pool.query('SELECT * FROM processing_registry WHERE active=TRUE ORDER BY id');
-    ok(res, rows);
-  } catch(e) { er(res,e); }
-});
-
-app.put('/api/compliance/registry/:id', async (req, res) => {
-  const r = req.body;
-  try {
-    await pool.query(
-      'UPDATE processing_registry SET name=,purpose=,legal_basis=,data_categories=,data_subjects=,retention_days=,security_measures=,updated_at=NOW() WHERE id=',
-      [r.name,r.purpose,r.legalBasis,r.dataCategories||[],r.dataSubjects||[],r.retentionDays||null,r.securityMeasures||null,req.params.id]
-    );
-    ok(res, { ok:true });
-  } catch(e) { er(res,e); }
-});
-
-app.get('/api/compliance/stats', async (req, res) => {
-  try {
-    const [auditCount, dsrPending, dsrOverdue, registryCount] = await Promise.all([
-      pool.query('SELECT COUNT(*) FROM audit_log'),
-      pool.query("SELECT COUNT(*) FROM data_subject_requests WHERE status='pending'"),
-      pool.query("SELECT COUNT(*) FROM data_subject_requests WHERE status NOT IN ('completed','rejected') AND deadline < NOW()"),
-      pool.query('SELECT COUNT(*) FROM processing_registry WHERE active=TRUE'),
-    ]);
-    ok(res, {
-      auditTotal:    parseInt(auditCount.rows[0].count),
-      dsrPending:    parseInt(dsrPending.rows[0].count),
-      dsrOverdue:    parseInt(dsrOverdue.rows[0].count),
-      registryCount: parseInt(registryCount.rows[0].count),
-    });
-  } catch(e) { er(res,e); }
-});
-
 /* ─── COMPANY TRUCKS ──────────────────────────────────────────────────────── */
 app.get('/api/company-trucks', async (req, res) => {
   try {
