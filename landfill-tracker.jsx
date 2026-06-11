@@ -1309,7 +1309,7 @@ onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.
             {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites} company={company} wasteTypes={wasteTypes} authUser={authUser}/>}
             {page==="operators"  && <PageOperators users={users} sites={sites} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} authUser={authUser}/>}
             {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} updateDischarge={updateDischarge} company={company}/>}
-            {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany} companyTrucks={companyTrucks} addCompanyTruck={addCompanyTruck} updateCompanyTruck={updateCompanyTruck} deleteCompanyTruck={deleteCompanyTruck}/>}
+            {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany} companyTrucks={companyTrucks} addCompanyTruck={addCompanyTruck} updateCompanyTruck={updateCompanyTruck} deleteCompanyTruck={deleteCompanyTruck} clients={clients} updateClient={updateClient}/>}
             {page==="schema"     && <PageSchema/>}
           </div>
           <nav className="mobile-bottom-nav">
@@ -3315,12 +3315,20 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                         className={`btn bsm ${c.consentGiven?"be":"bp"}`}
                         style={{fontSize:11,padding:"4px 10px",whiteSpace:"nowrap",
                           ...(c.consentGiven?{color:"var(--err)",background:"transparent",border:"1px solid var(--err)"}:{})}}
-                        onClick={()=>{
+                        onClick={async ()=>{
                           if (c.consentGiven) {
                             if (!window.confirm(t("Révoquer le consentement de ce client ? Ses opérations seront bloquées.","هل تريد سحب موافقة هذا العميل؟ ستُوقَف عملياته."))) return;
                             updateClient({...c, consentGiven:false, consentDate:null, consentBy:null});
                           } else {
-                            updateClient({...c, consentGiven:true, consentDate:new Date().toISOString(), consentBy:authUser?.name||authUser?.id});
+                            const now = new Date().toISOString();
+                            const by  = authUser?.name||authUser?.id;
+                            updateClient({...c, consentGiven:true, consentDate:now, consentBy:by});
+                            try {
+                              await fetch('/api/compliance/consent',{
+                                method:'POST',headers:{'Content-Type':'application/json'},
+                                body:JSON.stringify({userId:`client_${c.id}`,scope:'client_consent',detail:`Client: ${c.name}`}),
+                              });
+                            } catch(e) {}
                           }
                         }}>
                         {c.consentGiven ? t("↩ Révoquer","↩ سحب") : t("✅ Enregistrer le consentement","✅ تسجيل الموافقة")}
@@ -6807,7 +6815,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 /* ═══════════════════════════════════════════════════════════════════════════
    COMPLIANCE PANEL — Loi 18-07 + Loi 25-11
 ═══════════════════════════════════════════════════════════════════════════ */
-function CompliancePanel({ authUser, isAdmin }) {
+function CompliancePanel({ authUser, isAdmin, clients, updateClient }) {
   const [consentStatus,  setConsentStatus]  = useState(null);
   const [myData,         setMyData]         = useState(null);
   const [myDataLoading,  setMyDataLoading]  = useState(false);
@@ -6888,7 +6896,7 @@ function CompliancePanel({ authUser, isAdmin }) {
   const eventColor  = e => e.includes("FAIL")||e.includes("DENY") ? "var(--err)" : e.includes("SUCCESS")||e.includes("GIVEN") ? "var(--g)" : "var(--info)";
 
   const views = isAdmin
-    ? [["status","🛡 Statut"],["requests","📋 Demandes"],["auditlog","📜 Journal"],["breach","🚨 Rapport"],["purge","🗑 Rétention"]]
+    ? [["status","🛡 Statut"],["clients","🏢 Clients"],["requests","📋 Demandes"],["auditlog","📜 Journal"],["breach","🚨 Rapport"],["purge","🗑 Rétention"]]
     : [["status","🛡 Statut"],["mydata","📦 Mes données"],["request","📝 Mes droits"]];
 
   return (
@@ -7080,6 +7088,92 @@ function CompliancePanel({ authUser, isAdmin }) {
         </div>
       )}
 
+      {activeView==="clients" && isAdmin && (
+        <div>
+          <div style={{marginBottom:12,fontSize:13,color:"var(--muted)"}}>
+            Registre des consentements clients — Loi 18-07 Art. 7. Chaque client doit avoir consenti avant toute opération de déchargement.
+          </div>
+
+          <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+            {[
+              ["Total clients",(clients||[]).length,"var(--info)"],
+              ["✅ Consentement donné",(clients||[]).filter(c=>c.consentGiven).length,"var(--g)"],
+              ["🔒 En attente",(clients||[]).filter(c=>!c.consentGiven).length,"var(--err)"],
+            ].map(([l,v,col])=>(
+              <div key={l} style={{background:"var(--s2)",borderRadius:8,padding:"10px 16px",border:"1px solid var(--bdr)",textAlign:"center",minWidth:130}}>
+                <div style={{fontWeight:800,fontSize:20,color:col}}>{v}</div>
+                <div style={{fontSize:10,color:"var(--muted)"}}>{l}</div>
+              </div>
+            ))}
+          </div>
+
+          {(clients||[]).length===0 ? (
+            <div className="alrt ai"><span>ℹ</span><span>Aucun client enregistré.</span></div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {(clients||[]).filter(c=>c.type!=="daily").map(cl=>(
+                <div key={cl.id} style={{
+                  background:"var(--s2)",borderRadius:8,padding:"10px 14px",
+                  border:`1px solid ${cl.consentGiven?"rgba(46,201,92,.3)":"rgba(220,50,50,.25)"}`,
+                  display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"center",
+                }}>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                      <span style={{fontSize:12,fontWeight:700}}>{cl.name}</span>
+                      <span style={{fontSize:10,color:"var(--muted)",background:"var(--s1)",padding:"1px 6px",borderRadius:10,border:"1px solid var(--bdr)"}}>
+                        {cl.type==="convention"?"Conv. Tonnes":cl.type==="rotation"?"Conv. Rotation":cl.type==="prepaid"?"Prépayé":"Cash"}
+                      </span>
+                    </div>
+                    {cl.consentGiven ? (
+                      <div style={{fontSize:10,color:"var(--g)"}}>
+                        ✅ Accordé le {cl.consentDate ? new Date(cl.consentDate).toLocaleDateString("fr-DZ") : "—"}
+                        {cl.consentBy ? ` · par ${cl.consentBy}` : ""}
+                      </div>
+                    ) : (
+                      <div style={{fontSize:10,color:"var(--err)"}}>🔒 Consentement manquant — opérations bloquées</div>
+                    )}
+                  </div>
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    {cl.consentGiven ? (
+                      <button
+                        className="btn bsm"
+                        style={{fontSize:11,padding:"3px 8px",color:"var(--err)",background:"transparent",border:"1px solid var(--err)"}}
+                        onClick={()=>{
+                          if (!window.confirm(`Révoquer le consentement de ${cl.name} ?`)) return;
+                          updateClient({...cl, consentGiven:false, consentDate:null, consentBy:null});
+                        }}>
+                        ↩ Révoquer
+                      </button>
+                    ) : (
+                      <button
+                        className="btn bp bsm"
+                        style={{fontSize:11,padding:"3px 8px"}}
+                        onClick={async ()=>{
+                          const now = new Date().toISOString();
+                          const by  = authUser?.name||authUser?.id;
+                          updateClient({...cl, consentGiven:true, consentDate:now, consentBy:by});
+                          try {
+                            await fetch('/api/compliance/consent',{
+                              method:'POST',headers:{'Content-Type':'application/json'},
+                              body:JSON.stringify({userId:`client_${cl.id}`,scope:'client_consent',detail:`Client: ${cl.name}`}),
+                            });
+                          } catch(e) {}
+                        }}>
+                        ✅ Enregistrer
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{marginTop:14,fontSize:11,color:"var(--muted)"}}>
+            ℹ️ Le consentement peut également être enregistré directement depuis la fiche client (Page Clients → sélectionner un client).
+          </div>
+        </div>
+      )}
+
       {activeView==="purge" && isAdmin && (
         <div>
           <div style={{marginBottom:12,fontSize:13,color:"var(--muted)"}}>Loi 18-07 Art. 17 — Politique de conservation. Supprimer les déchargements de plus de 10 ans (obligation réglementaire).</div>
@@ -7097,7 +7191,7 @@ function CompliancePanel({ authUser, isAdmin }) {
 /* ═══════════════════════════════════════════════════════════════════════════
    SETTINGS
 ═══════════════════════════════════════════════════════════════════════════ */
-function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,setAuthUser,docTypes,updateDocTypes,company,updateCompany,companyTrucks,addCompanyTruck,updateCompanyTruck,deleteCompanyTruck}) {
+function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,setAuthUser,docTypes,updateDocTypes,company,updateCompany,companyTrucks,addCompanyTruck,updateCompanyTruck,deleteCompanyTruck,clients,updateClient}) {
   const t = useT();
   const isAdmin = authUser.role==="admin";
   const [tab, setTab] = useState("general");
@@ -7626,7 +7720,7 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
         )}
 
         {tab==="compliance"&&(
-          <CompliancePanel authUser={authUser} isAdmin={isAdmin}/>
+          <CompliancePanel authUser={authUser} isAdmin={isAdmin} clients={clients||[]} updateClient={updateClient}/>
         )}
 
         {tab==="about"&&(
