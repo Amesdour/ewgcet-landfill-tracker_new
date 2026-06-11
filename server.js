@@ -572,14 +572,22 @@ app.post('/api/compliance/consent', async (req, res) => {
   const ip = getIP(req);
   if (!userId) return res.status(400).json({ error: 'userId requis.' });
   try {
+    // Revoke any existing active consent for this policy version first
     await q(
+      `UPDATE consent_records
+       SET revoked_at = NOW()
+       WHERE user_id=$1 AND policy_ver=$2 AND revoked_at IS NULL`,
+      [userId, POLICY_VERSION]
+    );
+    // Fresh insert — no conflict possible since old record is now revoked
+    const { rows } = await q(
       `INSERT INTO consent_records(user_id, policy_ver, scope, ip_address)
        VALUES($1,$2,$3,$4)
-       ON CONFLICT DO NOTHING`,
+       RETURNING id, consented_at`,
       [userId, POLICY_VERSION, scope||'system_access', ip]
     );
     await logAudit({ eventType:'CONSENT_GIVEN', userId, ip, resource:'consent_records', detail:`Politique v${POLICY_VERSION} acceptée`, outcome:'success' });
-    ok(res, { ok:true, policyVersion: POLICY_VERSION });
+    ok(res, { ok:true, policyVersion: POLICY_VERSION, consentId: rows[0].id, consentedAt: rows[0].consented_at });
   } catch(e) { er(res,e); }
 });
 
