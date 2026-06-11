@@ -1306,7 +1306,7 @@ onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.
             {page==="dashboard"  && <PageDashboard discharges={discharges} clients={clients} sites={sites} wasteTypes={wasteTypes} setPage={setPage}/>}
             {page==="gate"       && <PageGate addDischarge={addDischarge} addClient={addClient} clients={clients} sites={sites} wasteTypes={wasteTypes} discharges={discharges} authUser={authUser} isAdmin={isAdmin} company={company} companyTrucks={companyTrucks}/>}
             {page==="discharges" && <PageDischarges discharges={discharges} setDischarges={setDischarges} sites={sites} wasteTypes={wasteTypes} users={users} clients={clients} invoices={invoices} updateClient={updateClient} updateDischarge={updateDischarge} isAdmin={isAdmin} authUser={authUser} company={company}/>}
-            {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites} company={company} wasteTypes={wasteTypes}/>}
+            {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites} company={company} wasteTypes={wasteTypes} authUser={authUser}/>}
             {page==="operators"  && <PageOperators users={users} sites={sites} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} authUser={authUser}/>}
             {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} updateDischarge={updateDischarge} company={company}/>}
             {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany} companyTrucks={companyTrucks} addCompanyTruck={addCompanyTruck} updateCompanyTruck={updateCompanyTruck} deleteCompanyTruck={deleteCompanyTruck}/>}
@@ -1679,6 +1679,7 @@ function PageGate({addDischarge, addClient, clients, sites, wasteTypes, discharg
   const remainingConvRotations = isConvWithRotation && client.rotationLimit>0 ? Math.max(0, client.rotationLimit - usedConvRotations) : null;
   const weightPct   = client && !client.creditEnabled && !isRotationClient && client.weightLimitYear>0 ? Math.round((usedThisYear/client.weightLimitYear)*100) : 0;
   const rotationPct = isRotationClient && client.weightLimitYear>0 ? Math.round((usedRotations/client.weightLimitYear)*100) : 0;
+  const consentBlocked = !!client && !client.consentGiven;
   const limitBlocked = !isAdmin && wouldExceed;
   const isCollectRotation        = opType==="collect" && (collectMode==="rotation" || client?.collectBillingMode==="rotation");
   const collectRotationPriceOk   = !isCollectRotation || (wt?.collectRotationPrice??0) > 0;
@@ -2348,6 +2349,16 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
             )
           )}
 
+          {consentBlocked&&(
+            <div className="alrt ae" style={{marginBottom:0}}>
+              <span>🔒</span>
+              <div>
+                <strong>DOSSIER BLOQUÉ — Consentement Loi 18-07 manquant.</strong>{" "}
+                Ce client n'a pas encore consenti au traitement de ses données personnelles. L'administrateur doit enregistrer son consentement dans la fiche client avant toute opération.
+              </div>
+            </div>
+          )}
+
           {limitBlocked&&(
             <div className="alrt ae" style={{marginBottom:0}}>
               <span>🚫</span>
@@ -2370,14 +2381,14 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
             </div>
           )}
           <button className="btn bp bfw"
-            style={{fontSize:15,padding:12,opacity:limitBlocked?.45:1,cursor:limitBlocked?"not-allowed":"pointer",
+            style={{fontSize:15,padding:12,opacity:(limitBlocked||consentBlocked)?.45:1,cursor:(limitBlocked||consentBlocked)?"not-allowed":"pointer",
               ...(opType==="collect"
                 ? collectMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)"}
                   :collectMode==="prepaid"?{background:"var(--g)",borderColor:"var(--g)"}
                   :collectMode==="cash"?{background:"var(--err)",borderColor:"var(--err)"}
                   :{background:"var(--purple)",borderColor:"var(--purple)"}
                 : isConvWithRotation&&convSubMode==="rotation"?{background:"var(--orange)",borderColor:"var(--orange)"}:{})}}
-            disabled={!canSubmit||limitBlocked}
+            disabled={!canSubmit||limitBlocked||consentBlocked}
             onClick={()=>{
               if (opType==="collect") {
                 if (collectMode==="cash") { setPayModal(true); return; }
@@ -2386,7 +2397,8 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
               if (mode==="cash") { setPayModal(true); return; }
               finalise(isConvWithRotation&&convSubMode==="rotation"?"rotation":mode);
             }}>
-            {limitBlocked?"🚫 Entrée bloquée — Limite atteinte"
+            {consentBlocked?"🔒 Dossier bloqué — Consentement requis"
+              :limitBlocked?"🚫 Entrée bloquée — Limite atteinte"
               :opType==="collect"?(
                 collectMode==="rotation"?"🔄 Enregistrer Collecte (Rotation) & Ouvrir Barrière →"
                 :collectMode==="prepaid"?"🎫 Consommer Bonus Collecte & Ouvrir Barrière →"
@@ -3008,7 +3020,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
 /* ═══════════════════════════════════════════════════════════════════════════
    CLIENTS
 ═══════════════════════════════════════════════════════════════════════════ */
-function PageClients({clients,discharges,updateClient,addClient,deleteClient,isAdmin,docTypes,sites,company,wasteTypes}) {
+function PageClients({clients,discharges,updateClient,addClient,deleteClient,isAdmin,docTypes,sites,company,wasteTypes,authUser}) {
   const t = useT();
   const [tab,   setTab]   = useState("convention");
   const [sel,   setSel]   = useState(null);
@@ -3174,10 +3186,13 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   background:sel===cl.id?isRotTab?"rgba(251,146,60,.07)":"rgba(46,201,92,.07)":"var(--s2)",
                 }}>
                   <div className="fx aic jsb">
-                    <span style={{fontWeight:700,fontSize:12,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cl.name}</span>
-                    {isAccountType
-                      ?<ClientStatusBadge s={cl.status}/>
-                      :<span className="badge b-cash">Cash</span>}
+                    <span style={{fontWeight:700,fontSize:12,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{cl.name}</span>
+                    <div className="fx aic g1">
+                      {!cl.consentGiven&&<span title="Consentement Loi 18-07 manquant" style={{fontSize:11,color:"var(--err)"}}>🔒</span>}
+                      {isAccountType
+                        ?<ClientStatusBadge s={cl.status}/>
+                        :<span className="badge b-cash">Cash</span>}
+                    </div>
                   </div>
                   {isRotTab&&cl.status==="approved"&&(
                     <>
@@ -3271,6 +3286,60 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       }
                     </div>
                   </div>
+                </div>
+
+                {/* ── Consentement Loi 18-07 ── */}
+                <div style={{border:`1px solid ${c.consentGiven?"rgba(46,201,92,.35)":"rgba(220,50,50,.3)"}`,borderRadius:10,padding:"12px 14px",background:c.consentGiven?"rgba(46,201,92,.05)":"rgba(220,50,50,.04)",marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:12,marginBottom:2}}>
+                        {c.consentGiven
+                          ? <><span style={{color:"var(--g)"}}>✅</span> {t("Consentement Loi 18-07 enregistré","تم تسجيل الموافقة — القانون 18-07")}</>
+                          : <><span style={{color:"var(--err)"}}>🔒</span> {t("Consentement Loi 18-07 manquant — Dossier bloqué","موافقة القانون 18-07 مفقودة — الملف محجوب")}</>
+                        }
+                      </div>
+                      {c.consentGiven && c.consentDate && (
+                        <div style={{fontSize:10,color:"var(--muted)"}}>
+                          {t("Accordé le","تم منحه في")} {new Date(c.consentDate).toLocaleDateString("fr-DZ")}
+                          {c.consentBy && ` · ${t("par","بواسطة")} ${c.consentBy}`}
+                        </div>
+                      )}
+                      {!c.consentGiven && (
+                        <div style={{fontSize:10,color:"var(--muted)",marginTop:2}}>
+                          {t("Toute opération de déchargement est bloquée jusqu'à enregistrement du consentement.","جميع عمليات التفريغ محجوبة حتى تسجيل الموافقة.")}
+                        </div>
+                      )}
+                    </div>
+                    {isAdmin && (
+                      <button
+                        className={`btn bsm ${c.consentGiven?"be":"bp"}`}
+                        style={{fontSize:11,padding:"4px 10px",whiteSpace:"nowrap",
+                          ...(c.consentGiven?{color:"var(--err)",background:"transparent",border:"1px solid var(--err)"}:{})}}
+                        onClick={()=>{
+                          if (c.consentGiven) {
+                            if (!window.confirm(t("Révoquer le consentement de ce client ? Ses opérations seront bloquées.","هل تريد سحب موافقة هذا العميل؟ ستُوقَف عملياته."))) return;
+                            updateClient({...c, consentGiven:false, consentDate:null, consentBy:null});
+                          } else {
+                            updateClient({...c, consentGiven:true, consentDate:new Date().toISOString(), consentBy:authUser?.name||authUser?.id});
+                          }
+                        }}>
+                        {c.consentGiven ? t("↩ Révoquer","↩ سحب") : t("✅ Enregistrer le consentement","✅ تسجيل الموافقة")}
+                      </button>
+                    )}
+                  </div>
+                  {isAdmin && !c.consentGiven && (
+                    <div style={{marginTop:10,background:"var(--s2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--bdr)"}}>
+                      <div style={{fontSize:11,fontWeight:600,marginBottom:6}}>
+                        📋 {t("Texte de consentement à soumettre au client","نص الموافقة الواجب تقديمه للعميل")} :
+                      </div>
+                      <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.6,fontStyle:"italic"}}>
+                        {t(
+                          `"Je soussigné(e), représentant de ${c.name}, consens au traitement de mes données personnelles et celles de mon organisation par EPWGCET Jijel, à des fins de gestion des opérations de déchargement, conformément à la Loi 18-07 du 10 juin 2018 relative à la protection des données à caractère personnel."`,
+                          `"أنا الموقع أدناه، ممثل ${c.name}، أوافق على معالجة بياناتي الشخصية وبيانات مؤسستي من قِبَل EPWGCET جيجل، لأغراض إدارة عمليات التفريغ، وفقًا للقانون 18-07 المؤرخ في 10 يونيو 2018 المتعلق بحماية البيانات ذات الطابع الشخصي."`
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Authorized waste types */}
