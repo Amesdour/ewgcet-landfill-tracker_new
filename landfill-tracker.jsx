@@ -785,6 +785,8 @@ function RegisterScreen({onBack, onRegistered, sites, company, lang, toggleLang}
   const [form, setForm] = useState({name:"",email:"",password:"",phone:"",siteId:"CET-JIJ"});
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [showConsentText, setShowConsentText] = useState(false);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
 
   const [pendingUser, setPendingUser] = useState(null);
@@ -793,15 +795,19 @@ function RegisterScreen({onBack, onRegistered, sites, company, lang, toggleLang}
   const [verified,    setVerified]    = useState(false);
 
   const handleRegister = async () => {
-    if (!form.name||!form.email||!form.password||!form.phone) { setError("Veuillez remplir tous les champs."); return; }
-    if (form.password.length < 8) { setError("Le mot de passe doit contenir au moins 8 caractères (lettres et chiffres)."); return; }
-    if (!/[A-Za-z]/.test(form.password)||!/[0-9]/.test(form.password)) { setError("Le mot de passe doit contenir au moins une lettre et un chiffre."); return; }
+    if (!form.name||!form.email||!form.password||!form.phone) { setError(t("Veuillez remplir tous les champs.","يرجى ملء جميع الحقول.")); return; }
+    if (form.password.length < 8) { setError(t("Le mot de passe doit contenir au moins 8 caractères (lettres et chiffres).","كلمة المرور يجب أن تحتوي على 8 أحرف على الأقل (أحرف وأرقام).")); return; }
+    if (!/[A-Za-z]/.test(form.password)||!/[0-9]/.test(form.password)) { setError(t("Le mot de passe doit contenir au moins une lettre et un chiffre.","يجب أن تحتوي كلمة المرور على حرف ورقم على الأقل.")); return; }
+    if (!consentChecked) { setError(t("Vous devez accepter la politique de confidentialité pour continuer.","يجب أن توافق على سياسة الخصوصية للمتابعة.")); return; }
     const newUser = {
       id:uidU(), name:form.name, email:form.email, password:form.password,
       role:"operator", status:"pending", phone:form.phone, siteId:form.siteId,
       matricule:"", createdAt:new Date().toISOString().slice(0,10),
     };
     await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newUser)});
+    try {
+      await fetch('/api/compliance/consent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:newUser.id,scope:'registration'})});
+    } catch(e) {}
     onRegistered(newUser);
     setPendingUser(newUser);
     setSent(true);
@@ -901,7 +907,40 @@ function RegisterScreen({onBack, onRegistered, sites, company, lang, toggleLang}
           <div className="field"><label>{t("Mot de passe (min. 6 caractères)","كلمة المرور (6 أحرف على الأقل)")}</label>
             <input className="fi" type="password" placeholder="••••••••" value={form.password} onChange={e=>set("password",e.target.value)}/>
           </div>
-          <button className="btn bp bfw" style={{marginTop:4}} onClick={handleRegister}>{t("📨 Envoyer la demande","📨 إرسال الطلب")}</button>
+          <div style={{border:"1px solid var(--bdr)",borderRadius:10,padding:"12px 14px",background:"var(--s2)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showConsentText?10:0}}>
+              <span style={{fontSize:12,fontWeight:600}}>
+                🔒 {t("Politique de confidentialité — Loi 18-07","سياسة الخصوصية — القانون 18-07")}
+              </span>
+              <button type="button" onClick={()=>setShowConsentText(p=>!p)} style={{fontSize:11,color:"var(--info)",background:"none",border:"none",cursor:"pointer",padding:"2px 6px"}}>
+                {showConsentText ? t("▲ Réduire","▲ طي") : t("▼ Lire","▼ اقرأ")}
+              </button>
+            </div>
+            {showConsentText && (
+              <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.7,marginBottom:10,maxHeight:160,overflowY:"auto",paddingRight:4}} dir={lang==="ar"?"rtl":"ltr"}>
+                {lang==="ar" ? (
+                  <span style={{fontFamily:"'Cairo',sans-serif"}}>
+                    تقوم <strong>EPWGCET جيجل</strong> بمعالجة بياناتك الشخصية (الاسم، البريد الإلكتروني، الهاتف، الرقم الوظيفي) لأغراض إدارة مراكز الردم التقني وفقًا للقانون <strong>18-07</strong>. مدة الاحتفاظ: 10 سنوات. يحق لك الاطلاع والتصحيح والحذف والمعارضة عبر قسم الإعدادات ← المطابقة والبيانات. التواصل: admin@epwgcet-jijel.dz
+                  </span>
+                ) : (
+                  <span>
+                    <strong>EPWGCET Jijel</strong> traite vos données personnelles (nom, email, téléphone, matricule) pour la gestion des centres d'enfouissement technique, conformément à la <strong>Loi 18-07</strong> du 10 juin 2018. Durée de conservation : 10 ans. Vous disposez d'un droit d'accès, de rectification, d'effacement et d'opposition via Paramètres → Conformité & Données. Contact : admin@epwgcet-jijel.dz
+                  </span>
+                )}
+              </div>
+            )}
+            <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
+              <input type="checkbox" checked={consentChecked} onChange={e=>setConsentChecked(e.target.checked)}
+                style={{marginTop:2,width:16,height:16,accentColor:"var(--g)",flexShrink:0}}/>
+              <span style={{fontSize:12,lineHeight:1.5}}>
+                {t(
+                  "J'ai lu et j'accepte la politique de confidentialité. Je consens au traitement de mes données personnelles par EPWGCET Jijel conformément à la Loi 18-07.",
+                  "لقد قرأت وأوافق على سياسة الخصوصية. أوافق على معالجة بياناتي الشخصية من قِبَل EPWGCET جيجل وفقًا للقانون 18-07."
+                )}
+              </span>
+            </label>
+          </div>
+          <button className="btn bp bfw" style={{marginTop:4,opacity:consentChecked?1:.55}} onClick={handleRegister}>{t("📨 Envoyer la demande","📨 إرسال الطلب")}</button>
           <button className="btn bg bfw" onClick={onBack}>{t("← Retour","← رجوع")}</button>
         </div>
       </div>
@@ -6999,6 +7038,8 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
   const [pwMsg, setPwMsg] = useState(null);
   const [profileForm, setProfileForm] = useState({name:authUser.name,email:authUser.email||"",phone:authUser.phone||"",matricule:authUser.matricule||""});
   const [profileMsg, setProfileMsg] = useState(null);
+  const [profileConsent, setProfileConsent] = useState(false);
+  const [profileConsentExpanded, setProfileConsentExpanded] = useState(false);
   const [newDoc, setNewDoc] = useState({private:"",state:"",prepaid:"",collect:""});
   const [companyEdit, setCompanyEdit] = useState(company ? [...company] : [...COMPANY_FIELDS_DEFAULT]);
   const [companyMsg, setCompanyMsg] = useState(null);
@@ -7035,13 +7076,18 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
     } catch(e) { setPwMsg({t:"err",m:"Erreur de connexion au serveur."}); }
   };
 
-  const handleProfileSave = () => {
+  const handleProfileSave = async () => {
     if (!profileForm.name.trim()) { setProfileMsg({t:"err",m:"Le nom est requis."}); return; }
     if (!profileForm.email.trim()) { setProfileMsg({t:"err",m:"L'email est requis."}); return; }
+    if (!profileConsent) { setProfileMsg({t:"err",m:"Vous devez cocher la case de consentement pour enregistrer vos données personnelles (Loi 18-07)."}); return; }
     const updated = {...authUser, ...profileForm};
     updateUser(updated);
     setAuthUser(updated);
-    setProfileMsg({t:"ok",m:"Profil mis à jour avec succès."});
+    try {
+      await fetch('/api/compliance/consent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:authUser.id,scope:'profile_update'})});
+    } catch(e) {}
+    setProfileMsg({t:"ok",m:"Profil mis à jour avec succès. Consentement enregistré."});
+    setProfileConsent(false);
   };
 
   const removeDoc = (cat, idx) => {
@@ -7143,7 +7189,27 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
                   <input className="fi" value={profileForm.matricule} onChange={e=>{setProfileForm(f=>({...f,matricule:e.target.value}));setProfileMsg(null);}} placeholder="ADM-001"/>
                 </div>
               </div>
-              <button className="btn bp" style={{width:"fit-content"}} onClick={handleProfileSave}>✓ Enregistrer le profil</button>
+              <div style={{border:"1px solid var(--bdr)",borderRadius:10,padding:"12px 14px",background:"var(--s2)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:profileConsentExpanded?10:0}}>
+                  <span style={{fontSize:12,fontWeight:600}}>🔒 Consentement — Loi 18-07</span>
+                  <button type="button" onClick={()=>setProfileConsentExpanded(p=>!p)} style={{fontSize:11,color:"var(--info)",background:"none",border:"none",cursor:"pointer",padding:"2px 6px"}}>
+                    {profileConsentExpanded?"▲ Réduire":"▼ Lire la politique"}
+                  </button>
+                </div>
+                {profileConsentExpanded && (
+                  <div style={{fontSize:11,color:"var(--muted)",lineHeight:1.7,marginBottom:10,maxHeight:140,overflowY:"auto"}}>
+                    <strong>EPWGCET Jijel</strong> traite vos données personnelles (nom, email, téléphone, matricule) pour la gestion des centres d'enfouissement technique, conformément à la <strong>Loi 18-07</strong> du 10 juin 2018. Durée de conservation : 10 ans. Droits : accès, rectification, effacement et opposition via Paramètres → Conformité & Données. Contact : admin@epwgcet-jijel.dz
+                  </div>
+                )}
+                <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
+                  <input type="checkbox" checked={profileConsent} onChange={e=>{setProfileConsent(e.target.checked);setProfileMsg(null);}}
+                    style={{marginTop:2,width:16,height:16,accentColor:"var(--g)",flexShrink:0}}/>
+                  <span style={{fontSize:12,lineHeight:1.5}}>
+                    Je confirme avoir pris connaissance de la politique de confidentialité et je consens au traitement de mes données personnelles par EPWGCET Jijel conformément à la Loi 18-07.
+                  </span>
+                </label>
+              </div>
+              <button className="btn bp" style={{width:"fit-content",opacity:profileConsent?1:.55}} onClick={handleProfileSave}>✓ Enregistrer le profil</button>
             </div>
           </>
         )}
