@@ -794,7 +794,8 @@ function RegisterScreen({onBack, onRegistered, sites, company, lang, toggleLang}
 
   const handleRegister = async () => {
     if (!form.name||!form.email||!form.password||!form.phone) { setError("Veuillez remplir tous les champs."); return; }
-    if (form.password.length < 6) { setError("Le mot de passe doit contenir au moins 6 caractères."); return; }
+    if (form.password.length < 8) { setError("Le mot de passe doit contenir au moins 8 caractères (lettres et chiffres)."); return; }
+    if (!/[A-Za-z]/.test(form.password)||!/[0-9]/.test(form.password)) { setError("Le mot de passe doit contenir au moins une lettre et un chiffre."); return; }
     const newUser = {
       id:uidU(), name:form.name, email:form.email, password:form.password,
       role:"operator", status:"pending", phone:form.phone, siteId:form.siteId,
@@ -909,6 +910,98 @@ function RegisterScreen({onBack, onRegistered, sites, company, lang, toggleLang}
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   CONSENT MODAL — Loi 18-07 Art. 7 (Lawful basis: consent)
+═══════════════════════════════════════════════════════════════════════════ */
+function ConsentModal({ user, lang, onAccepted }) {
+  const t = (fr, ar) => lang === "ar" ? ar : fr;
+  const [tab, setTab] = useState("fr");
+  const [loading, setLoading] = useState(false);
+
+  const handleAccept = async () => {
+    setLoading(true);
+    try {
+      await fetch('/api/compliance/consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, scope: 'system_access' }),
+      });
+    } catch(e) { /* non-blocking: log error but let user in */ }
+    setLoading(false);
+    onAccepted();
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.55)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"var(--s1)",borderRadius:16,maxWidth:640,width:"100%",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 48px rgba(0,0,0,.25)",border:"1px solid var(--bdr)"}}>
+        <div style={{padding:"20px 24px 0",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <span style={{fontSize:28}}>🔒</span>
+            <div>
+              <div style={{fontFamily:"var(--head)",fontWeight:800,fontSize:18,letterSpacing:".04em"}}>
+                {t("Politique de confidentialité","سياسة الخصوصية")}
+              </div>
+              <div style={{fontSize:11,color:"var(--muted)"}}>
+                {t("Loi 18-07 · Conformité Algérienne","القانون 18-07 · الامتثال الجزائري")}
+              </div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:4,borderBottom:"1px solid var(--bdr)",marginBottom:0}}>
+            {[["fr","🇫🇷 Français"],["ar","🇩🇿 العربية"]].map(([id,lbl])=>(
+              <button key={id} onClick={()=>setTab(id)} style={{padding:"6px 14px",border:"none",background:"none",cursor:"pointer",fontWeight:tab===id?700:400,borderBottom:tab===id?"2px solid var(--g)":"2px solid transparent",color:tab===id?"var(--g)":"var(--muted)",fontSize:12,marginBottom:-1}}>
+                {lbl}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{padding:"16px 24px",overflowY:"auto",flex:1,lineHeight:1.7,fontSize:13}}>
+          {tab==="fr" ? (
+            <div>
+              <p style={{marginBottom:10}}><strong>EPWGCET Jijel</strong> traite vos données personnelles pour la gestion des centres d'enfouissement technique, conformément à la <strong>Loi 18-07</strong> du 10 juin 2018 relative à la protection des données personnelles.</p>
+              <div style={{background:"var(--s2)",borderRadius:8,padding:"12px 14px",marginBottom:12,border:"1px solid var(--bdr)"}}>
+                <div style={{fontWeight:700,marginBottom:6,fontSize:12,textTransform:"uppercase",letterSpacing:".06em",color:"var(--muted)"}}>Données collectées</div>
+                {[["Nom, email, téléphone","Identification et authentification","Contrat d'emploi"],["Matricule, rôle, site assigné","Habilitation et traçabilité","Obligation légale (Loi 25-11)"],["Historique des actions","Audit de sécurité","Obligation légale"],].map(([d,f,b])=>(
+                  <div key={d} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:4,fontSize:11,padding:"4px 0",borderBottom:"1px solid var(--bdr)"}}>
+                    <span><strong>{d}</strong></span><span style={{color:"var(--muted)"}}>{f}</span><span style={{color:"var(--info)"}}>{b}</span>
+                  </div>
+                ))}
+              </div>
+              <p style={{marginBottom:8}}><strong>Vos droits (Art. 20-25)</strong> : accès, rectification, effacement, portabilité et opposition — via la section <em>Conformité & Données</em> dans Paramètres.</p>
+              <p style={{marginBottom:8}}>Conservation : <strong>10 ans</strong> (données opérationnelles) · <strong>5 ans</strong> (journal d'audit).</p>
+              <p style={{color:"var(--muted)",fontSize:11}}>Contact DPD : admin@epwgcet-jijel.dz · Autorité : ANPDP Algérie</p>
+            </div>
+          ) : (
+            <div dir="rtl" style={{fontFamily:"'Cairo',sans-serif"}}>
+              <p style={{marginBottom:10}}><strong>EPWGCET جيجل</strong> تعالج بياناتك الشخصية لأغراض تسيير مراكز الردم التقني، وفقًا للقانون <strong>18-07</strong> المؤرخ في 10 يونيو 2018 المتعلق بحماية البيانات الشخصية.</p>
+              <div style={{background:"var(--s2)",borderRadius:8,padding:"12px 14px",marginBottom:12,border:"1px solid var(--bdr)"}}>
+                <div style={{fontWeight:700,marginBottom:6,fontSize:12,color:"var(--muted)"}}>البيانات المجمعة</div>
+                {[["الاسم، البريد الإلكتروني، الهاتف","تعريف الهوية والمصادقة","عقد العمل"],["الرقم الوظيفي، الدور، الموقع","الصلاحيات والتتبع","التزام قانوني (ق. 25-11)"],["سجل الإجراءات","مراجعة الأمان","التزام قانوني"],].map(([d,f,b])=>(
+                  <div key={d} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:4,fontSize:11,padding:"4px 0",borderBottom:"1px solid var(--bdr)"}}>
+                    <span><strong>{d}</strong></span><span style={{color:"var(--muted)"}}>{f}</span><span style={{color:"var(--info)"}}>{b}</span>
+                  </div>
+                ))}
+              </div>
+              <p style={{marginBottom:8}}><strong>حقوقك (المواد 20-25)</strong>: الاطلاع، التصحيح، الحذف، قابلية النقل، والمعارضة — عبر قسم <em>المطابقة والبيانات</em> في الإعدادات.</p>
+              <p style={{marginBottom:8}}>مدة الاحتفاظ: <strong>10 سنوات</strong> (البيانات التشغيلية) · <strong>5 سنوات</strong> (سجل المراجعة).</p>
+              <p style={{color:"var(--muted)",fontSize:11}}>التواصل: admin@epwgcet-jijel.dz · السلطة المختصة: ANPDP الجزائر</p>
+            </div>
+          )}
+        </div>
+
+        <div style={{padding:"16px 24px",borderTop:"1px solid var(--bdr)",flexShrink:0,display:"flex",gap:10,alignItems:"center"}}>
+          <div style={{flex:1,fontSize:11,color:"var(--muted)"}}>
+            {t("En cliquant sur Accepter, vous consentez au traitement de vos données conformément à la politique ci-dessus (v1.0).","بالنقر على قبول، فإنك توافق على معالجة بياناتك وفقًا للسياسة أعلاه (الإصدار 1.0).")}
+          </div>
+          <button className="btn bp" style={{whiteSpace:"nowrap",minWidth:120}} onClick={handleAccept} disabled={loading}>
+            {loading ? t("Enregistrement...","جارٍ الحفظ...") : t("✅ Accepter","✅ قبول")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    ROOT
 ═══════════════════════════════════════════════════════════════════════════ */
 export default function App() {
@@ -931,6 +1024,7 @@ export default function App() {
   const [invoices,    setInvoices]    = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [companyTrucks, setCompanyTrucks] = useState([]);
+  const [showConsent,   setShowConsent]   = useState(false);
   const [docTypes,    setDocTypes]    = useState(() => {
     try { return JSON.parse(localStorage.getItem('ewgcet_docTypes')) || {private:[...REQUIRED_DOCS_PRIVATE],state:[...REQUIRED_DOCS_STATE],prepaid:[...REQUIRED_DOCS_PREPAID],collect:[...REQUIRED_DOCS_COLLECT]}; }
     catch { return {private:[...REQUIRED_DOCS_PRIVATE],state:[...REQUIRED_DOCS_STATE],prepaid:[...REQUIRED_DOCS_PREPAID],collect:[...REQUIRED_DOCS_COLLECT]}; }
@@ -991,7 +1085,17 @@ export default function App() {
     return (
       <LangCtx.Provider value={lang}>
         <style>{STYLES}</style>
-        <LoginScreen onLogin={u=>{setAuthUser(u);localStorage.setItem('authUser',JSON.stringify(u));const p=u.role==="admin"?"dashboard":"gate";localStorage.setItem('currentPage',p);setPage(p);}}
+        <LoginScreen onLogin={u=>{
+          setAuthUser(u);
+          localStorage.setItem('authUser',JSON.stringify(u));
+          const p=u.role==="admin"?"dashboard":"gate";
+          localStorage.setItem('currentPage',p);
+          setPage(p);
+          fetch(`/api/compliance/consent/${u.id}`)
+            .then(r=>r.json())
+            .then(d=>{ if(!d.consented) setShowConsent(true); })
+            .catch(()=>{});
+        }}
           onRegister={()=>setAuthScreen("register")} company={company}
           lang={lang} toggleLang={toggleLang}/>
       </LangCtx.Provider>
@@ -1105,6 +1209,7 @@ export default function App() {
   return (
     <LangCtx.Provider value={lang}>
       <style>{STYLES}</style>
+      {showConsent && <ConsentModal user={authUser} lang={lang} onAccepted={()=>setShowConsent(false)}/>}
       <div className="shell" dir={lang==="ar"?"rtl":"ltr"}>
         <div className={`sidebar-backdrop${sidebarOpen?" open":""}`} onClick={closeSidebar}/>
         <aside className={`sidebar${sidebarOpen?" open":""}`}>
@@ -6592,6 +6697,296 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   COMPLIANCE PANEL — Loi 18-07 + Loi 25-11
+═══════════════════════════════════════════════════════════════════════════ */
+function CompliancePanel({ authUser, isAdmin }) {
+  const [consentStatus,  setConsentStatus]  = useState(null);
+  const [myData,         setMyData]         = useState(null);
+  const [myDataLoading,  setMyDataLoading]  = useState(false);
+  const [requests,       setRequests]       = useState([]);
+  const [auditLog,       setAuditLog]       = useState([]);
+  const [auditLoading,   setAuditLoading]   = useState(false);
+  const [breachReport,   setBreachReport]   = useState(null);
+  const [brLoading,      setBrLoading]      = useState(false);
+  const [reqForm,        setReqForm]        = useState({type:"access",note:""});
+  const [reqMsg,         setReqMsg]         = useState(null);
+  const [purgeMsg,       setPurgeMsg]       = useState(null);
+  const [activeView,     setActiveView]     = useState("status");
+
+  const fmtDate = d => d ? new Date(d).toLocaleString("fr-DZ") : "—";
+
+  useEffect(() => {
+    fetch(`/api/compliance/consent/${authUser.id}`)
+      .then(r=>r.json()).then(setConsentStatus).catch(()=>{});
+    if (isAdmin) {
+      fetch('/api/compliance/data-requests').then(r=>r.json()).then(d=>setRequests(Array.isArray(d)?d:[])).catch(()=>{});
+    }
+  }, [authUser.id, isAdmin]);
+
+  const loadMyData = async () => {
+    setMyDataLoading(true);
+    const r = await fetch(`/api/compliance/my-data/${authUser.id}`);
+    const d = await r.json();
+    setMyData(d);
+    setMyDataLoading(false);
+  };
+
+  const loadAuditLog = async () => {
+    setAuditLoading(true);
+    const r = await fetch('/api/compliance/audit-log?limit=50');
+    const d = await r.json();
+    setAuditLog(d.rows||[]);
+    setAuditLoading(false);
+  };
+
+  const loadBreachReport = async () => {
+    setBrLoading(true);
+    const r = await fetch('/api/compliance/breach-report');
+    const d = await r.json();
+    setBreachReport(d);
+    setBrLoading(false);
+  };
+
+  const submitRequest = async () => {
+    setReqMsg(null);
+    const r = await fetch('/api/compliance/data-request', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ userId: authUser.id, requestType: reqForm.type, subjectName: authUser.name, subjectEmail: authUser.email, note: reqForm.note }),
+    });
+    const d = await r.json();
+    if (r.ok) { setReqMsg({t:"ok",m:`Demande #${d.requestId} enregistrée. Délai de réponse : 30 jours.`}); setReqForm({type:"access",note:""}); }
+    else setReqMsg({t:"err",m:d.error||"Erreur serveur."});
+  };
+
+  const handleRequest = async (id, status) => {
+    await fetch(`/api/compliance/data-requests/${id}`, {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ status, handledBy: authUser.id }),
+    });
+    setRequests(p=>p.map(r=>r.id===id?{...r,status,handled_by:authUser.id,handled_at:new Date().toISOString()}:r));
+  };
+
+  const purgeOld = async () => {
+    if (!window.confirm("Confirmer la purge des données de déchargement de plus de 10 ans ?")) return;
+    const r = await fetch('/api/compliance/purge-expired', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ adminUserId: authUser.id, retentionYears: 10 }),
+    });
+    const d = await r.json();
+    setPurgeMsg(r.ok ? `✅ ${d.deletedCount} entrée(s) supprimées (avant ${d.cutoffDate}).` : `Erreur: ${d.error}`);
+  };
+
+  const statusColor = s => ({pending:"var(--warn)",processing:"var(--info)",completed:"var(--g)",rejected:"var(--err)"}[s]||"var(--muted)");
+  const eventColor  = e => e.includes("FAIL")||e.includes("DENY") ? "var(--err)" : e.includes("SUCCESS")||e.includes("GIVEN") ? "var(--g)" : "var(--info)";
+
+  const views = isAdmin
+    ? [["status","🛡 Statut"],["requests","📋 Demandes"],["auditlog","📜 Journal"],["breach","🚨 Rapport"],["purge","🗑 Rétention"]]
+    : [["status","🛡 Statut"],["mydata","📦 Mes données"],["request","📝 Mes droits"]];
+
+  return (
+    <div>
+      <div className="settings-title">🛡️ {isAdmin ? "Conformité & Sécurité" : "Mes données & droits"}</div>
+      <div className="settings-sub">{isAdmin ? "Loi 18-07 · Loi 25-11 — Tableau de bord conformité" : "Loi 18-07 Art.20-25 — Exercer vos droits sur vos données personnelles"}</div>
+
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:20}}>
+        {views.map(([id,lbl])=>(
+          <button key={id} onClick={()=>setActiveView(id)} style={{padding:"6px 14px",borderRadius:20,border:"1px solid var(--bdr)",background:activeView===id?"var(--g)":"var(--s2)",color:activeView===id?"#fff":"var(--txt)",fontWeight:activeView===id?700:400,cursor:"pointer",fontSize:12}}>
+            {lbl}
+          </button>
+        ))}
+      </div>
+
+      {activeView==="status" && (
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{background:"var(--s2)",borderRadius:10,padding:"14px 16px",border:"1px solid var(--bdr)"}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:8}}>📜 Consentement (Loi 18-07, Art. 7)</div>
+            {consentStatus ? (
+              consentStatus.consented
+                ? <div className="alrt as" style={{marginBottom:0}}><span>✅</span><span>Politique v{consentStatus.record?.policy_ver} acceptée le {fmtDate(consentStatus.record?.consented_at)}</span></div>
+                : <div className="alrt ae" style={{marginBottom:0}}><span>⚠</span><span>Consentement non enregistré pour la politique actuelle (v{consentStatus.currentPolicyVersion})</span></div>
+            ) : <span style={{fontSize:12,color:"var(--muted)"}}>Chargement…</span>}
+          </div>
+
+          {isAdmin && (
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}>
+              {[
+                ["📋","Demandes en attente",requests.filter(r=>r.status==="pending").length,"var(--warn)"],
+                ["📜","Événements d'audit",auditLog.length||"Charger →","var(--info)"],
+                ["🔐","Politique de mdp","8 car. min — lettres+chiffres","var(--g)"],
+                ["🌐","Hébergement","Replit/USA — ⚠️ Auth. ANPDP requise","var(--err)"],
+              ].map(([ic,label,val,col])=>(
+                <div key={label} style={{background:"var(--s2)",borderRadius:8,padding:"12px 14px",border:"1px solid var(--bdr)"}}>
+                  <div style={{fontSize:20,marginBottom:4}}>{ic}</div>
+                  <div style={{fontSize:10,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".06em",marginBottom:2}}>{label}</div>
+                  <div style={{fontWeight:700,fontSize:13,color:col}}>{val}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{background:"rgba(240,130,0,.07)",border:"1px solid rgba(240,130,0,.25)",borderRadius:8,padding:"12px 14px",fontSize:12}}>
+            <div style={{fontWeight:700,marginBottom:6}}>⚠️ Actions ANPDP requises avant production officielle</div>
+            {["Désigner un Délégué à la Protection des Données (DPD)","Soumettre la déclaration de traitements à l'ANPDP","Obtenir l'autorisation de transfert transfrontalier (hébergement Replit/USA)"].map(a=>(
+              <div key={a} style={{display:"flex",gap:6,alignItems:"flex-start",marginBottom:4}}>
+                <span style={{color:"var(--err)",flexShrink:0}}>❌</span><span style={{color:"var(--muted)"}}>{a}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {activeView==="mydata" && (
+        <div>
+          <div style={{marginBottom:12,fontSize:13,color:"var(--muted)"}}>Droit d'accès — Art. 20 Loi 18-07. Export de toutes vos données personnelles enregistrées dans le système.</div>
+          <button className="btn bp" onClick={loadMyData} disabled={myDataLoading} style={{marginBottom:16}}>
+            {myDataLoading?"Chargement…":"📦 Exporter mes données (JSON)"}
+          </button>
+          {myData && (
+            <div>
+              <div style={{background:"var(--s2)",borderRadius:8,padding:"12px 14px",border:"1px solid var(--bdr)",marginBottom:10}}>
+                <div style={{fontWeight:700,fontSize:12,marginBottom:6,color:"var(--muted)"}}>PROFIL</div>
+                {Object.entries(myData.profile||{}).map(([k,v])=>(
+                  <div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0",borderBottom:"1px solid var(--bdr)"}}>
+                    <span style={{color:"var(--muted)",fontFamily:"var(--mono)",fontSize:10}}>{k}</span>
+                    <span style={{fontWeight:600}}>{String(v||"—")}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:"var(--s2)",borderRadius:8,padding:"12px 14px",border:"1px solid var(--bdr)",marginBottom:10}}>
+                <div style={{fontWeight:700,fontSize:12,marginBottom:4,color:"var(--muted)"}}>CONSENTEMENTS ({myData.consentHistory?.length||0})</div>
+                {myData.consentHistory?.map((c,i)=><div key={i} style={{fontSize:11,color:"var(--muted)",padding:"2px 0"}}>v{c.policy_ver} — {fmtDate(c.consented_at)}</div>)}
+              </div>
+              <div style={{background:"var(--s2)",borderRadius:8,padding:"12px 14px",border:"1px solid var(--bdr)"}}>
+                <div style={{fontWeight:700,fontSize:12,marginBottom:4,color:"var(--muted)"}}>DÉCHARGEMENTS OPÉRÉS ({myData.operatorDischarges?.length||0})</div>
+                <div style={{fontSize:11,color:"var(--muted)"}}>{myData.operatorDischarges?.length||0} enregistrement(s)</div>
+              </div>
+              <div style={{marginTop:10,fontSize:11,color:"var(--muted)"}}>Export généré le {fmtDate(myData.exportedAt)} · Base légale : {myData.legalBasis}</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeView==="request" && (
+        <div>
+          <div style={{marginBottom:12,fontSize:13,color:"var(--muted)"}}>Exercez vos droits conformément aux Art. 20-25 de la Loi 18-07. Délai de réponse : 30 jours maximum.</div>
+          <div className="fg" style={{gap:12,maxWidth:440}}>
+            <div className="field">
+              <label>Type de demande</label>
+              <select className="fi" value={reqForm.type} onChange={e=>setReqForm(f=>({...f,type:e.target.value}))}>
+                <option value="access">Droit d'accès (Art. 20) — Obtenir une copie de mes données</option>
+                <option value="rectification">Droit de rectification (Art. 21) — Corriger des données inexactes</option>
+                <option value="erasure">Droit à l'effacement (Art. 23) — Supprimer mes données</option>
+                <option value="portability">Droit à la portabilité — Recevoir mes données au format structuré</option>
+                <option value="objection">Droit d'opposition (Art. 22) — M'opposer à un traitement</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>Détails / précisions (optionnel)</label>
+              <textarea className="fi" rows={3} value={reqForm.note} onChange={e=>setReqForm(f=>({...f,note:e.target.value}))} placeholder="Décrivez votre demande…" style={{resize:"vertical"}}/>
+            </div>
+            {reqMsg && <div className={`alrt ${reqMsg.t==="ok"?"as":"ae"}`}><span>{reqMsg.t==="ok"?"✅":"⚠"}</span><span>{reqMsg.m}</span></div>}
+            <button className="btn bp" style={{width:"fit-content"}} onClick={submitRequest}>📝 Soumettre la demande</button>
+          </div>
+        </div>
+      )}
+
+      {activeView==="requests" && isAdmin && (
+        <div>
+          <div style={{marginBottom:12,fontSize:13,color:"var(--muted)"}}>Demandes de droits des personnes concernées — Délai légal de traitement : 30 jours (Loi 18-07).</div>
+          {requests.length===0 ? <div className="alrt ai"><span>ℹ</span><span>Aucune demande en attente.</span></div> : (
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {requests.map(r=>(
+                <div key={r.id} style={{background:"var(--s2)",borderRadius:8,padding:"12px 14px",border:"1px solid var(--bdr)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:6}}>
+                    <div>
+                      <span style={{fontWeight:700,fontSize:12,textTransform:"uppercase",color:"var(--info)"}}>{r.request_type}</span>
+                      {" · "}<span style={{fontSize:12}}>{r.subject_name||r.subject_email||r.user_id||"Anonyme"}</span>
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,color:statusColor(r.status)}}>{r.status}</span>
+                  </div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>{fmtDate(r.requested_at)}{r.note ? ` — ${r.note}` : ""}</div>
+                  {r.status==="pending" && (
+                    <div style={{display:"flex",gap:6}}>
+                      <button className="btn bp" style={{fontSize:11,padding:"4px 10px"}} onClick={()=>handleRequest(r.id,"completed")}>✅ Traité</button>
+                      <button className="btn" style={{fontSize:11,padding:"4px 10px",color:"var(--err)",border:"1px solid var(--err)"}} onClick={()=>handleRequest(r.id,"rejected")}>❌ Rejeté</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeView==="auditlog" && isAdmin && (
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={{fontSize:13,color:"var(--muted)"}}>Journal d'audit sécurité — Loi 25-11 Art. 16 · Conservation 5 ans</div>
+            <button className="btn bp" style={{fontSize:11,padding:"5px 12px"}} onClick={loadAuditLog} disabled={auditLoading}>
+              {auditLoading?"Chargement…":"🔄 Charger"}
+            </button>
+          </div>
+          {auditLog.length===0 ? (
+            <div className="alrt ai"><span>ℹ</span><span>Cliquez sur Charger pour afficher les 50 derniers événements.</span></div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:400,overflowY:"auto"}}>
+              {auditLog.map(e=>(
+                <div key={e.id} style={{background:"var(--s2)",borderRadius:6,padding:"8px 12px",border:"1px solid var(--bdr)",fontSize:11,display:"grid",gridTemplateColumns:"140px 160px 1fr 70px",gap:6,alignItems:"center"}}>
+                  <span style={{color:"var(--muted)",fontFamily:"var(--mono)",fontSize:10}}>{new Date(e.ts).toLocaleString("fr-DZ")}</span>
+                  <span style={{fontWeight:700,color:eventColor(e.event_type),fontFamily:"var(--mono)",fontSize:10}}>{e.event_type}</span>
+                  <span style={{color:"var(--txt)"}}>{e.user_name||"—"} {e.detail ? `— ${e.detail}` : ""}</span>
+                  <span style={{textAlign:"right",color:e.outcome==="success"?"var(--g)":"var(--err)",fontSize:10,fontWeight:700}}>{e.outcome}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeView==="breach" && isAdmin && (
+        <div>
+          <div style={{marginBottom:12,fontSize:13,color:"var(--muted)"}}>Loi 25-11 Art. 18 — Rapport d'incident sur les 72 dernières heures (notification ANSSI obligatoire).</div>
+          <button className="btn bp" onClick={loadBreachReport} disabled={brLoading} style={{marginBottom:16}}>
+            {brLoading?"Génération…":"🚨 Générer le rapport d'incident"}
+          </button>
+          {breachReport && (
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{background:"rgba(200,0,0,.06)",border:"1px solid rgba(200,0,0,.2)",borderRadius:8,padding:"12px 14px"}}>
+                <div style={{fontWeight:700,fontSize:12,marginBottom:6}}>Rapport généré le {fmtDate(breachReport.reportGeneratedAt)}</div>
+                <div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>Fenêtre : {fmtDate(breachReport.reportingWindowStart)} → maintenant</div>
+                <div style={{fontSize:11,color:"var(--muted)"}}>{breachReport.legalReference}</div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                {[["Total échecs",breachReport.summary?.totalFailures,"var(--err)"],["Échecs connexion",breachReport.summary?.loginFailures,"var(--warn)"],["Échecs mot de passe",breachReport.summary?.passwordFailures,"var(--info)"]].map(([l,v,c])=>(
+                  <div key={l} style={{background:"var(--s2)",borderRadius:8,padding:"10px 12px",border:"1px solid var(--bdr)",textAlign:"center"}}>
+                    <div style={{fontWeight:800,fontSize:22,color:c}}>{v??0}</div>
+                    <div style={{fontSize:10,color:"var(--muted)"}}>{l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:"var(--s2)",borderRadius:8,padding:"12px 14px",border:"1px solid var(--bdr)",fontSize:11,color:"var(--muted)"}}>
+                <strong>Autorité de notification :</strong> {breachReport.reportingAuthority}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeView==="purge" && isAdmin && (
+        <div>
+          <div style={{marginBottom:12,fontSize:13,color:"var(--muted)"}}>Loi 18-07 Art. 17 — Politique de conservation. Supprimer les déchargements de plus de 10 ans (obligation réglementaire).</div>
+          <div className="alrt ae" style={{marginBottom:16}}><span>⚠</span><span>Cette opération est <strong>irréversible</strong>. Les données supprimées seront définitivement effacées de la base de données.</span></div>
+          <button className="btn" style={{background:"var(--err)",color:"#fff",width:"fit-content",border:"none"}} onClick={purgeOld}>
+            🗑 Purger les données ≥ 10 ans
+          </button>
+          {purgeMsg && <div style={{marginTop:12,fontSize:13,fontWeight:600,color:purgeMsg.startsWith("✅")?"var(--g)":"var(--err)"}}>{purgeMsg}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    SETTINGS
 ═══════════════════════════════════════════════════════════════════════════ */
 function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,setAuthUser,docTypes,updateDocTypes,company,updateCompany,companyTrucks,addCompanyTruck,updateCompanyTruck,deleteCompanyTruck}) {
@@ -6619,12 +7014,14 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
     {id:"tarifs",    ic:"💰", lbl:"Tarifs & Tarification"},
     {id:"fleet",     ic:"🚛", lbl:"Flotte EPWGCET"},
     {id:"documents", ic:"📋", lbl:"Types de documents"},
-    {id:"security",  ic:"🔐", lbl:"Sécurité du compte"},
-    {id:"about",     ic:"ℹ️", lbl:"À propos"},
+    {id:"security",    ic:"🔐", lbl:"Sécurité du compte"},
+    {id:"compliance",  ic:"🛡️", lbl:isAdmin?"Conformité & Sécurité":"Mes données"},
+    {id:"about",       ic:"ℹ️", lbl:"À propos"},
   ];
 
   const handlePwChange = async () => {
-    if (pwForm.newPw.length < 6) { setPwMsg({t:"err",m:"Le nouveau mot de passe doit faire au moins 6 caractères."}); return; }
+    if (pwForm.newPw.length < 8) { setPwMsg({t:"err",m:"Le nouveau mot de passe doit faire au moins 8 caractères."}); return; }
+    if (!/[A-Za-z]/.test(pwForm.newPw)||!/[0-9]/.test(pwForm.newPw)) { setPwMsg({t:"err",m:"Le mot de passe doit contenir au moins une lettre et un chiffre."}); return; }
     if (pwForm.newPw !== pwForm.confirm) { setPwMsg({t:"err",m:"Les mots de passe ne correspondent pas."}); return; }
     try {
       const r = await fetch('/api/auth/change-password', {
@@ -7091,6 +7488,10 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
               <button className="btn bp" style={{width:"fit-content"}} onClick={handlePwChange}>🔐 Changer le mot de passe</button>
             </div>
           </>
+        )}
+
+        {tab==="compliance"&&(
+          <CompliancePanel authUser={authUser} isAdmin={isAdmin}/>
         )}
 
         {tab==="about"&&(

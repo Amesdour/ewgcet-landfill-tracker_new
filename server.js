@@ -11,9 +11,25 @@ const { Pool } = pg;
 const app = express();
 const IS_PROD = process.env.NODE_ENV === 'production';
 const PORT = process.env.PORT || 3001;
+const POLICY_VERSION = '1.0';
+const MIN_PASSWORD_LENGTH = 8;
+
+/* ─── SECURITY HEADERS (Law 25-11, Art. 10) ──────────────────────────────── */
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('X-Powered-By', 'EPWGCET');
+  if (IS_PROD) {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+  }
+  next();
+});
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
 const pool = new Pool({
@@ -26,9 +42,34 @@ const q  = (sql, p) => pool.query(sql, p);
 const ok = (res, data) => res.json(data);
 const er = (res, err, code=500) => { console.error(err); res.status(code).json({error:String(err)}); };
 
+/* ─── HELPERS ────────────────────────────────────────────────────────────── */
+function getIP(req) {
+  const fwd = req.headers['x-forwarded-for'] || '';
+  return fwd.split(',')[0].trim() || req.ip || 'unknown';
+}
+
+async function logAudit({ eventType, userId=null, userName=null, userRole=null, ip=null, resource=null, resourceId=null, detail=null, outcome='success' }) {
+  try {
+    await pool.query(
+      `INSERT INTO audit_logs(event_type,user_id,user_name,user_role,ip_address,resource,resource_id,detail,outcome)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [eventType, userId, userName, userRole, ip, resource, resourceId, detail, outcome]
+    );
+  } catch(e) {
+    console.error('[AUDIT LOG ERROR]', e.message);
+  }
+}
+
+function validatePasswordStrength(pw) {
+  if (!pw || pw.length < MIN_PASSWORD_LENGTH) return `Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`;
+  if (!/[A-Za-z]/.test(pw)) return 'Le mot de passe doit contenir au moins une lettre.';
+  if (!/[0-9]/.test(pw)) return 'Le mot de passe doit contenir au moins un chiffre.';
+  return null;
+}
+
+/* ─── MIGRATIONS ─────────────────────────────────────────────────────────── */
 async function runMigrations() {
   try {
-    // Create tracking table if it doesn't exist
     await pool.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         filename   VARCHAR(200) PRIMARY KEY,
@@ -37,27 +78,17 @@ async function runMigrations() {
     `);
 
     const migrationsDir = join(__dirname, 'migrations');
-    if (!existsSync(migrationsDir)) {
-      console.log('No migrations directory found, skipping.');
-      return;
-    }
+    if (!existsSync(migrationsDir)) { console.log('No migrations directory found.'); return; }
 
-    const files = readdirSync(migrationsDir)
-      .filter(f => f.endsWith('.sql'))
-      .sort();
+    const files = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
     for (const file of files) {
-      const { rows } = await pool.query(
-        'SELECT filename FROM schema_migrations WHERE filename=$1', [file]
-      );
-      if (rows.length > 0) continue; // already applied
-
+      const { rows } = await pool.query('SELECT filename FROM schema_migrations WHERE filename=$1', [file]);
+      if (rows.length > 0) continue;
       console.log(`Running migration: ${file}`);
       const sql = readFileSync(join(migrationsDir, file), 'utf8');
       await pool.query(sql);
-      await pool.query(
-        'INSERT INTO schema_migrations (filename) VALUES ($1)', [file]
-      );
+      await pool.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
       console.log(`Migration applied: ${file}`);
     }
 
@@ -69,17 +100,16 @@ async function runMigrations() {
         await pool.query('UPDATE users SET password=$1 WHERE id=$2', [hash, u.id]);
       }
     }
-
     console.log('Migrations complete.');
   } catch (e) {
     console.error('Migration error:', e.message);
   }
 }
 
-// Simple in-memory rate limiter for login (max 10 attempts/min per IP)
+/* ─── RATE LIMITER (login) ───────────────────────────────────────────────── */
 const loginAttempts = new Map();
 const rateLimitLogin = (req, res, next) => {
-  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const ip = getIP(req);
   const now = Date.now();
   const e = loginAttempts.get(ip) || { count: 0, resetAt: now + 60000 };
   if (now > e.resetAt) { e.count = 0; e.resetAt = now + 60000; }
@@ -89,7 +119,7 @@ const rateLimitLogin = (req, res, next) => {
   next();
 };
 
-// Row mappers
+/* ─── ROW MAPPERS ────────────────────────────────────────────────────────── */
 const mapDischarge = r => ({
   id:r.id, ts:r.ts, siteId:r.site_id, clientId:r.client_id,
   clientName:r.client_name, truck:r.truck, wasteType:r.waste_type,
@@ -130,9 +160,7 @@ const mapUser = r => ({
   verificationCode:r.verification_code||null,
 });
 
-function genCode() {
-  return String(Math.floor(100000 + Math.random() * 900000));
-}
+function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
 
 const mapSite = r => ({
   id:r.id, name:r.name, type:r.type, region:r.region,
@@ -169,7 +197,6 @@ app.get('/api/discharges', async (req, res) => {
 app.post('/api/discharges', async (req, res) => {
   const d = req.body;
   try {
-    // Enforce client waste type restriction
     if (d.clientId && d.wasteType) {
       const { rows: clientRows } = await q('SELECT allowed_waste_types FROM clients WHERE id=$1', [d.clientId]);
       if (clientRows.length > 0) {
@@ -192,14 +219,12 @@ app.post('/api/discharges', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-// Full discharge update (admin correction)
 app.put('/api/discharges/:id', async (req, res) => {
   const d = req.body;
   try {
     if (d.statusOnly) {
       await q('UPDATE discharges SET status=$1 WHERE id=$2',[d.status, req.params.id]);
     } else {
-      // Fetch old record to adjust consumed diff
       const { rows:old } = await q('SELECT * FROM discharges WHERE id=$1',[req.params.id]);
       const oldD = old[0];
       await q(
@@ -210,7 +235,6 @@ app.put('/api/discharges/:id', async (req, res) => {
          d.total,d.status,d.payMethod,d.siteId,d.ts,
          d.correctionReason||'',d.opType||'treatment',req.params.id]
       );
-      // Adjust client consumed if billing type is account-based
       if (oldD) {
         const oldTotal = parseFloat(oldD.total)||0;
         const newTotal = parseFloat(d.total)||0;
@@ -234,7 +258,6 @@ app.put('/api/discharges/:id', async (req, res) => {
 });
 
 /* ─── CLIENTS ─────────────────────────────────────────────────────────────── */
-// Compute consumed dynamically from discharges
 app.get('/api/clients', async (req, res) => {
   try {
     const { rows } = await q(`
@@ -359,7 +382,6 @@ app.put('/api/users/:id', async (req, res) => {
   const u = req.body;
   try {
     if (u.password && u.password.trim() && !u.password.startsWith('$2')) {
-      // New plaintext password provided — hash it
       const hashed = await bcrypt.hash(u.password, 10);
       await q(
         `UPDATE users SET name=$1,email=$2,password=$3,role=$4,status=$5,
@@ -368,7 +390,6 @@ app.put('/api/users/:id', async (req, res) => {
          u.matricule||'',u.siteId||'all',req.params.id]
       );
     } else {
-      // No password change — keep existing hash
       await q(
         `UPDATE users SET name=$1,email=$2,role=$3,status=$4,
          phone=$5,matricule=$6,site_id=$7 WHERE id=$8`,
@@ -462,15 +483,23 @@ app.put('/api/invoices/:id', async (req, res) => {
 /* ─── AUTH ────────────────────────────────────────────────────────────────── */
 app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
   const { email, password } = req.body;
+  const ip = getIP(req);
   if (!email || !password) return res.status(400).json({ error: 'Champs requis manquants.' });
   try {
     const { rows } = await q(
       'SELECT * FROM users WHERE email=$1 AND status=$2',
       [email, 'active']
     );
-    if (rows.length === 0) return res.status(401).json({ error: 'Identifiants invalides ou compte inactif.' });
+    if (rows.length === 0) {
+      await logAudit({ eventType:'LOGIN_FAIL', ip, resource:'auth', detail:`Email inconnu ou compte inactif: ${email}`, outcome:'failure' });
+      return res.status(401).json({ error: 'Identifiants invalides ou compte inactif.' });
+    }
     const match = await bcrypt.compare(password, rows[0].password);
-    if (!match) return res.status(401).json({ error: 'Identifiants invalides ou compte inactif.' });
+    if (!match) {
+      await logAudit({ eventType:'LOGIN_FAIL', userId:rows[0].id, userName:rows[0].name, userRole:rows[0].role, ip, resource:'auth', detail:'Mot de passe incorrect', outcome:'failure' });
+      return res.status(401).json({ error: 'Identifiants invalides ou compte inactif.' });
+    }
+    await logAudit({ eventType:'LOGIN_SUCCESS', userId:rows[0].id, userName:rows[0].name, userRole:rows[0].role, ip, resource:'auth', detail:'Connexion réussie', outcome:'success' });
     ok(res, mapUser(rows[0]));
   } catch(e) { er(res,e); }
 });
@@ -478,17 +507,23 @@ app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
 app.post('/api/auth/change-password', async (req, res) => {
   const { userId, currentPassword, newPassword } = req.body;
   if (!userId || !currentPassword || !newPassword) return res.status(400).json({ error: 'Champs requis manquants.' });
-  if (newPassword.length < 6) return res.status(400).json({ error: 'Le nouveau mot de passe doit faire au moins 6 caractères.' });
+  const pwError = validatePasswordStrength(newPassword);
+  if (pwError) return res.status(400).json({ error: pwError });
   try {
     const { rows } = await q('SELECT * FROM users WHERE id=$1', [userId]);
     if (rows.length === 0) return res.status(404).json({ error: 'Utilisateur introuvable.' });
     const match = await bcrypt.compare(currentPassword, rows[0].password);
-    if (!match) return res.status(401).json({ error: 'Mot de passe actuel incorrect.' });
+    if (!match) {
+      await logAudit({ eventType:'PASSWORD_CHANGE_FAIL', userId, userRole:rows[0].role, resource:'auth', detail:'Mot de passe actuel incorrect', outcome:'failure' });
+      return res.status(401).json({ error: 'Mot de passe actuel incorrect.' });
+    }
     const hashed = await bcrypt.hash(newPassword, 10);
     await q('UPDATE users SET password=$1 WHERE id=$2', [hashed, userId]);
+    await logAudit({ eventType:'PASSWORD_CHANGE', userId, userName:rows[0].name, userRole:rows[0].role, resource:'users', resourceId:userId, detail:'Mot de passe modifié', outcome:'success' });
     ok(res, { ok: true });
   } catch(e) { er(res,e); }
 });
+
 /* ─── COMPANY TRUCKS ──────────────────────────────────────────────────────── */
 app.get('/api/company-trucks', async (req, res) => {
   try {
@@ -526,7 +561,183 @@ app.delete('/api/company-trucks/:id', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-// Serve built frontend in production
+/* ══════════════════════════════════════════════════════════════════════════════
+   CONFORMITÉ — Loi 18-07 + Loi 25-11
+   All endpoints under /api/compliance/
+══════════════════════════════════════════════════════════════════════════════ */
+
+/* POST /api/compliance/consent — Record user consent (Law 18-07, Art. 7) */
+app.post('/api/compliance/consent', async (req, res) => {
+  const { userId, scope } = req.body;
+  const ip = getIP(req);
+  if (!userId) return res.status(400).json({ error: 'userId requis.' });
+  try {
+    await q(
+      `INSERT INTO consent_records(user_id, policy_ver, scope, ip_address)
+       VALUES($1,$2,$3,$4)
+       ON CONFLICT DO NOTHING`,
+      [userId, POLICY_VERSION, scope||'system_access', ip]
+    );
+    await logAudit({ eventType:'CONSENT_GIVEN', userId, ip, resource:'consent_records', detail:`Politique v${POLICY_VERSION} acceptée`, outcome:'success' });
+    ok(res, { ok:true, policyVersion: POLICY_VERSION });
+  } catch(e) { er(res,e); }
+});
+
+/* GET /api/compliance/consent/:userId — Check consent status */
+app.get('/api/compliance/consent/:userId', async (req, res) => {
+  try {
+    const { rows } = await q(
+      `SELECT id, consented_at, policy_ver, scope FROM consent_records
+       WHERE user_id=$1 AND policy_ver=$2 AND revoked_at IS NULL
+       ORDER BY consented_at DESC LIMIT 1`,
+      [req.params.userId, POLICY_VERSION]
+    );
+    ok(res, {
+      consented: rows.length > 0,
+      record: rows[0] || null,
+      currentPolicyVersion: POLICY_VERSION,
+    });
+  } catch(e) { er(res,e); }
+});
+
+/* GET /api/compliance/my-data/:userId — Right of Access (Law 18-07, Art. 20) */
+app.get('/api/compliance/my-data/:userId', async (req, res) => {
+  const uid = req.params.userId;
+  const ip = getIP(req);
+  try {
+    const [userRes, dischargesRes, consentRes, requestsRes] = await Promise.all([
+      q('SELECT id,name,email,role,status,phone,matricule,site_id,created_at FROM users WHERE id=$1', [uid]),
+      q('SELECT id,ts,site_id,waste_type,truck,net,total,status,pay_method FROM discharges WHERE op_id=$1 ORDER BY ts DESC', [uid]),
+      q('SELECT policy_ver,consented_at,scope FROM consent_records WHERE user_id=$1 ORDER BY consented_at DESC', [uid]),
+      q('SELECT request_type,requested_at,status FROM data_requests WHERE user_id=$1 ORDER BY requested_at DESC', [uid]),
+    ]);
+    if (!userRes.rows.length) return res.status(404).json({ error: 'Utilisateur introuvable.' });
+    await logAudit({ eventType:'DATA_ACCESS_REQUEST', userId:uid, ip, resource:'my-data', detail:'Export données personnelles (Art.20 Loi 18-07)', outcome:'success' });
+    ok(res, {
+      exportedAt: new Date().toISOString(),
+      legalBasis: 'Loi 18-07, Article 20 — Droit d\'accès',
+      profile: userRes.rows[0],
+      operatorDischarges: dischargesRes.rows,
+      consentHistory: consentRes.rows,
+      dataRequests: requestsRes.rows,
+    });
+  } catch(e) { er(res,e); }
+});
+
+/* POST /api/compliance/data-request — Submit a data rights request (Law 18-07, Art. 20-25) */
+app.post('/api/compliance/data-request', async (req, res) => {
+  const { userId, requestType, subjectName, subjectEmail, note } = req.body;
+  const validTypes = ['access','rectification','erasure','portability','objection'];
+  if (!validTypes.includes(requestType)) return res.status(400).json({ error: 'Type de demande invalide.' });
+  const ip = getIP(req);
+  try {
+    const { rows } = await q(
+      `INSERT INTO data_requests(request_type,user_id,subject_name,subject_email,note)
+       VALUES($1,$2,$3,$4,$5) RETURNING id,requested_at`,
+      [requestType, userId||null, subjectName||'', subjectEmail||'', note||'']
+    );
+    await logAudit({ eventType:`DATA_REQUEST_${requestType.toUpperCase()}`, userId, ip, resource:'data_requests', resourceId:String(rows[0].id), detail:`Demande de ${requestType} soumise`, outcome:'success' });
+    ok(res, { ok:true, requestId: rows[0].id, requestedAt: rows[0].requested_at });
+  } catch(e) { er(res,e); }
+});
+
+/* GET /api/compliance/data-requests — Admin: list all requests */
+app.get('/api/compliance/data-requests', async (req, res) => {
+  try {
+    const { rows } = await q(
+      `SELECT dr.*, u.name AS handler_name FROM data_requests dr
+       LEFT JOIN users u ON u.id=dr.handled_by
+       ORDER BY dr.requested_at DESC`
+    );
+    ok(res, rows);
+  } catch(e) { er(res,e); }
+});
+
+/* PUT /api/compliance/data-requests/:id — Admin: handle a request */
+app.put('/api/compliance/data-requests/:id', async (req, res) => {
+  const { status, handledBy, note } = req.body;
+  const ip = getIP(req);
+  try {
+    await q(
+      `UPDATE data_requests SET status=$1,handled_by=$2,handled_at=NOW(),note=$3 WHERE id=$4`,
+      [status, handledBy||null, note||'', req.params.id]
+    );
+    await logAudit({ eventType:'DATA_REQUEST_HANDLED', userId:handledBy, ip, resource:'data_requests', resourceId:req.params.id, detail:`Demande traitée → ${status}`, outcome:'success' });
+    ok(res, { ok:true });
+  } catch(e) { er(res,e); }
+});
+
+/* GET /api/compliance/audit-log — Admin: view security audit log (Law 25-11, Art. 16) */
+app.get('/api/compliance/audit-log', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit)||100, 500);
+  const offset = parseInt(req.query.offset)||0;
+  const eventType = req.query.event_type||null;
+  try {
+    const base = `SELECT * FROM audit_logs ${eventType?'WHERE event_type=$3':''} ORDER BY ts DESC LIMIT $1 OFFSET $2`;
+    const params = eventType ? [limit, offset, eventType] : [limit, offset];
+    const { rows } = await q(base, params);
+    const { rows:cnt } = await q(`SELECT COUNT(*) FROM audit_logs${eventType?' WHERE event_type=$1':''}`, eventType?[eventType]:[]);
+    ok(res, { total: parseInt(cnt[0].count), limit, offset, rows });
+  } catch(e) { er(res,e); }
+});
+
+/* GET /api/compliance/breach-report — Admin: generate incident/breach report (Law 25-11, Art. 18 — 72h window) */
+app.get('/api/compliance/breach-report', async (req, res) => {
+  const since = req.query.since ? new Date(req.query.since) : new Date(Date.now() - 72*3600*1000);
+  try {
+    const { rows: failures } = await q(
+      `SELECT * FROM audit_logs
+       WHERE ts >= $1 AND outcome='failure'
+       ORDER BY ts DESC`,
+      [since]
+    );
+    const { rows: logins } = await q(
+      `SELECT DATE_TRUNC('hour',ts) AS hour, COUNT(*) AS count, outcome
+       FROM audit_logs WHERE ts >= $1 AND event_type LIKE 'LOGIN%'
+       GROUP BY 1,3 ORDER BY 1 DESC`,
+      [since]
+    );
+    ok(res, {
+      reportGeneratedAt: new Date().toISOString(),
+      reportingWindowStart: since.toISOString(),
+      legalReference: 'Loi 25-11 Art.18 — Notification d\'incident dans les 72 heures',
+      reportingAuthority: 'ANSSI Algérie (Agence Nationale de la Sécurité des Systèmes d\'Information)',
+      failureEvents: failures,
+      loginActivity: logins,
+      summary: {
+        totalFailures: failures.length,
+        loginFailures: failures.filter(r=>r.event_type==='LOGIN_FAIL').length,
+        passwordFailures: failures.filter(r=>r.event_type==='PASSWORD_CHANGE_FAIL').length,
+      },
+    });
+  } catch(e) { er(res,e); }
+});
+
+/* POST /api/compliance/purge-expired — Admin: enforce retention policy (Law 18-07, Art. 17) */
+app.post('/api/compliance/purge-expired', async (req, res) => {
+  const ip = getIP(req);
+  const { adminUserId, retentionYears } = req.body;
+  const years = parseInt(retentionYears) || 10;
+  try {
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - years);
+    const { rowCount } = await q(
+      `DELETE FROM discharges WHERE ts < $1`,
+      [cutoff]
+    );
+    await logAudit({
+      eventType:'RETENTION_PURGE',
+      userId: adminUserId,
+      ip,
+      resource:'discharges',
+      detail:`Purge données > ${years} ans (avant ${cutoff.toISOString().slice(0,10)}): ${rowCount} entrées supprimées`,
+      outcome:'success',
+    });
+    ok(res, { ok:true, deletedCount: rowCount, cutoffDate: cutoff.toISOString().slice(0,10) });
+  } catch(e) { er(res,e); }
+});
+
+/* ─── STATIC (production) ─────────────────────────────────────────────────── */
 if (IS_PROD) {
   const distPath = join(__dirname, 'dist');
   if (existsSync(distPath)) {
@@ -534,8 +745,7 @@ if (IS_PROD) {
     app.get('/{*path}', (req, res) => res.sendFile(join(distPath, 'index.html')));
   }
 }
-// Health check endpoint (responds immediately, before DB is ready)
-// Start listening immediately so health checks pass, then init DB in background
+
 app.listen(PORT, () => {
   console.log(`API server running on port ${PORT}`);
   runMigrations().catch(e => console.error('Migration failed:', e.message));
