@@ -150,6 +150,9 @@ const mapClient = r => ({
   serviceType:r.service_type||'treatment_only',
   collectBillingMode:r.collect_billing_mode||'tonnage',
   allowedWasteTypes:r.allowed_waste_types||[],
+  consentGiven:r.consent_given||false,
+  consentDate:r.consent_date||null,
+  consentBy:r.consent_by||'',
 });
 
 const mapUser = r => ({
@@ -300,14 +303,17 @@ app.put('/api/clients/:id', async (req, res) => {
        credit_enabled=$6,weight_limit_year=$7,pay_frequency=$8,pay_instrument=$9,
        phone=$10,address=$11,nif=$12,rc=$13,docs=$14,note=$15,vat_subject=$16,
        assigned_sites=$17,rotation_limit=$18,service_type=$19,collect_billing_mode=$20,
-       allowed_waste_types=$21 WHERE id=$22`,
+       allowed_waste_types=$21,consent_given=$22,consent_date=$23,consent_by=$24
+       WHERE id=$25`,
       [c.name,c.clientType,c.type,c.status,c.creditLimit||0,
        c.creditEnabled||false,c.weightLimitYear||0,
        c.payFrequency||'monthly',c.payInstrument||'cheque',
        c.phone||'',c.address||'',c.nif||'',c.rc||'',JSON.stringify(c.docs||[]),c.note||'',
        c.vatSubject||false,JSON.stringify(c.assignedSites||[]),c.rotationLimit||0,
        c.serviceType||'treatment_only',c.collectBillingMode||'tonnage',
-       JSON.stringify(c.allowedWasteTypes||[]),req.params.id]
+       JSON.stringify(c.allowedWasteTypes||[]),
+       c.consentGiven||false,c.consentDate||null,c.consentBy||null,
+       req.params.id]
     );
     ok(res, { ok:true });
   } catch(e) { er(res,e); }
