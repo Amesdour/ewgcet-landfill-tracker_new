@@ -25,6 +25,19 @@ In production, the Express server serves the built React frontend from `dist/`.
 
 Uses Replit's built-in PostgreSQL. The `DATABASE_URL` environment variable is set automatically. On startup, `server.js` applies any pending SQL migrations from the `migrations/` directory.
 
+## Billing Engine (added in overhaul)
+
+New backend endpoints in `server.js`:
+- `POST /api/bills` — generates a bill for a client from all unbilled discharges with remaining balance
+- `POST /api/bills/:billId/payments` — FIFO waterfall payment; returns per-discharge allocations + grouped receipt
+- `GET /api/bills`, `GET /api/bills/:id`, `GET /api/bills/:billId/payments`
+
+New tables (migration 007): `bills`, `bill_discharges`, `payments`, `discharge_payments`.
+
+A discharge's remaining balance is always computed live (`total_ttc − SUM(applied_amount_ttc)`), never stored.
+
+VAT helpers `toTTC(amtHT, vatSubject)` / `toHT(amtTTC, vatSubject)` defined at module level in both `server.js` and `landfill-tracker.jsx`.
+
 ## User Preferences
 
 - Keep existing code structure and conventions

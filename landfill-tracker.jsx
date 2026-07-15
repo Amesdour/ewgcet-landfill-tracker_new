@@ -623,6 +623,9 @@ const uidC   = () => "C" + Date.now().toString(36).toUpperCase();
 const uidU   = () => "U" + Date.now().toString(36).toUpperCase();
 const nowIso = () => { const n=new Date(); return new Date(n.getTime()-n.getTimezoneOffset()*60000).toISOString().slice(0,16); };
 const tsMatchesPfx = (ts, pfx) => { const d=new Date(ts); if(pfx.length===4) return d.getFullYear().toString()===pfx; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`===pfx; };
+/* ─── VAT HELPERS (Phase 5.5) — single source of truth for HT↔TTC (19% Algerian VAT) ─ */
+const toTTC = (amtHT,  vatSubject) => vatSubject ? Math.round(amtHT  * 1.19 * 100) / 100 : amtHT;
+const toHT  = (amtTTC, vatSubject) => vatSubject ? Math.round((amtTTC / 1.19) * 100) / 100 : amtTTC;
 
 const creditPct   = c => c.creditLimit ? Math.round((c.consumed/c.creditLimit)*100) : 0;
 const creditColor = p => p>=90 ? "var(--err)" : p>=70 ? "var(--warn)" : "var(--g)";
@@ -2603,17 +2606,15 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
     setSelD({...d, client:c});
     setNewLimit(String(c?.creditLimit||0));
     setResolveNote("");
+    // Phase 2b: extend-limit is no longer a discharge-resolution action
     setAction("extend");
   };
 
   const handleResolve = async () => {
     if (!selD) return;
-    await fetch(`/api/discharges/${selD.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:"settled"})});
+    // Phase 0 fix: always send statusOnly:true so the backend never overwrites discharge data
+    await fetch(`/api/discharges/${selD.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:"settled",statusOnly:true})});
     setDischarges(p=>p.map(d=>d.id===selD.id?{...d,status:"settled"}:d));
-    if (action==="extend" && selD.client) {
-      const limit = parseInt(newLimit)||selD.client.creditLimit;
-      updateClient({...selD.client, creditLimit:limit});
-    }
     setSelD(null);
   };
 
@@ -2836,43 +2837,22 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
                 </div>
               )}
 
-              <div style={{fontWeight:700,marginBottom:12,fontSize:13}}>Choisir une action de régularisation :</div>
-              <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
-                {[
-                  {val:"extend", ic:"📈", title:"Étendre la limite de crédit", desc:"Augmenter la limite autorisée du client pour couvrir ce dépassement."},
-                  {val:"settle", ic:"✅", title:"Marquer comme réglé (exception)", desc:"Valider le dépassement ponctuellement sans modifier la limite. À utiliser si l'accord est déjà donné."},
-                ].map(opt=>(
-                  <label key={opt.val} style={{
-                    display:"flex",alignItems:"flex-start",gap:12,cursor:"pointer",
-                    padding:"12px 14px",borderRadius:9,
-                    border:`1px solid ${action===opt.val?"rgba(41,196,84,.4)":"var(--bdr)"}`,
-                    background:action===opt.val?"rgba(41,196,84,.06)":"var(--s2)",
-                    transition:"all .15s",
-                  }}>
-                    <input type="radio" name="resolve-action" value={opt.val}
-                      checked={action===opt.val} onChange={()=>setAction(opt.val)}
-                      style={{marginTop:3,accentColor:"var(--g)"}}/>
-                    <div>
-                      <div style={{fontWeight:700,fontSize:13}}>{opt.ic} {opt.title}</div>
-                      <div style={{fontSize:11,color:"var(--muted)",marginTop:3,lineHeight:1.5}}>{opt.desc}</div>
-                    </div>
-                  </label>
-                ))}
-              </div>
-
-              {action==="extend"&&(
-                <div className="field">
-                  <label>Nouvelle limite de crédit (DA)</label>
-                  <input className="fi" type="number" value={newLimit}
-                    onChange={e=>setNewLimit(e.target.value)}
-                    placeholder={`Actuelle: ${selD.client?.creditLimit||0}`}/>
-                  {parseInt(newLimit)>0&&selD.client&&(
-                    <div style={{fontSize:11,color:"var(--g)",marginTop:4,fontFamily:"var(--mono)"}}>
-                      Augmentation: +{fmt(parseInt(newLimit)-(selD.client?.creditLimit||0))}
-                    </div>
-                  )}
+              {/* Phase 2b: extend-limit is a separate admin action, not a discharge resolution.
+                  Resolution is done here as an admin exception; real settlement goes through billing. */}
+              <div className="alrt ao" style={{marginBottom:16}}>
+                <span>✅</span>
+                <div>
+                  <strong>Marquer comme réglé — exception admin</strong>
+                  <div style={{marginTop:4,fontSize:11,lineHeight:1.5}}>
+                    Cette décharge sera marquée <em>Réglé</em> à titre exceptionnel (accord donné hors système).
+                    Pour un règlement financier traçable, générez une facture depuis l'onglet <strong>Facturation</strong>
+                    {" "}et enregistrez le paiement du client.
+                  </div>
                 </div>
-              )}
+              </div>
+              <div style={{fontSize:11,color:"var(--muted)",marginBottom:14}}>
+                Pour augmenter la limite de crédit du client, utilisez la fiche client dans l'onglet <strong>Clients</strong>.
+              </div>
 
               <div className="field mt3" style={{marginTop:14}}>
                 <label>Note de régularisation (optionnel)</label>
@@ -5303,10 +5283,9 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     const clEntries = discharges.filter(d=>d.clientId===cl.id&&tsMatchesPfx(d.ts,clPeriod)&&d.status!=="cancelled");
     const clNet  = clEntries.reduce((s,d)=>s+d.net,0);
     const rawCost = clEntries.reduce((s,d)=>s+d.total,0);
-    // For credit-enabled clients the invoiceable amount is only the excess over the credit limit
-    const clCost = cl.creditEnabled && cl.creditLimit>0
-      ? Math.max(0, cl.consumed - cl.creditLimit)
-      : rawCost;
+    // Phase 2: bill 100% of consumption regardless of creditEnabled —
+    // creditLimit is a discharge gate only, never a billing-amount reducer.
+    const clCost = rawCost;
     const existInv = invoices.find(i=>i.clientId===cl.id&&i.month===clPeriod);
     // Compute limit usage percentage for notification
     let limitPct = 0, limitData = null;
@@ -5341,7 +5320,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     // Pending or overdue invoice already has TTC stored in totalAmount
     if (r.inv?.status==="pending" || r.inv?.status==="overdue") return s + (r.inv.totalAmount||0);
     // No invoice yet — estimate TTC from discharge totals
-    return s + (r.cl.vatSubject ? Math.round(r.cost * 1.19 * 100) / 100 : r.cost);
+    return s + toTTC(r.cost, r.cl.vatSubject);
   },0);
   const grandDeps = globalRows.reduce((s,r)=>s+r.entries.length,0);
 
@@ -5349,7 +5328,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
   // Generate/update invoice for a client+month (totalAmount stored as TTC)
   const generateInvoice = async (cl, costHT) => {
-    const ttc = cl.vatSubject ? Math.round(costHT * 1.19 * 100) / 100 : costHT;
+    const ttc = toTTC(costHT, cl.vatSubject);
     // Annual clients get a year-level invoice (e.g. "2026"); monthly clients get "2026-06"
     const period = clientPeriod(cl);
     const id = `FAC-${period.replace("-","")}-${cl.id}`;
@@ -5567,7 +5546,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   // would re-distribute the paid amount over new+old combined line items and produce wrong totals.
   const debtEntries = entries.filter(d => d.status !== "paid" && d.status !== "cancelled");
   const debtHT      = debtEntries.reduce((s,d) => s + (d.total||0), 0);
-  const debtTTC     = c?.vatSubject ? Math.round(debtHT * 1.19 * 100) / 100 : debtHT;
+  const debtTTC     = toTTC(debtHT, c?.vatSubject);
   const debtNum     = `${invNum}-SOLDE`;
   const hasDebtBill = currentInv && currentInv.status !== "paid" && debtEntries.length > 0;
   // Amount already paid specifically against the unpaid discharges:
@@ -5779,7 +5758,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                               </div>
                             :clC>0 ? (
                               <div>
-                                <span className="mn fw7">{fmt(cl.vatSubject ? Math.round(clC*1.19*100)/100 : clC)}</span>
+                                <span className="mn fw7">{fmt(toTTC(clC, cl.vatSubject))}</span>
                                 {cl.vatSubject && <span className="mn tmu" style={{fontSize:9,marginLeft:4}}>TTC (est.)</span>}
                               </div>
                             ) : <span className="mn tmu">—</span>}
@@ -5795,7 +5774,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         <td>
                           <div className="fx aic g2" style={{flexWrap:"wrap"}}>
                             <button className="btn bi bsm" title="Voir relevé" onClick={()=>switchToClient(cl.id)}>📋</button>
-                            {clC>0&&(!inv||(inv.status==="paid"&&(cl.vatSubject?clC*1.19:clC)>(inv.paidAmount||0)))&&(
+                            {clC>0&&(!inv||(inv.status==="paid"&&toTTC(clC,cl.vatSubject)>(inv.paidAmount||0)))&&(
                               <button className="btn bp bsm" style={{fontSize:10}} onClick={()=>generateInvoice(cl,clC)}>🧾 Facturer</button>
                             )}
                             {inv&&inv.status!=="paid"&&(
@@ -6013,7 +5992,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                     </div>
                     <div className="fx jsb" style={{borderTop:"1px solid var(--bdr)",paddingTop:6,marginTop:4}}>
                       <span className="tsm fw7">Total TTC</span>
-                      <span className="tg fw8" style={{fontFamily:"var(--head)",fontSize:16}}>{fmt(totalCost*1.19)}</span>
+                      <span className="tg fw8" style={{fontFamily:"var(--head)",fontSize:16}}>{fmt(toTTC(totalCost, c?.vatSubject))}</span>
                     </div>
                   </>
                 ) : (
@@ -6180,12 +6159,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                     // paidAmount is TTC; item.total is HT.
                     const totalHT = lineItems.reduce((s,li)=>s+li.total,0);
                     const invTTC  = currentInv?.totalAmount
-                      || (c.vatSubject ? Math.round(totalHT*1.19*100)/100 : totalHT);
+                      || toTTC(totalHT, c.vatSubject);
                     // Pre-compute each item's TTC share
                     const itemTTCs = lineItems.map(item =>
                       totalHT > 0
                         ? Math.round((item.total / totalHT) * invTTC * 100) / 100
-                        : (c.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total)
+                        : toTTC(item.total, c.vatSubject)
                     );
                     // Distribute partial payment equally across all waste-type line items.
                     // e.g. 3000 DA paid, 3 waste-type lines → 1000 DA allocated to each line.

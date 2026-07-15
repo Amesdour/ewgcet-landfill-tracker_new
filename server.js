@@ -42,6 +42,11 @@ const q  = (sql, p) => pool.query(sql, p);
 const ok = (res, data) => res.json(data);
 const er = (res, err, code=500) => { console.error(err); res.status(code).json({error:String(err)}); };
 
+/* ─── VAT HELPERS (Phase 5.5) ────────────────────────────────────────────── */
+// Single source of truth for HT↔TTC conversion (19% Algerian VAT).
+const toTTC = (amtHT,  vatSubject) => vatSubject ? Math.round(amtHT  * 1.19 * 100) / 100 : amtHT;
+const toHT  = (amtTTC, vatSubject) => vatSubject ? Math.round((amtTTC / 1.19) * 100) / 100 : amtTTC;
+
 /* ─── HELPERS ────────────────────────────────────────────────────────────── */
 function getIP(req) {
   const fwd = req.headers['x-forwarded-for'] || '';
@@ -199,65 +204,157 @@ app.get('/api/discharges', async (req, res) => {
 
 app.post('/api/discharges', async (req, res) => {
   const d = req.body;
+  // Phase 5.2 — single pooled client for the whole operation
+  const dbClient = await pool.connect();
   try {
-    if (d.clientId && d.wasteType) {
-      const { rows: clientRows } = await q('SELECT allowed_waste_types FROM clients WHERE id=$1', [d.clientId]);
-      if (clientRows.length > 0) {
-        const allowed = clientRows[0].allowed_waste_types || [];
-        if (allowed.length > 0 && !allowed.includes(d.wasteType)) {
-          return res.status(403).json({ error: `Type de déchet non autorisé pour ce client.` });
+    await dbClient.query('BEGIN');
+
+    let forcedStatus = d.status;
+
+    if (d.clientId) {
+      // Phase 4 — SELECT … FOR UPDATE so two concurrent requests can't both read stale consumption
+      const { rows: cls } = await dbClient.query(
+        'SELECT * FROM clients WHERE id=$1 FOR UPDATE', [d.clientId]
+      );
+      if (cls.length > 0) {
+        const cl = cls[0];
+
+        // Waste-type allow-list check
+        const allowed = cl.allowed_waste_types || [];
+        if (allowed.length > 0 && d.wasteType && !allowed.includes(d.wasteType)) {
+          await dbClient.query('ROLLBACK');
+          dbClient.release();
+          return res.status(403).json({ error: 'Type de déchet non autorisé pour ce client.' });
+        }
+
+        // Phase 4 — credit-limit backstop
+        if (cl.credit_enabled && parseFloat(cl.credit_limit) > 0) {
+          const { rows: cRows } = await dbClient.query(
+            `SELECT COALESCE(SUM(total),0) AS consumed FROM discharges
+             WHERE client_id=$1 AND pay_method IN ('convention','credit','prepaid') AND status!='cancelled'`,
+            [d.clientId]
+          );
+          const consumed = parseFloat(cRows[0].consumed) || 0;
+          if (consumed + (parseFloat(d.total) || 0) > parseFloat(cl.credit_limit)) forcedStatus = 'flagged';
+        }
+
+        // Phase 4 — rotation-limit backstop
+        if (parseInt(cl.rotation_limit) > 0 && d.payMethod === 'rotation') {
+          const now = new Date();
+          const pfx = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+          const { rows: rRows } = await dbClient.query(
+            `SELECT COUNT(*) AS cnt FROM discharges
+             WHERE client_id=$1 AND pay_method='rotation' AND status!='cancelled' AND ts LIKE $2`,
+            [d.clientId, pfx + '%']
+          );
+          if ((parseInt(rRows[0].cnt) || 0) >= parseInt(cl.rotation_limit)) forcedStatus = 'flagged';
+        }
+
+        // Phase 4 — weight / rotation-count annual/monthly limit backstop
+        if (parseFloat(cl.weight_limit_year) > 0) {
+          const now = new Date();
+          const isMonthly = cl.pay_frequency === 'monthly';
+          const pfx = isMonthly
+            ? `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+            : String(now.getFullYear());
+          const isRot = d.payMethod === 'rotation';
+          const { rows: wRows } = await dbClient.query(
+            isRot
+              ? `SELECT COUNT(*) AS val FROM discharges WHERE client_id=$1 AND status!='cancelled' AND ts LIKE $2`
+              : `SELECT COALESCE(SUM(net),0) AS val FROM discharges WHERE client_id=$1 AND status!='cancelled' AND ts LIKE $2`,
+            [d.clientId, pfx + '%']
+          );
+          const used     = parseFloat(wRows[0].val) || 0;
+          const incoming = isRot ? 1 : (parseFloat(d.net) || 0);
+          if (used + incoming > parseFloat(cl.weight_limit_year)) forcedStatus = 'flagged';
         }
       }
     }
-    await q(
+
+    // Phase 5.3 — ts sanity check (POST only — PUT supports admin backdating)
+    const tsVal = d.ts ? new Date(d.ts) : null;
+    const serverNow = new Date();
+    const tsToInsert = (!tsVal || isNaN(tsVal) || Math.abs(serverNow - tsVal) > 24 * 3600 * 1000)
+      ? serverNow.toISOString()
+      : d.ts;
+
+    // Phase 5.4 — round net (3 dp) and total (2 dp) before persisting
+    const net   = d.net   != null ? Math.round(parseFloat(d.net)   * 1000) / 1000 : d.net;
+    const total = d.total != null ? Math.round(parseFloat(d.total) *  100) /  100 : d.total;
+
+    await dbClient.query(
       `INSERT INTO discharges(id,ts,site_id,client_id,client_name,truck,waste_type,gross,tare,net,unit_price,total,status,pay_method,op_id,op_type)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
-      [d.id,d.ts,d.siteId,d.clientId,d.clientName,d.truck,d.wasteType,
-       d.gross,d.tare,d.net,d.unitPrice,d.total,d.status,d.payMethod,d.opId,d.opType||'treatment']
+      [d.id, tsToInsert, d.siteId, d.clientId, d.clientName, d.truck, d.wasteType,
+       d.gross, d.tare, net, d.unitPrice, total, forcedStatus, d.payMethod, d.opId, d.opType||'treatment']
     );
-    if ((d.payMethod==='convention'||d.payMethod==='credit'||d.payMethod==='prepaid') && d.clientId) {
-      await q('UPDATE clients SET consumed=consumed+$1 WHERE id=$2',[d.total,d.clientId]);
-    }
-    ok(res, { ok:true });
-  } catch(e) { er(res,e); }
+    // Phase 5.1 — do NOT write to clients.consumed incrementally;
+    //             GET /api/clients always recomputes it live via SUM.
+
+    await dbClient.query('COMMIT');
+    dbClient.release();
+    ok(res, { ok: true });
+  } catch(e) {
+    await dbClient.query('ROLLBACK');
+    dbClient.release();
+    er(res, e);
+  }
 });
 
 app.put('/api/discharges/:id', async (req, res) => {
   const d = req.body;
+  // Phase 5.2 — single pooled client; Phase 0 — fetch old row first for null-safe fallbacks
+  const dbClient = await pool.connect();
   try {
+    await dbClient.query('BEGIN');
+    const { rows: old } = await dbClient.query(
+      'SELECT * FROM discharges WHERE id=$1 FOR UPDATE', [req.params.id]
+    );
+    const oldD = old[0];
+    if (!oldD) {
+      await dbClient.query('ROLLBACK');
+      dbClient.release();
+      return res.status(404).json({ error: 'Discharge not found' });
+    }
+
     if (d.statusOnly) {
-      await q('UPDATE discharges SET status=$1 WHERE id=$2',[d.status, req.params.id]);
+      // Phase 0 fix: status-only path — never touch other columns
+      await dbClient.query('UPDATE discharges SET status=$1 WHERE id=$2', [d.status, req.params.id]);
     } else {
-      const { rows:old } = await q('SELECT * FROM discharges WHERE id=$1',[req.params.id]);
-      const oldD = old[0];
-      await q(
+      // Phase 0 fix: fall back to existing DB values for any field missing from the request body,
+      // so a partial payload (e.g. {status:"settled"} without statusOnly) can never null a column.
+      const truck            = d.truck            ?? oldD.truck;
+      const wasteType        = d.wasteType        ?? oldD.waste_type;
+      const gross            = d.gross            ?? oldD.gross;
+      const tare             = d.tare             ?? oldD.tare;
+      const net              = d.net              ?? oldD.net;
+      const unitPrice        = d.unitPrice        ?? oldD.unit_price;
+      const total            = d.total            ?? oldD.total;
+      const status           = d.status           ?? oldD.status;
+      const payMethod        = d.payMethod        ?? oldD.pay_method;
+      const siteId           = d.siteId           ?? oldD.site_id;
+      const ts               = d.ts               ?? oldD.ts;
+      const correctionReason = d.correctionReason ?? oldD.correction_reason ?? '';
+      const opType           = d.opType           ?? oldD.op_type ?? 'treatment';
+
+      await dbClient.query(
         `UPDATE discharges SET truck=$1,waste_type=$2,gross=$3,tare=$4,net=$5,
          unit_price=$6,total=$7,status=$8,pay_method=$9,site_id=$10,ts=$11,
          correction_reason=$12,op_type=$13 WHERE id=$14`,
-        [d.truck,d.wasteType,d.gross,d.tare,d.net,d.unitPrice,
-         d.total,d.status,d.payMethod,d.siteId,d.ts,
-         d.correctionReason||'',d.opType||'treatment',req.params.id]
+        [truck, wasteType, gross, tare, net, unitPrice, total, status,
+         payMethod, siteId, ts, correctionReason, opType, req.params.id]
       );
-      if (oldD) {
-        const oldTotal = parseFloat(oldD.total)||0;
-        const newTotal = parseFloat(d.total)||0;
-        const oldIsBilled = ['convention','credit','prepaid'].includes(oldD.pay_method);
-        const newIsBilled = ['convention','credit','prepaid'].includes(d.payMethod);
-        const clientId = oldD.client_id;
-        if (clientId) {
-          if (oldIsBilled && newIsBilled) {
-            const diff = newTotal - oldTotal;
-            if (diff !== 0) await q('UPDATE clients SET consumed=consumed+$1 WHERE id=$2',[diff,clientId]);
-          } else if (oldIsBilled && !newIsBilled) {
-            await q('UPDATE clients SET consumed=consumed-$1 WHERE id=$2',[oldTotal,clientId]);
-          } else if (!oldIsBilled && newIsBilled) {
-            await q('UPDATE clients SET consumed=consumed+$1 WHERE id=$2',[newTotal,clientId]);
-          }
-        }
-      }
+      // Phase 5.1 — do NOT write to clients.consumed; GET /api/clients recomputes it live.
     }
-    ok(res, { ok:true });
-  } catch(e) { er(res,e); }
+
+    await dbClient.query('COMMIT');
+    dbClient.release();
+    ok(res, { ok: true });
+  } catch(e) {
+    await dbClient.query('ROLLBACK');
+    dbClient.release();
+    er(res, e);
+  }
 });
 
 /* ─── CLIENTS ─────────────────────────────────────────────────────────────── */
@@ -466,10 +563,11 @@ app.post('/api/invoices', async (req, res) => {
   const inv = req.body;
   try {
     await q(
-      `INSERT INTO invoices(id,client_id,month,total_amount,paid_amount,status,note)
-       VALUES($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT(id) DO UPDATE SET total_amount=$4,paid_amount=$5,status=$6,note=$7`,
-      [inv.id,inv.clientId,inv.month,inv.totalAmount,inv.paidAmount||0,inv.status||'pending',inv.note||'']
+      `INSERT INTO invoices(id,client_id,month,total_amount,paid_amount,status,note,period_type)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT(id) DO UPDATE SET total_amount=$4,paid_amount=$5,status=$6,note=$7,period_type=COALESCE($8,invoices.period_type)`,
+      [inv.id, inv.clientId, inv.month, inv.totalAmount, inv.paidAmount||0,
+       inv.status||'pending', inv.note||'', inv.periodType||'monthly']
     );
     ok(res, { ok:true });
   } catch(e) { er(res,e); }
@@ -477,13 +575,33 @@ app.post('/api/invoices', async (req, res) => {
 
 app.put('/api/invoices/:id', async (req, res) => {
   const inv = req.body;
+  const dbClient = await pool.connect();
   try {
-    await q(
-      'UPDATE invoices SET status=$1,paid_at=$2,paid_amount=$3,note=$4,total_amount=$5 WHERE id=$6',
-      [inv.status,inv.paidAt||null,inv.paidAmount||0,inv.note||'',inv.totalAmount||0,req.params.id]
+    await dbClient.query('BEGIN');
+    await dbClient.query(
+      'UPDATE invoices SET status=$1,paid_at=$2,paid_amount=$3,note=$4,total_amount=$5,period_type=COALESCE($6,period_type) WHERE id=$7',
+      [inv.status, inv.paidAt||null, inv.paidAmount||0, inv.note||'', inv.totalAmount||0,
+       inv.periodType||null, req.params.id]
     );
-    ok(res, { ok:true });
-  } catch(e) { er(res,e); }
+    // Phase 5.7 — when an invoice transitions to fully paid, mark all its period's discharges paid
+    if (inv.status === 'paid' && inv.clientId && inv.month) {
+      const pfxLen = inv.month.length; // "2026" (annual) or "2026-06" (monthly)
+      await dbClient.query(
+        `UPDATE discharges SET status='paid'
+         WHERE client_id=$1
+           AND status NOT IN ('paid','cancelled')
+           AND LEFT(ts::text, $2) = $3`,
+        [inv.clientId, pfxLen, inv.month]
+      );
+    }
+    await dbClient.query('COMMIT');
+    dbClient.release();
+    ok(res, { ok: true });
+  } catch(e) {
+    await dbClient.query('ROLLBACK');
+    dbClient.release();
+    er(res, e);
+  }
 });
 
 /* ─── AUTH ────────────────────────────────────────────────────────────────── */
@@ -749,6 +867,242 @@ app.post('/api/compliance/purge-expired', async (req, res) => {
     });
     ok(res, { ok:true, deletedCount: rowCount, cutoffDate: cutoff.toISOString().slice(0,10) });
   } catch(e) { er(res,e); }
+});
+
+/* ─── BILLS & PAYMENTS (Phase 3) ─────────────────────────────────────────── */
+
+app.get('/api/bills', async (req, res) => {
+  try {
+    const { clientId } = req.query;
+    const { rows } = clientId
+      ? await q('SELECT * FROM bills WHERE client_id=$1 ORDER BY generated_at DESC', [clientId])
+      : await q('SELECT * FROM bills ORDER BY generated_at DESC');
+    ok(res, rows);
+  } catch(e) { er(res, e); }
+});
+
+app.get('/api/bills/:id', async (req, res) => {
+  try {
+    const { rows: bills } = await q('SELECT * FROM bills WHERE id=$1', [req.params.id]);
+    if (!bills.length) return res.status(404).json({ error: 'Facture introuvable.' });
+    const { rows: discs } = await q(
+      `SELECT d.* FROM discharges d
+       JOIN bill_discharges bd ON bd.discharge_id = d.id
+       WHERE bd.bill_id = $1 ORDER BY d.ts ASC`,
+      [req.params.id]
+    );
+    ok(res, { ...bills[0], discharges: discs });
+  } catch(e) { er(res, e); }
+});
+
+/* POST /api/bills — generate a new bill for a client (Phase 3.1)
+   Picks up every discharge not already in an open/partial bill with remaining_ttc > 0,
+   ordered by ts ASC.  A discharge can be in at most one open/partial bill at a time. */
+app.post('/api/bills', async (req, res) => {
+  const { clientId } = req.body;
+  if (!clientId) return res.status(400).json({ error: 'clientId requis.' });
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query('BEGIN');
+    const { rows: cls } = await dbClient.query('SELECT * FROM clients WHERE id=$1', [clientId]);
+    if (!cls.length) {
+      await dbClient.query('ROLLBACK'); dbClient.release();
+      return res.status(404).json({ error: 'Client introuvable.' });
+    }
+    const vatSubject = cls[0].vat_subject || false;
+
+    const { rows: discs } = await dbClient.query(`
+      SELECT sub.* FROM (
+        SELECT d.id, d.ts, d.waste_type, d.net, d.unit_price, d.total, d.status, d.pay_method,
+          CASE WHEN $2 THEN d.total * 1.19 ELSE d.total END AS total_ttc,
+          (CASE WHEN $2 THEN d.total * 1.19 ELSE d.total END)
+            - COALESCE((
+                SELECT SUM(dp.applied_amount_ttc) FROM discharge_payments dp
+                WHERE dp.discharge_id = d.id
+              ), 0) AS remaining_ttc
+        FROM discharges d
+        WHERE d.client_id = $1
+          AND d.status != 'cancelled'
+          AND NOT EXISTS (
+            -- Block only OPEN bills; partial bills' remaining balances carry forward (Phase 3.4)
+            SELECT 1 FROM bill_discharges bd
+            JOIN bills b ON b.id = bd.bill_id
+            WHERE bd.discharge_id = d.id AND b.status = 'open'
+          )
+        ORDER BY d.ts ASC
+      ) sub
+      WHERE sub.remaining_ttc > 0.005
+    `, [clientId, vatSubject]);
+
+    if (!discs.length) {
+      await dbClient.query('ROLLBACK'); dbClient.release();
+      return res.status(400).json({ error: 'Aucun dépôt à facturer pour ce client.' });
+    }
+
+    const totalTTC = Math.round(discs.reduce((s, d) => s + parseFloat(d.remaining_ttc), 0) * 100) / 100;
+    const totalHT  = toHT(totalTTC, vatSubject);
+    const billId   = `BL-${Date.now().toString(36).toUpperCase()}`;
+
+    await dbClient.query(
+      `INSERT INTO bills(id,client_id,total_ht,total_ttc,status) VALUES($1,$2,$3,$4,'open')`,
+      [billId, clientId, totalHT, totalTTC]
+    );
+    for (const d of discs) {
+      await dbClient.query(
+        'INSERT INTO bill_discharges(bill_id,discharge_id) VALUES($1,$2)',
+        [billId, d.id]
+      );
+    }
+
+    await dbClient.query('COMMIT');
+    dbClient.release();
+    ok(res, { id: billId, clientId, totalHT, totalTTC, status: 'open', discharges: discs });
+  } catch(e) {
+    await dbClient.query('ROLLBACK'); dbClient.release();
+    er(res, e);
+  }
+});
+
+/* POST /api/bills/:billId/payments — FIFO waterfall payment (Phase 3.2)
+   Applies amountTTC against the bill's discharges in ts ASC order (oldest first).
+   Returns unappliedAmount if payment exceeds total owed — admin must decide what to do. */
+app.post('/api/bills/:billId/payments', async (req, res) => {
+  const { amountTTC, method, note, createdBy } = req.body;
+  if (!amountTTC || amountTTC <= 0) return res.status(400).json({ error: 'Montant invalide.' });
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query('BEGIN');
+
+    const { rows: bills } = await dbClient.query(
+      'SELECT * FROM bills WHERE id=$1 FOR UPDATE', [req.params.billId]
+    );
+    if (!bills.length) {
+      await dbClient.query('ROLLBACK'); dbClient.release();
+      return res.status(404).json({ error: 'Facture introuvable.' });
+    }
+    const bill = bills[0];
+    if (bill.status === 'paid') {
+      await dbClient.query('ROLLBACK'); dbClient.release();
+      return res.status(400).json({ error: 'Cette facture est déjà soldée.' });
+    }
+
+    const { rows: cls } = await dbClient.query(
+      'SELECT vat_subject FROM clients WHERE id=$1', [bill.client_id]
+    );
+    const vatSubject = cls.length ? (cls[0].vat_subject || false) : false;
+
+    // Fetch discharges with live remaining balance, locked FOR UPDATE, FIFO order
+    const { rows: discs } = await dbClient.query(`
+      SELECT d.id, d.ts, d.waste_type, d.unit_price,
+        (CASE WHEN $2 THEN d.total * 1.19 ELSE d.total END)
+          - COALESCE((
+              SELECT SUM(dp.applied_amount_ttc) FROM discharge_payments dp
+              WHERE dp.discharge_id = d.id
+            ), 0) AS remaining_ttc
+      FROM discharges d
+      JOIN bill_discharges bd ON bd.discharge_id = d.id
+      WHERE bd.bill_id = $1
+      ORDER BY d.ts ASC, d.id ASC
+      FOR UPDATE OF d
+    `, [req.params.billId, vatSubject]);
+
+    let P_c = Math.round(amountTTC * 100); // work in integer centimes
+    const allocations = [];
+
+    for (const d of discs) {
+      const due_c = Math.round(parseFloat(d.remaining_ttc) * 100);
+      if (due_c <= 0) continue;
+      if (P_c <= 0) break;
+      const applied_c  = Math.min(P_c, due_c);
+      const appliedTTC = applied_c / 100;
+      const appliedHT  = toHT(appliedTTC, vatSubject);
+      const unitP      = parseFloat(d.unit_price) || 0;
+      const appliedQty = unitP > 0 ? Math.round((appliedHT / unitP) * 1000) / 1000 : 0;
+      allocations.push({ discharge_id: d.id, waste_type: d.waste_type, unit_price: unitP,
+                         applied_c, appliedTTC, appliedHT, appliedQty });
+      P_c -= applied_c;
+    }
+
+    const unappliedAmount = P_c / 100;
+    const appliedAmount   = Math.round((amountTTC - unappliedAmount) * 100) / 100;
+
+    if (appliedAmount <= 0) {
+      await dbClient.query('ROLLBACK'); dbClient.release();
+      return res.status(400).json({ error: 'Aucune allocation possible — solde déjà soldé ?' });
+    }
+
+    const paymentId = `PY-${Date.now().toString(36).toUpperCase()}`;
+    await dbClient.query(
+      `INSERT INTO payments(id,client_id,bill_id,amount_ttc,method,note,created_by)
+       VALUES($1,$2,$3,$4,$5,$6,$7)`,
+      [paymentId, bill.client_id, req.params.billId, appliedAmount,
+       method||null, note||null, createdBy||null]
+    );
+
+    for (const a of allocations) {
+      await dbClient.query(
+        `INSERT INTO discharge_payments
+           (discharge_id,payment_id,bill_id,applied_amount_ttc,applied_amount_ht,applied_qty)
+         VALUES($1,$2,$3,$4,$5,$6)`,
+        [a.discharge_id, paymentId, req.params.billId, a.appliedTTC, a.appliedHT, a.appliedQty]
+      );
+    }
+
+    // Recompute bill status
+    const { rows: rem } = await dbClient.query(`
+      SELECT COALESCE(SUM(
+        (CASE WHEN $2 THEN d.total * 1.19 ELSE d.total END)
+          - COALESCE((SELECT SUM(dp.applied_amount_ttc) FROM discharge_payments dp
+                      WHERE dp.discharge_id = d.id), 0)
+      ), 0) AS remaining
+      FROM discharges d
+      JOIN bill_discharges bd ON bd.discharge_id = d.id
+      WHERE bd.bill_id = $1
+    `, [req.params.billId, vatSubject]);
+
+    const newStatus = parseFloat(rem[0].remaining) < 0.005 ? 'paid' : 'partial';
+    await dbClient.query('UPDATE bills SET status=$1 WHERE id=$2', [newStatus, req.params.billId]);
+
+    // Phase 3.3 — receipt grouped by (waste_type, unit_price) — separate sub-lines for mixed tariffs
+    const groups = {};
+    for (const a of allocations) {
+      const key = `${a.waste_type}||${a.unit_price}`;
+      if (!groups[key]) groups[key] = { wasteType: a.waste_type, unitPrice: a.unit_price, ht: 0, qty: 0 };
+      groups[key].ht  += a.appliedHT;
+      groups[key].qty += a.appliedQty;
+    }
+    const receiptLines = Object.values(groups).map(g => ({
+      wasteType:  g.wasteType,
+      unitPrice:  Math.round(g.unitPrice * 100) / 100,
+      qty:        Math.round(g.qty * 1000) / 1000,
+      montantHT:  Math.round(g.ht * 100) / 100,
+      montantTTC: toTTC(Math.round(g.ht * 100) / 100, vatSubject),
+    }));
+
+    // Phase 3.3 assertion: receipt total must exactly equal applied amount
+    const receiptTTC = Math.round(receiptLines.reduce((s, l) => s + l.montantTTC, 0) * 100) / 100;
+    if (Math.abs(receiptTTC - appliedAmount) > 0.02) {
+      console.error(`[RECEIPT ASSERTION FAILED] receipt=${receiptTTC} applied=${appliedAmount}`);
+    }
+
+    await dbClient.query('COMMIT');
+    dbClient.release();
+    ok(res, { paymentId, appliedAmount, unappliedAmount, billStatus: newStatus,
+              allocations, receiptLines });
+  } catch(e) {
+    await dbClient.query('ROLLBACK'); dbClient.release();
+    er(res, e);
+  }
+});
+
+app.get('/api/bills/:billId/payments', async (req, res) => {
+  try {
+    const { rows } = await q(
+      'SELECT * FROM payments WHERE bill_id=$1 ORDER BY created_at DESC',
+      [req.params.billId]
+    );
+    ok(res, rows);
+  } catch(e) { er(res, e); }
 });
 
 /* ─── STATIC (production) ─────────────────────────────────────────────────── */

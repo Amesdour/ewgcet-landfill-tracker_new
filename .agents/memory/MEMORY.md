@@ -1,3 +1,6 @@
 - [Hardcoded color audit](hardcoded-colors.md) — all `#1d4ed8`, `#7c3aed`, `#065f46`, `#92400e`, `#6366f1`, `#1d6fa4` were hardcoded; now use CSS vars.
 - [CSS variable palette](css-vars.md) — `--indigo` added for partial-payment indigo buttons; both light (#4f46e5) and dark (#818cf8) mode values defined.
 - [Print-area colors](print-area.md) — `#333/#555/#777` inside `.print-only` are intentional (white paper print); do not change them.
+- [Billing engine design](billing-engine.md) — bills/payments use live remaining_ttc; partial bills allow discharge carry-forward to next bill.
+- [PUT discharge null-safe](discharge-put-fix.md) — always fetch old row FOR UPDATE; use ?? fallback for every field; send statusOnly:true for status-only changes.
+- [clients.consumed column](consumed-column.md) — raw column is never read; GET /api/clients recomputes live via SUM; incremental writes removed.
