@@ -3020,8 +3020,9 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
 
   // Per-discharge payment progress (Phase 3B.4) — fetched when client is selected
   const [discPayments, setDiscPayments] = useState({});
+  const [expandedDisc, setExpandedDisc] = useState(null); // discharge id whose payment trail is open
   useEffect(() => {
-    if (!sel) { setDiscPayments({}); return; }
+    if (!sel) { setDiscPayments({}); setExpandedDisc(null); return; }
     fetch(`/api/clients/${sel}/discharge-payments`)
       .then(r => r.json())
       .then(data => { if (data && typeof data === 'object' && !Array.isArray(data) && !data.error) setDiscPayments(data); })
@@ -3607,11 +3608,15 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       <tbody>
                         {cd.map(d=>{
                           const dp = discPayments[d.id];
-                          const paidTTC = dp?.paidTTC || 0;
+                          const paidTTC  = dp?.paidTTC || 0;
                           const totalTTC = c?.vatSubject ? Math.round(d.total * 1.19 * 100)/100 : d.total;
                           const remTTC   = Math.max(0, totalTTC - paidTTC);
+                          const hasTrail = dp?.details?.length > 0;
+                          const isExp    = expandedDisc === d.id;
                           return (
-                          <tr key={d.id}>
+                          <React.Fragment key={d.id}>
+                          <tr style={{cursor:hasTrail?"pointer":undefined}}
+                              onClick={hasTrail?()=>setExpandedDisc(isExp?null:d.id):undefined}>
                             <td className="mn">{fmtTs(d.ts)}</td>
                             <td><span className="badge b-info">{d.siteId}</span></td>
                             <td className="mn">{d.truck}</td>
@@ -3627,9 +3632,46 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                                       <span style={{color:"var(--muted)"}}> / {fmt(totalTTC)}</span>
                                       <div style={{color:"var(--warn)",fontWeight:600}}>reste {fmt(remTTC)}</div>
                                     </div>}
+                              {hasTrail&&<span style={{fontSize:9,marginLeft:4,color:"var(--indigo)",cursor:"pointer"}}>
+                                {isExp?"▲":"▼"} {dp.details.length} pmt
+                              </span>}
                             </td>
                             <td><StatusBadge s={d.status}/></td>
                           </tr>
+                          {isExp&&(
+                            <tr style={{background:"rgba(99,102,241,.04)"}}>
+                              <td colSpan={7} style={{padding:"8px 16px"}}>
+                                <div style={{fontSize:11,fontWeight:700,color:"var(--indigo)",marginBottom:6}}>
+                                  Détail des paiements appliqués à ce dépôt
+                                </div>
+                                <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+                                  <thead>
+                                    <tr style={{color:"var(--muted)"}}>
+                                      <th style={{textAlign:"left",padding:"2px 8px",fontWeight:600}}>Date</th>
+                                      <th style={{textAlign:"left",padding:"2px 8px",fontWeight:600}}>Réf. Paiement</th>
+                                      <th style={{textAlign:"left",padding:"2px 8px",fontWeight:600}}>Réf. Facture</th>
+                                      <th style={{textAlign:"right",padding:"2px 8px",fontWeight:600}}>Montant TTC</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {dp.details.map((p,i)=>(
+                                      <tr key={i} style={{borderTop:"1px solid var(--bdr)"}}>
+                                        <td style={{padding:"3px 8px",fontFamily:"var(--mono)"}}>{p.createdAt ? new Date(p.createdAt).toLocaleDateString("fr-DZ") : "—"}</td>
+                                        <td style={{padding:"3px 8px",fontFamily:"var(--mono)",fontSize:10,color:"var(--indigo)"}}>{p.paymentId||"—"}</td>
+                                        <td style={{padding:"3px 8px",fontFamily:"var(--mono)",fontSize:10,color:"var(--muted)"}}>{p.billId||"—"}</td>
+                                        <td style={{padding:"3px 8px",textAlign:"right",fontWeight:700,fontFamily:"var(--mono)",color:"var(--g)"}}>{fmt(p.appliedTTC)}</td>
+                                      </tr>
+                                    ))}
+                                    <tr style={{borderTop:"2px solid var(--bdr)"}}>
+                                      <td colSpan={3} style={{padding:"3px 8px",fontWeight:700,color:"var(--indigo)"}}>Total réglé</td>
+                                      <td style={{padding:"3px 8px",textAlign:"right",fontWeight:800,fontFamily:"var(--mono)",color:"var(--g)"}}>{fmt(paidTTC)}</td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                          )}
+                          </React.Fragment>
                           );
                         })}
                       </tbody>
@@ -5638,8 +5680,22 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       status: isFull ? "paid" : "partial",
       paidAt: isFull ? new Date().toISOString().slice(0,10) : null,
     });
-    for (const d of selectedDischarges) {
-      await updateDischarge({...d, status: "paid"});
+    // Phase 5.7: when fully paid, mark ALL the period's unpaid discharges as paid
+    // (not just the manually selected ones — so nothing is left in a limbo state)
+    if (isFull) {
+      const periodDs = discharges.filter(d =>
+        d.clientId === inv.clientId &&
+        tsMatchesPfx(d.ts, inv.month) &&
+        d.status !== 'cancelled' && d.status !== 'paid'
+      );
+      for (const d of periodDs) {
+        await updateDischarge({...d, status: "paid", statusOnly: true});
+      }
+    } else {
+      // Partial: only mark the admin-selected discharges
+      for (const d of selectedDischarges) {
+        await updateDischarge({...d, status: "paid"});
+      }
     }
     setPayInvModal(null);
     setPayConfirm(false);
@@ -6460,6 +6516,17 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                     title="Télécharger en format Word (.doc)">📄 Word</button>
                 </div>
               </>
+            )}
+            {/* 💰 Bill-based payment — always available for convention/prepaid clients */}
+            {c&&(c.type==="convention"||c.type==="prepaid"||c.type==="rotation")&&(
+              <button className="btn bsm"
+                style={{background:"#0891b2",color:"#fff",borderColor:"#0891b2",
+                  opacity:billPayLoading ? 0.6 : 1}}
+                disabled={billPayLoading}
+                onClick={()=>openBillPayModal(c)}
+                title="Régler une facture via le système de paiement (Montant libre, Par décharge, Paiement intégral)">
+                💰 Régler Facture
+              </button>
             )}
             {currentInv&&(
               <div style={{width:"100%",display:"flex",justifyContent:"flex-end",marginTop:2}}>

@@ -4,3 +4,5 @@
 - [Billing engine design](billing-engine.md) — bills/payments use live remaining_ttc; partial bills allow discharge carry-forward to next bill.
 - [PUT discharge null-safe](discharge-put-fix.md) — always fetch old row FOR UPDATE; use ?? fallback for every field; send statusOnly:true for status-only changes.
 - [clients.consumed column](consumed-column.md) — raw column is never read; GET /api/clients recomputes live via SUM; incremental writes removed.
+- [Bill-payment modal locations](bill-pay-modal-locations.md) — 💰 Régler Facture in Vue Mensuelle (global rows only) AND Relevé Client (unconditional for convention/rotation/prepaid).
+- [ts LIKE SQL cast fix](ts-like-cast.md) — timestamp columns need ts::text LIKE $2; plain LIKE fails with "operator does not exist".
