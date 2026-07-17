@@ -1,0 +1,426 @@
+Implement the following billing/debt-tracking overhaul in the Landfill Tracker app (React frontend + Express/pg backend). Work through the phases **in the order given** — later phases depend on earlier ones. After each phase, tell me exactly what you changed, which files, and how you verified it (query result, test run, manual trace) before moving to the next phase. Do not refactor unrelated code.
+
+This replaces and supersedes any earlier partial instructions you may have seen about billing — this is the complete, confirmed spec.
+
+---
+
+# PHASE 0 — Critical: stop the discharge PUT from nulling data
+
+**Bug:** the "Régulariser" (resolve flagged discharge) action sends `PUT /api/discharges/:id` with body `{status:"settled"}` and no `statusOnly` flag. The backend's handler only does a safe status-only update `if (d.statusOnly)`; since that's never sent, every regularization falls into the full-overwrite branch and writes `undefined` into `truck`, `waste_type`, `gross`, `tare`, `net`, `unit_price`, `total`, `pay_method`, `site_id`, `ts`, and `correction_reason`.
+
+**Fix — both sides:**
+
+a) Frontend: wherever this PUT is sent for a pure status change, add `statusOnly: true` to the body.
+
+b) Backend `PUT /api/discharges/:id`: before running the full-overwrite branch, fetch the existing row and fall back to its old values for any field missing from the request body, so a partial payload can never null a column:
+
+```js
+app.put('/api/discharges/:id', async (req, res) => {
+  const d = req.body;
+  try {
+    const { rows: old } = await q('SELECT * FROM discharges WHERE id=$1', [req.params.id]);
+    const oldD = old[0];
+    if (!oldD) return res.status(404).json({ error: 'Discharge not found' });
+
+    if (d.statusOnly) {
+      await q('UPDATE discharges SET status=$1 WHERE id=$2', [d.status, req.params.id]);
+    } else {
+      const truck            = d.truck            ?? oldD.truck;
+      const wasteType        = d.wasteType         ?? oldD.waste_type;
+      const gross            = d.gross             ?? oldD.gross;
+      const tare              = d.tare             ?? oldD.tare;
+      const net               = d.net              ?? oldD.net;
+      const unitPrice         = d.unitPrice         ?? oldD.unit_price;
+      const total             = d.total             ?? oldD.total;
+      const status            = d.status            ?? oldD.status;
+      const payMethod         = d.payMethod         ?? oldD.pay_method;
+      const siteId            = d.siteId            ?? oldD.site_id;
+      const ts                = d.ts                ?? oldD.ts;
+      const correctionReason  = d.correctionReason  ?? oldD.correction_reason ?? '';
+      const opType            = d.opType            ?? oldD.op_type ?? 'treatment';
+
+      await q(
+        `UPDATE discharges SET truck=$1,waste_type=$2,gross=$3,tare=$4,net=$5,
+         unit_price=$6,total=$7,status=$8,pay_method=$9,site_id=$10,ts=$11,
+         correction_reason=$12,op_type=$13 WHERE id=$14`,
+        [truck, wasteType, gross, tare, net, unitPrice, total, status,
+         payMethod, siteId, ts, correctionReason, opType, req.params.id]
+      );
+      // keep existing consumed-adjustment diff logic, but using the resolved
+      // `total`/`payMethod` values above, not the raw possibly-undefined d.total/d.payMethod
+    }
+    ok(res, { ok: true });
+  } catch(e) { er(res, e); }
+});
+```
+
+**Data repair check (report only, don't modify):**
+```sql
+SELECT id, ts, truck, net, total, status, pay_method
+FROM discharges
+WHERE status = 'settled' AND (ts IS NULL OR total IS NULL OR truck IS NULL);
+```
+Report any rows this returns before continuing.
+
+---
+
+# PHASE 1 — Schema: add real bill/payment tracking tables
+
+Create a new migration file (following the existing migration pattern in the `migrations` directory) adding these tables. This is the foundation for everything in Phase 3.
+
+```sql
+-- A "bill" is an explicit, scoped snapshot of discharges owed at the time it's generated.
+-- It is NOT the same as the existing `invoices` table's month-based aggregation — a bill
+-- can cover an arbitrary set of discharges (e.g. "everything unbilled as of today").
+CREATE TABLE IF NOT EXISTS bills (
+  id            VARCHAR(30) PRIMARY KEY,
+  client_id     VARCHAR(10) NOT NULL REFERENCES clients(id),
+  generated_at  TIMESTAMP DEFAULT NOW(),
+  total_ht      DECIMAL(12,2) NOT NULL,
+  total_ttc     DECIMAL(12,2) NOT NULL,
+  status        VARCHAR(20) DEFAULT 'open',  -- open | partial | paid
+  note          TEXT
+);
+
+-- Explicit scope: which discharges belong to which bill. A discharge can appear in
+-- at most one OPEN bill at a time (enforce in application logic, not just DB).
+CREATE TABLE IF NOT EXISTS bill_discharges (
+  id            SERIAL PRIMARY KEY,
+  bill_id       VARCHAR(30) NOT NULL REFERENCES bills(id) ON DELETE CASCADE,
+  discharge_id  VARCHAR(20) NOT NULL REFERENCES discharges(id),
+  UNIQUE(bill_id, discharge_id)
+);
+
+-- Raw payment event — what the client actually handed over, before allocation.
+CREATE TABLE IF NOT EXISTS payments (
+  id            VARCHAR(30) PRIMARY KEY,
+  client_id     VARCHAR(10) NOT NULL REFERENCES clients(id),
+  bill_id       VARCHAR(30) REFERENCES bills(id),
+  amount_ttc    DECIMAL(12,2) NOT NULL,
+  method        VARCHAR(20),
+  note          TEXT,
+  created_at    TIMESTAMP DEFAULT NOW(),
+  created_by    VARCHAR(10) REFERENCES users(id)
+);
+
+-- The allocation ledger: exactly how much of each discharge was settled by each payment.
+-- This is the source of truth for "how much of discharge X has been paid" — never a
+-- manually-incremented column on the discharge itself.
+CREATE TABLE IF NOT EXISTS discharge_payments (
+  id                SERIAL PRIMARY KEY,
+  discharge_id      VARCHAR(20) NOT NULL REFERENCES discharges(id),
+  payment_id        VARCHAR(30) NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+  bill_id           VARCHAR(30) NOT NULL REFERENCES bills(id),
+  applied_amount_ttc DECIMAL(12,2) NOT NULL,
+  applied_amount_ht  DECIMAL(12,2) NOT NULL,
+  applied_qty        DECIMAL(10,3) NOT NULL,
+  created_at         TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_discharge_payments_discharge ON discharge_payments(discharge_id);
+CREATE INDEX IF NOT EXISTS idx_bill_discharges_bill ON bill_discharges(bill_id);
+CREATE INDEX IF NOT EXISTS idx_discharges_client_ts ON discharges(client_id, ts);
+```
+
+A discharge's **remaining balance** is always computed live, never stored:
+```sql
+remaining_ttc = discharge.total_ttc - COALESCE((
+  SELECT SUM(applied_amount_ttc) FROM discharge_payments WHERE discharge_id = discharge.id
+), 0)
+```
+(`total_ttc` = `total * 1.19` if the client is `vatSubject`, else `total`.)
+
+---
+
+# PHASE 2 — Fix credit-limit billing and separate "extend limit" from "pay debt"
+
+**Confirmed decision (do this, don't re-ask):** bill 100% of what a credit-enabled client consumes. `creditLimit` is purely a gate that blocks new discharges once exceeded — it is never used to reduce or zero out an invoice amount.
+
+a) Remove this from the invoice cost calculation:
+```js
+const clCost = cl.creditEnabled && cl.creditLimit>0
+  ? Math.max(0, cl.consumed - cl.creditLimit)
+  : rawCost;
+```
+Replace with simply `rawCost` for all clients regardless of `creditEnabled`. Find every other place in the codebase that special-cases `creditEnabled` for *billing amount* purposes (not gate-checking purposes) and apply the same fix — grep for `creditLimit` and `creditEnabled` across the invoice-related code and list every call site to me before changing each one, since some of those are legitimate gate checks (`wouldExceedCredit` in the gate/entry page) that must NOT change.
+
+b) **Extend-credit-limit action must be fully decoupled from debt resolution.** Currently, resolving a flagged over-limit discharge via "Étendre la limite" just raises `creditLimit`, which (combined with the old formula in 2a) made the debt vanish. Now that 2a is fixed, raising the limit no longer erases anything numerically — but still rework this UI/flow so it's explicit:
+   - Remove the "extend limit" option from the flagged-discharge resolution modal entirely, OR keep it but relabel/re-scope it as a completely separate admin action ("Augmenter la limite de crédit de ce client") that has nothing to do with resolving a specific flagged discharge.
+   - A flagged discharge is resolved by it becoming part of a real bill (Phase 3) that the client then pays down — not by an admin clicking a button that makes the flag disappear.
+   - Extending the limit going forward requires no special payment-refusal handling: if the client won't pay for/agree to a higher limit, simply don't raise it. The existing `wouldExceedCredit` gate keeps blocking new discharges until `consumed` (now correctly tracking full real consumption) drops back under whatever the current limit is, via them paying down open bills.
+
+---
+
+# PHASE 3 — Scoped FIFO partial-payment and bill-splitting engine
+
+This is the core feature. Implement exactly this behavior, validated against the worked test case at the end of this phase.
+
+## 3.1 — Bill generation
+
+A new endpoint `POST /api/bills` takes `{ clientId }` and:
+1. Finds every discharge for that client that is **not already scoped to an open/partial bill** and has `remaining_ttc > 0` (per the live computation in Phase 1), ordered by `ts ASC`.
+2. Creates a new `bills` row with `total_ht`/`total_ttc` summed from those discharges' remaining amounts.
+3. Inserts one `bill_discharges` row per discharge included.
+4. Returns the new bill with its scoped discharge list.
+
+A discharge must never be pulled into more than one **open** bill at a time — enforce this with the uniqueness of "not already in an open/partial bill" in the selection query (e.g. `NOT EXISTS (SELECT 1 FROM bill_discharges bd JOIN bills b ON b.id=bd.bill_id WHERE bd.discharge_id = d.id AND b.status IN ('open','partial'))`).
+
+## 3.2 — Applying a payment (the FIFO waterfall)
+
+New endpoint `POST /api/bills/:billId/payments` takes `{ amountTTC, method, note, createdBy }`. Inside a single DB transaction with row locks on the bill and its discharges:
+
+1. Convert `amountTTC` to integer centimes: `P_c = Math.round(amountTTC * 100)`.
+2. Fetch the bill's discharges (via `bill_discharges` join `discharges`) **ordered by `ts ASC, discharge_id ASC`** (tiebreaker), each with its live `remaining_ttc` computed as in Phase 1, locked `FOR UPDATE`.
+3. For each discharge in that order:
+   - `due_c = round(remaining_ttc * 100)`
+   - if `due_c <= 0`: skip (already fully paid)
+   - if `P_c <= 0`: stop — no more payment left
+   - `applied_c = Math.min(P_c, due_c)`
+   - Convert `applied_c` back to `appliedTTC`, then `appliedHT = client.vatSubject ? appliedTTC / 1.19 : appliedTTC`
+   - `appliedQty = appliedHT / discharge.unitPrice`
+   - Insert a `discharge_payments` row: `{discharge_id, payment_id, bill_id, applied_amount_ttc: appliedTTC, applied_amount_ht: appliedHT, applied_qty: appliedQty}`
+   - `P_c -= applied_c`
+4. If `P_c > 0` after the loop (overpayment beyond this bill's total): do NOT auto-create a credit balance. Return the leftover amount in the response as `unappliedAmount` so the admin sees it and decides what to do (refund, apply to next bill manually, etc.) — this must be a value the frontend surfaces to the admin, not silently dropped.
+5. Insert one `payments` row recording the raw amount actually applied (`amountTTC - unappliedAmount`).
+6. Recompute the bill's status: `paid` if all its discharges now have `remaining_ttc = 0`, else `partial`.
+7. Commit.
+
+## 3.3 — Payment receipt generation (grouped by waste type)
+
+After a payment is applied, generate the receipt from **only the `discharge_payments` rows just created by this payment** (not the whole bill, not the client's whole history):
+
+```
+group these discharge_payments rows by waste_type
+for each group:
+  totalAppliedHT = sum(applied_amount_ht in group)
+  unitPrices = distinct unit prices of the discharges in this group
+  if unitPrices.length === 1:
+    line.qty = totalAppliedHT / unitPrices[0]
+    line.unitPrice = unitPrices[0]
+  else:
+    // mixed tariffs within the same waste type in this one payment — do not
+    // fabricate a single clean unit price/qty. Show the montant only, and
+    // flag this line as "tarifs multiples" so the admin sees it's a blend,
+    // OR list it as separate sub-lines per unit price. Implement as separate
+    // sub-lines per unit price (cleaner, still traceable) rather than a fake average.
+  line.montant = totalAppliedHT (or TTC per how the bill displays, matching existing invoice display convention)
+```
+
+Total of all lines must exactly equal `amountTTC - unappliedAmount` from 3.2 — assert this in code (throw/log if it doesn't match, as a correctness guard) since any mismatch means a bug in the allocation.
+
+## 3.4 — Next-bill generation (remaining balance rollover)
+
+When `POST /api/bills` (3.1) is called again for the same client later, it must naturally pick up:
+- Any discharge with `remaining_ttc > 0` that was partially paid in a previous bill (its remaining balance carries forward automatically since it's computed live from `discharge_payments`, not stored) — no special "carry forward" logic needed beyond the live remaining-balance computation itself.
+- Any new discharges created since the last bill, that aren't yet in any open/partial bill.
+
+Group the new bill's line items by waste type using the same `groupByType` logic from 3.3, but instead of `applied_amount_ht` per group, use each discharge's **remaining amount** (in centimes, same precision rules).
+
+## 3.5 — REQUIRED validation test case before this phase is considered done
+
+Build this exact scenario as an automated test (or a script you run and show me the output of) and confirm every number matches:
+
+**Setup — 7 discharges for one test client, `vatSubject = false` (exoneration case, HT = TTC):**
+```
+d1: Inerte,  U.P 650, 8t  → 5200 DA
+d2: Ménager, U.P 850, 6t  → 5100 DA
+d3: Ménager, U.P 850, 9t  → 7650 DA
+d4: Inerte,  U.P 650, 7t  → 4550 DA
+d5: Inerte,  U.P 650, 10t → 6500 DA
+d6: Inerte,  U.P 650, 3t  → 1950 DA
+d7: Ménager, U.P 850, 4t  → 3400 DA
+```
+Total across all 7 = 34,350 DA.
+
+**Step A:** Generate a bill scoped to ONLY d1, d2, d3 (total 17,950 DA).
+
+**Step B:** Apply a payment of 12,000 DA against that bill. Assert:
+- d1 → fully paid (5200 applied)
+- d2 → fully paid (5100 applied)
+- d3 → partially paid (1700 applied, remaining_ttc = 5950, remaining equivalent qty = 5950/850 = 7t exactly)
+- d4–d7 → completely untouched, not part of this bill at all
+- Receipt for this payment, grouped by type:
+  - Inerte: qty 8t, montant 5200
+  - Ménager: qty 8t (6 + 2), montant 6800
+  - Total: 12,000 ✅ (must equal the payment amount exactly)
+- Bill status → `partial` (5,950 DA still owed on it)
+
+**Step C:** Generate the next bill for this client. Assert it includes exactly: d3's remaining 7t/5950 DA slice, plus d4, d5, d6, d7 in full (since they were never in any bill yet). Grouped by type:
+- Ménager: qty 11t (7 remaining from d3 + 4 from d7), montant 9,350
+- Inerte: qty 20t (7 + 10 + 3 from d4–d6), montant 13,000
+- Total: 22,350 ✅ (must equal 34,350 − 12,000 exactly)
+
+If any of these numbers don't come out exactly as shown, the allocation logic has a bug — do not proceed to Phase 3B until this test passes exactly.
+
+---
+
+# PHASE 3B — Unified three-strategy payment engine (by discharge / by amount / full payment) + per-discharge payment visibility
+
+This builds directly on Phase 3's engine and tables. Do not proceed to this phase until Phase 3.5's test case passes exactly.
+
+## 3B.1 — One shared payment engine, three selection strategies
+
+Do not build three separate payment flows. Build **one** payment modal with a three-way toggle for *how the admin selects what to pay*; all three strategies must produce the exact same internal shape (a "plan": a list of `{dischargeId, appliedTTC}`), which then flows through one identical generate-bill → confirm-payment pipeline (3B.3). This is required — do not let any of the three options skip the bill-generation step or use a different commit path.
+
+- **"Par décharge spécifique"** — admin checks specific discharge(s) from the bill's list; the plan is simply "fully settle each checked discharge."
+- **"Montant libre"** — admin types any DA amount; the plan is computed by the FIFO waterfall (3B.2) starting from the oldest unpaid discharge in the bill.
+- **"Paiement intégral"** — a single-click shortcut that is exactly the "Montant libre" path with the amount pre-filled and locked to the bill's full current remaining total (`SUM(remaining_ttc)` across the bill's discharges) — same waterfall, same code path, it simply happens to fully settle every discharge in the bill because the amount covers everything.
+
+All three must write through the same `payments` / `discharge_payments` ledger, and all three must go through the identical two-step generate-then-confirm flow in 3B.3 — none of them is allowed to commit a payment without a bill document having been generated first for that exact plan.
+
+## 3B.1b — Unify the preview endpoint to accept any of the three selection strategies
+
+`POST /api/bills/:billId/payments/preview` (3B.2) must accept **either** an amount **or** an explicit discharge selection, and internally normalize both into the same allocation-plan shape before returning:
+
+```
+Body (Montant libre / Paiement intégral): { amountTTC }
+Body (Par décharge spécifique):           { dischargeIds: ["d1","d2",...] }
+```
+For the discharge-ID case, build the plan by fully settling each named discharge (using its live `remaining_ttc`) — no FIFO walking needed, the admin already chose exactly what to pay. For the amount case, run the FIFO waterfall as already specified. Both paths must return the identical response shape (`lines`, `unappliedAmount`, `receiptByType`, `totalApplied`) so the frontend's bill-generation step (3B.3) never needs to know which selection strategy produced the plan.
+
+## 3B.2 — The FIFO allocation logic behind the "Montant libre" / "Paiement intégral" strategies
+
+```
+POST /api/bills/:billId/payments/preview
+Body: { amountTTC }   ← see 3B.1b for the alternate { dischargeIds } body shape
+```
+
+Runs the exact same FIFO allocation logic as the real `POST /api/bills/:billId/payments` (Phase 3.2) — convert to centimes, walk discharges ordered `ts ASC`, apply against each `remaining_ttc` in turn — but writes nothing to the database. The waterfall itself is billing-type-agnostic: it always applies as much money as it can to each discharge in order, whether that discharge is tonnage-billed or rotation-billed. Money is always fully divisible; only the *display* of quantity differs by billing type (see 3B.2b). Returns:
+
+```json
+{
+  "lines": [
+    { "dischargeId": "...", "wasteType": "...", "payMethod": "convention", "appliedTTC": 5200, "fullyPaid": true, "remainingAfter": 0 },
+    { "dischargeId": "...", "wasteType": "...", "payMethod": "convention", "appliedTTC": 1700, "fullyPaid": false, "remainingAfter": 5950 },
+    { "dischargeId": "...", "wasteType": "...", "payMethod": "rotation",   "appliedTTC": 600,  "fullyPaid": false, "remainingAfter": 900 }
+  ],
+  "unappliedAmount": 0,
+  "receiptByType": [
+    { "wasteType": "Inerte", "billingMode": "tonnage", "qty": 8, "unitPrice": 650, "montant": 5200 },
+    { "wasteType": "Ménager", "billingMode": "tonnage", "qty": 8, "unitPrice": 850, "montant": 6800 },
+    { "wasteType": "Ménager", "billingMode": "rotation", "qty": 1, "unitPrice": 1500, "montant": 600, "partial": true, "note": "1 rotation — 600 DA réglés sur 1 500 DA dus" }
+  ],
+  "totalApplied": 12000
+}
+```
+
+**Refactor so both the preview endpoint and the committing endpoint call one shared function** (e.g. `computeFifoAllocation(billDischarges, amountTTC)` returning a plan, and a separate `commitAllocation(plan)` doing the writes) — never duplicate the FIFO logic between the two endpoints.
+
+## 3B.2b — Tonnage vs. rotation: how a touched discharge renders on the bill line
+
+The waterfall in 3B.2 never special-cases rotation discharges — it applies money to them in FIFO order exactly like tonnage discharges. **What differs is only how the receipt line displays quantity**, because a rotation is one atomic truck pass that either happened or didn't — it cannot be fractionally represented, unlike tonnage which is a continuous, genuinely divisible physical quantity.
+
+For each discharge touched by the allocation, check `discharge.payMethod`:
+
+**If tonnage-billed** (`payMethod !== 'rotation'`):
+```
+equivQty = appliedHT ÷ unitPrice     // a fractional quantity here is physically meaningful
+```
+Unchanged from the original spec.
+
+**If rotation-billed** (`payMethod === 'rotation'`):
+```
+qty = 1                              // always the real, whole rotation count for this discharge row
+                                      // — NEVER derived from the applied amount, NEVER fractional
+montant = appliedAmountThisPayment   // whatever portion of the flat per-rotation price this
+                                      // specific payment covers — can be less than unitPrice
+```
+
+### Grouping/merging rule (extends the existing mixed-tariff rule from 3B.3/A.3)
+
+When building `receiptByType`, group entries by `(wasteType, billingMode)`:
+
+- **Tonnage entries**: merge into one line when unit price matches across the touched discharges (existing rule — sum `equivQty`, sum `montant`). If unit prices differ, split into separate sub-lines per price, same as already specified.
+- **Rotation entries**: merge multiple discharges of the same waste type into one aggregate line (`qty = count of discharges`, `montant = sum of applied amounts`) **only if every one of those discharges was fully paid by this payment** (`applied === unitPrice` for each, i.e. `qty × unitPrice === montant` holds exactly). The moment a rotation discharge is only partially covered by this payment, it must be kept as its **own explicit, unmerged line**, tagged `partial: true` with a clear note like `"1 rotation — 600 DA réglés sur 1 500 DA dus"` — never folded into an aggregate count, since that would hide which specific rotation still has money owed on it.
+
+This is a rendering-only rule — it changes nothing about how money is applied or how `remaining_ttc` is computed (that ledger math in Phase 3/3B stays identical for both billing types). It only changes how the `receiptByType` array is built before being handed to the bill-document generator in 3B.3.
+
+## 3B.3 — Frontend: generate the bill FIRST, confirm payment SECOND — applies to ALL THREE strategies, no exceptions
+
+Mirror the existing "Paiement Partiel par Calcul" pattern already in this app (`doGeneratePartialBill` prints/downloads a bill document first; only afterward does `doConfirmPartialPayment` become available to record the payment) — but generalize it so it's the **single, shared** pipeline for all three selection strategies from 3B.1, not something specific to one of them.
+
+**This replaces the old app's two-separate-button behavior** ("📄 Facture Partielle" and "💳 Confirmer Paiement" as independent, unlinked actions the admin could click in any order or skip between). That independence is exactly what must be removed: regardless of whether the admin picked "Par décharge spécifique," "Montant libre," or "Paiement intégral," the flow is always:
+
+**Step 1 — Générer la facture (no DB writes yet), same for all three strategies:**
+1. Admin makes their selection (checks discharges, types an amount, or clicks "Paiement intégral") and clicks **"🖨️ Générer la facture de ce paiement"**.
+2. Frontend calls the unified 3B.1b preview endpoint with whichever selection was made — no side effects yet, regardless of strategy.
+3. From the returned `receiptByType` lines, generate an actual bill document using the app's existing bill-HTML generator — reuse `generateOfficialBillHTML(client, [], company, month, billNumber, wasteTypes, { precomputedRows })`, mapping each `receiptByType` entry into the same `{ opType, label, isRotation, qty, unitPrice, tva, ht }` shape that function already accepts for debt/precomputed bills — set `isRotation` from the entry's `billingMode === 'rotation'` (see 3B.2b), and preserve any `partial`/`note` flag from a partially-paid rotation entry in the line's label (e.g. append " — partiellement réglée" to `label`) so it's visually distinct on the printed bill. Do not write a new HTML template — this is exactly the "arbitrary set of precomputed rows" case the debt/`avis de débit` document already uses.
+4. Open the document in a print window (PDF) and trigger a Word (`.doc`) download, exactly like every other bill-generation path in this app (same `window.open` + print, same `Blob`/`application/msword` download pattern used in `doGeneratePartialBill`).
+5. If `unappliedAmount > 0` (only possible in the "Montant libre" strategy, when the typed amount exceeds everything owed), show a clear warning with the exact leftover figure before allowing generation at all — require the admin to correct the amount first, don't silently cap it. This cannot happen for "Par décharge spécifique" (the selected discharges are always fully settled by definition) or "Paiement intégral" (the amount is derived from the bill's own total, so it always matches exactly).
+6. After the document is generated, set a local "bill printed" flag (mirroring the existing `partialCalcPrinted` state) and reveal step 2's button, **regardless of which of the three strategies produced this plan**. Nothing has been written to the database at this point.
+
+**Step 2 — Confirmer la réception du paiement (the only step that writes anything), same for all three strategies:**
+1. Only after step 1's document has been generated does **"✓ Confirmer la réception du paiement"** become enabled — for all three strategies equally. There is no path in the UI that allows confirming a payment without step 1 having produced a document for that exact plan first.
+2. Clicking it calls the real committing endpoint (a single unified `POST /api/bills/:billId/payments`, accepting the same `{amountTTC}` or `{dischargeIds}` body shape as the preview endpoint) with the same selection used in step 1 — this writes the `payments` and `discharge_payments` rows and updates the bill's status. Internally this endpoint must call the exact same shared allocation function used by the preview endpoint (per 3B.1b/3B.2's shared-function requirement), then commit it.
+3. After a successful commit, show a simple on-screen confirmation — the bill document itself was already delivered in step 1.
+4. If the admin changes their selection (a different amount, a different set of checked discharges, or switches strategy) after generating a bill but before confirming, invalidate the "bill printed" flag and require step 1 to be redone for the new selection — the confirmed payment must always match exactly what was on the generated document, no matter which strategy produced it.
+
+## 3B.4 — Show per-discharge payment status in the client's prestation/discharge history
+
+Every place the app lists a client's discharges (the "Historique des dépôts" table in the client detail view, and the discharges history page) needs to show real payment progress per row, not just the existing status badge.
+
+Add a query (or extend existing discharge-fetch queries) computing, per discharge, from the `discharge_payments` ledger:
+```sql
+paid_ttc = COALESCE((SELECT SUM(applied_amount_ttc) FROM discharge_payments WHERE discharge_id = d.id), 0)
+remaining_ttc = d.total_ttc - paid_ttc   -- total_ttc = d.total * 1.19 if client.vat_subject else d.total
+```
+In the frontend tables:
+- `paidTTC === 0` → existing status badge, unchanged.
+- `0 < paidTTC < total_ttc` → a "Partiel" indicator with real figures, e.g. `"1 700 / 7 650 DA réglé — reste 5 950 DA"`, reusing the existing partial-payment progress-bar component used elsewhere in this app rather than inventing a new one.
+- `paidTTC >= total_ttc` → fully paid, unchanged.
+- Make each partial row expandable (icon/popover) listing the individual `discharge_payments` entries that touched it — date, amount, which payment/bill it came from — so an admin can trace exactly how a discharge reached its current state. Keep this lightweight.
+
+## 3B.5 — REQUIRED validation before this phase is considered done
+
+Using the same test client/bill from Phase 3.5 (7 discharges, bill of the first 3 totaling 17,950 DA):
+
+1. Call the preview endpoint with `amountTTC = 12000` against that bill and confirm it returns exactly: d1 fully paid (5200), d2 fully paid (5100), d3 partial (1700 applied, 5950 remaining), `unappliedAmount: 0`, `receiptByType` = Inerte 5200 / Ménager 6800, `totalApplied: 12000` — and confirm nothing was written to the database (re-query afterward and confirm remaining amounts are unchanged).
+2. In the UI, select "Montant libre," type 12000, and click "Générer la facture" — confirm a bill document is produced (PDF print window opens, Word `.doc` downloads) showing exactly Inerte 5200 / Ménager 6800 / Total 12000, and confirm the database is still unchanged after this step.
+3. Confirm "Confirmer la réception du paiement" is disabled/hidden until step 1's document generation has completed, and only becomes clickable afterward.
+4. Click confirm, then verify the discharge history view for this client now shows d3 as "Partiel — 1 700 / 7 650 DA réglé — reste 5 950 DA," and d1/d2 as fully paid — matching exactly what both the preview and the generated document showed.
+5. Change the typed amount after generating a bill but before confirming, and verify the "bill printed" flag resets, forcing a fresh bill generation for the new amount before confirm becomes available again.
+6. **Repeat steps 2–5 for "Par décharge spécifique"**: check specific discharges instead of typing an amount, and confirm the exact same gate applies — no way to reach "Confirmer" without first generating a bill document for that exact selection, and changing the checked discharges after generating invalidates the printed flag exactly like changing the amount does.
+7. **Repeat for "Paiement intégral"**: click it against a bill with a known total remaining balance, confirm the amount is pre-filled to exactly that total, confirm it goes through the identical generate→confirm gate, and confirm it fully settles every discharge in the bill.
+8. Confirm all three strategies write through the same `payments`/`discharge_payments` ledger and produce identical, consistent per-discharge breakdown display regardless of which strategy was used to build the plan.
+9. **Rotation case:** construct a second test client/bill containing at least one `payMethod:'rotation'` discharge priced e.g. 1500 DA/rotation. Apply a payment that only partially covers it (e.g. 600 DA against that 1500 DA rotation, with nothing else in the bill). Confirm the generated bill line shows `qty: 1`, `montant: 600`, and a clear "partiellement réglée" indication — NOT a fractional quantity like `0.4`. Then apply another payment of 900 DA (completing it) and confirm the discharge now shows fully paid with the two payments summing to exactly 1500. Also construct a case with two same-type, same-price rotation discharges both fully paid by one payment, and confirm they DO merge into one aggregate line (`qty: 2`).
+
+If any of this doesn't check out exactly, fix it before moving to Phase 4.
+
+---
+
+# PHASE 4 — Server-side re-validation of limits on discharge creation
+
+In `POST /api/discharges`, before inserting, re-check server-side (don't just trust the client-side check in the gate/entry page):
+1. If the client has `credit_enabled` and a `credit_limit`, recompute their true current consumption (live SUM, same logic as `GET /api/clients` already uses) and check whether `consumed + d.total` would exceed `credit_limit`. If so, force `status = 'flagged'` on the inserted row regardless of what the client sent.
+2. Do the equivalent for `weight_limit_year` / `rotation_limit`, matching the same monthly/annual period logic the frontend uses.
+3. Wrap the whole check + insert in a transaction with `SELECT ... FOR UPDATE` on the client row, so two concurrent requests can't both read a stale consumption figure and both pass.
+
+Keep the existing frontend checks as-is — this is a backstop, not a replacement.
+
+---
+
+# PHASE 5 — Remaining hardening items (do these last, lower priority)
+
+5.1. **Stop writing to `clients.consumed` incrementally.** `GET /api/clients` already recomputes it live via SUM; the incremental writes in `POST`/`PUT /api/discharges` drift (e.g. don't decrement on cancellation) and are never read. Grep for every read of `clients.consumed` (the raw column) across frontend and backend and list them to me before removing the writes, in case something still depends on it.
+
+5.2. **Wrap multi-statement writes in transactions** in `POST`/`PUT /api/discharges` using a single checked-out pooled client (`BEGIN`/`COMMIT`/`ROLLBACK`), not separate `pool.query` calls.
+
+5.3. **Server-side sanity check on discharge `ts`.** In `POST /api/discharges` only (not `PUT`, which needs to support admin backdating for corrections), if `ts` is missing or differs from server time by more than ~24h, default to server `NOW()` instead of trusting the client device clock.
+
+5.4. **Round `net`/`total` before persisting** (`Math.round(n*1000)/1000` for tonnage, `Math.round(n*100)/100` for DA) in both the frontend computation and defensively again in the backend insert/update.
+
+5.5. **Extract one shared VAT helper** (`toTTC(amountHT, vatSubject)` / `toHT(amountTTC, vatSubject)`) and replace every inline `*1.19`/`/1.19` across the invoice/bill generation code with calls to it. Grep for `1.19` and list every call site before replacing, to confirm none are doing something subtly different.
+
+5.6. **Fix annual-invoice period display.** Add a `period_type` (`monthly`/`annual`) field to the existing `invoices` table (separate migration), set at generation time from the client's `payFrequency`, and update every place that formats `invoice.month` for display to branch on it instead of inferring from string length.
+
+5.7. **Guard full invoice payment against partially-paid underlying discharges** in the existing (older) month-based `invoices`/`doMarkPaid` flow — when an invoice transitions to fully `"paid"`, also mark all its period's discharges `"paid"` in the same operation, not just the ones the admin manually checked.
+
+---
+
+## Process notes for you (the agent)
+
+- Phase 0 first, always — it's an active data-corruption bug.
+- Phase 1 (schema) before Phase 3 (needs the tables).
+- Phase 3.5's test case is a hard gate — do not move on until every number matches exactly as specified.
+- Report back after each phase: what changed, which files, what you verified.
+- Don't touch styling, copy, or unrelated refactors.

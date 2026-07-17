@@ -885,13 +885,22 @@ app.get('/api/bills/:id', async (req, res) => {
   try {
     const { rows: bills } = await q('SELECT * FROM bills WHERE id=$1', [req.params.id]);
     if (!bills.length) return res.status(404).json({ error: 'Facture introuvable.' });
+    const bill = bills[0];
+    const { rows: cls } = await q('SELECT vat_subject FROM clients WHERE id=$1', [bill.client_id]);
+    const vatSubject = cls.length ? (cls[0].vat_subject || false) : false;
     const { rows: discs } = await q(
-      `SELECT d.* FROM discharges d
+      `SELECT d.*,
+        CASE WHEN $2 THEN d.total * 1.19 ELSE d.total END AS total_ttc,
+        (CASE WHEN $2 THEN d.total * 1.19 ELSE d.total END)
+          - COALESCE((SELECT SUM(dp.applied_amount_ttc) FROM discharge_payments dp
+                      WHERE dp.discharge_id = d.id), 0) AS remaining_ttc
+       FROM discharges d
        JOIN bill_discharges bd ON bd.discharge_id = d.id
        WHERE bd.bill_id = $1 ORDER BY d.ts ASC`,
-      [req.params.id]
+      [req.params.id, vatSubject]
     );
-    ok(res, { ...bills[0], discharges: discs });
+    const remainingTotal = Math.round(discs.reduce((s, d) => s + Math.max(0, parseFloat(d.remaining_ttc)), 0) * 100) / 100;
+    ok(res, { ...bill, discharges: discs, remainingTotal });
   } catch(e) { er(res, e); }
 });
 
@@ -963,16 +972,155 @@ app.post('/api/bills', async (req, res) => {
   }
 });
 
-/* POST /api/bills/:billId/payments — FIFO waterfall payment (Phase 3.2)
-   Applies amountTTC against the bill's discharges in ts ASC order (oldest first).
-   Returns unappliedAmount if payment exceeds total owed — admin must decide what to do. */
+/* ─── SHARED FIFO ALLOCATION (Phase 3B) ─────────────────────────────────────
+   Used by both the preview and the commit endpoints — never duplicated.
+   discs : [{id, ts, waste_type, unit_price, pay_method, remaining_ttc}]
+   input : {amountTTC}  → FIFO waterfall (Montant libre / Paiement intégral)
+         | {dischargeIds:[...]} → fully settle each named discharge in FIFO order
+   Returns: { allocations, unappliedAmount, appliedAmount, lines, receiptByType } */
+function computeFifoAllocation(discs, input, vatSubject) {
+  const allocations = [];
+  let unapplied_c = 0;
+
+  if (input.dischargeIds && input.dischargeIds.length > 0) {
+    // Par décharge spécifique: fully settle each named discharge
+    const idSet = new Set(input.dischargeIds);
+    for (const d of discs) {
+      if (!idSet.has(d.id)) continue;
+      const due_c     = Math.round(parseFloat(d.remaining_ttc) * 100);
+      if (due_c <= 0) continue;
+      const appliedTTC = due_c / 100;
+      const appliedHT  = toHT(appliedTTC, vatSubject);
+      const unitP      = parseFloat(d.unit_price) || 0;
+      const isRot      = d.pay_method === 'rotation';
+      const appliedQty = isRot ? 1 : (unitP > 0 ? Math.round((appliedHT / unitP) * 1000) / 1000 : 0);
+      allocations.push({ discharge_id: d.id, waste_type: d.waste_type, unit_price: unitP,
+        pay_method: d.pay_method, applied_c: due_c, appliedTTC, appliedHT, appliedQty,
+        fullyPaid: true, remainingAfter: 0, due_c });
+    }
+  } else {
+    // Montant libre / Paiement intégral: FIFO waterfall by amount
+    let P_c = Math.round((parseFloat(input.amountTTC) || 0) * 100);
+    for (const d of discs) {
+      const due_c = Math.round(parseFloat(d.remaining_ttc) * 100);
+      if (due_c <= 0) continue;
+      if (P_c <= 0) break;
+      const applied_c  = Math.min(P_c, due_c);
+      const appliedTTC = applied_c / 100;
+      const appliedHT  = toHT(appliedTTC, vatSubject);
+      const unitP      = parseFloat(d.unit_price) || 0;
+      const isRot      = d.pay_method === 'rotation';
+      const appliedQty = isRot ? 1 : (unitP > 0 ? Math.round((appliedHT / unitP) * 1000) / 1000 : 0);
+      allocations.push({ discharge_id: d.id, waste_type: d.waste_type, unit_price: unitP,
+        pay_method: d.pay_method, applied_c, appliedTTC, appliedHT, appliedQty,
+        fullyPaid: applied_c >= due_c, remainingAfter: Math.max(0, due_c - applied_c) / 100, due_c });
+      P_c -= applied_c;
+    }
+    unapplied_c = Math.max(0, P_c);
+  }
+
+  const appliedAmount   = Math.round(allocations.reduce((s, a) => s + a.appliedTTC, 0) * 100) / 100;
+  const unappliedAmount = unapplied_c / 100;
+
+  // Per-discharge lines (for frontend detail display)
+  const lines = allocations.map(a => ({
+    dischargeId: a.discharge_id, wasteType: a.waste_type, payMethod: a.pay_method,
+    appliedTTC: a.appliedTTC, fullyPaid: a.fullyPaid, remainingAfter: a.remainingAfter,
+  }));
+
+  // Build receiptByType — group by (waste_type, unit_price, billingMode)
+  // Rotation: keep separate if partially paid; merge only when all fully paid
+  const groups = {};
+  for (const a of allocations) {
+    const isRot = a.pay_method === 'rotation';
+    const key   = `${a.waste_type}||${a.unit_price}||${isRot ? 'rotation' : 'tonnage'}`;
+    if (!groups[key]) groups[key] = { wasteType: a.waste_type, unitPrice: a.unit_price,
+      billingMode: isRot ? 'rotation' : 'tonnage', htTotal: 0, qtyTotal: 0, ttcTotal: 0, rotItems: [] };
+    if (isRot) {
+      groups[key].rotItems.push(a);
+    } else {
+      groups[key].htTotal  += a.appliedHT;
+      groups[key].qtyTotal += a.appliedQty;
+    }
+    groups[key].ttcTotal += a.appliedTTC;
+  }
+
+  const receiptByType = Object.values(groups).flatMap(g => {
+    if (g.billingMode === 'rotation') {
+      const allFull = g.rotItems.every(r => r.fullyPaid);
+      if (allFull && g.rotItems.length > 1) {
+        // Merge all fully-paid rotations of same type+price into one line
+        return [{ wasteType: g.wasteType, billingMode: 'rotation', unitPrice: g.unitPrice,
+          qty: g.rotItems.length,
+          montantHT: toHT(g.ttcTotal, vatSubject), montantTTC: g.ttcTotal, partial: false }];
+      }
+      // Keep each rotation as its own line (partial or single)
+      return g.rotItems.map(r => ({
+        wasteType: r.waste_type, billingMode: 'rotation', unitPrice: r.unit_price, qty: 1,
+        montantHT: r.appliedHT, montantTTC: r.appliedTTC, partial: !r.fullyPaid,
+        note: !r.fullyPaid
+          ? `1 rotation — ${r.appliedTTC.toFixed(2)} DA réglés sur ${(r.due_c / 100).toFixed(2)} DA dus`
+          : null,
+      }));
+    }
+    return [{ wasteType: g.wasteType, billingMode: 'tonnage',
+      unitPrice: Math.round(g.unitPrice * 100) / 100,
+      qty:       Math.round(g.qtyTotal  * 1000) / 1000,
+      montantHT: Math.round(g.htTotal   * 100) / 100,
+      montantTTC:Math.round(g.ttcTotal  * 100) / 100, partial: false }];
+  });
+
+  // Correctness assertion — mismatch means a bug in allocation
+  const receiptTTC = Math.round(receiptByType.reduce((s, l) => s + l.montantTTC, 0) * 100) / 100;
+  if (Math.abs(receiptTTC - appliedAmount) > 0.02)
+    console.error(`[RECEIPT ASSERTION] receipt=${receiptTTC} applied=${appliedAmount} diff=${receiptTTC - appliedAmount}`);
+
+  return { allocations, unappliedAmount, appliedAmount, lines, receiptByType };
+}
+
+/* POST /api/bills/:billId/payments/preview — dry-run FIFO allocation (Phase 3B.2)
+   Accepts {amountTTC} for waterfall or {dischargeIds:[...]} for specific selection.
+   NO database writes — returns the allocation plan for the bill-generation step. */
+app.post('/api/bills/:billId/payments/preview', async (req, res) => {
+  const { amountTTC, dischargeIds } = req.body;
+  const hasAmount = amountTTC != null && parseFloat(amountTTC) > 0;
+  const hasIds    = Array.isArray(dischargeIds) && dischargeIds.length > 0;
+  if (!hasAmount && !hasIds)
+    return res.status(400).json({ error: 'amountTTC ou dischargeIds requis.' });
+  try {
+    const { rows: bills } = await q('SELECT * FROM bills WHERE id=$1', [req.params.billId]);
+    if (!bills.length) return res.status(404).json({ error: 'Facture introuvable.' });
+    const { rows: cls } = await q('SELECT vat_subject FROM clients WHERE id=$1', [bills[0].client_id]);
+    const vatSubject = cls.length ? (cls[0].vat_subject || false) : false;
+    const { rows: discs } = await q(`
+      SELECT d.id, d.ts, d.waste_type, d.unit_price, d.pay_method,
+        (CASE WHEN $2 THEN d.total * 1.19 ELSE d.total END)
+          - COALESCE((SELECT SUM(dp.applied_amount_ttc) FROM discharge_payments dp
+                      WHERE dp.discharge_id = d.id), 0) AS remaining_ttc
+      FROM discharges d
+      JOIN bill_discharges bd ON bd.discharge_id = d.id
+      WHERE bd.bill_id = $1
+      ORDER BY d.ts ASC, d.id ASC
+    `, [req.params.billId, vatSubject]);
+    const input  = hasIds ? { dischargeIds } : { amountTTC: parseFloat(amountTTC) };
+    const result = computeFifoAllocation(discs, input, vatSubject);
+    ok(res, { lines: result.lines, unappliedAmount: result.unappliedAmount,
+              receiptByType: result.receiptByType, totalApplied: result.appliedAmount });
+  } catch(e) { er(res, e); }
+});
+
+/* POST /api/bills/:billId/payments — commit FIFO payment (Phase 3.2 + 3B)
+   Accepts {amountTTC} for waterfall or {dischargeIds:[...]} for specific selection.
+   Uses the same computeFifoAllocation function as the preview endpoint. */
 app.post('/api/bills/:billId/payments', async (req, res) => {
-  const { amountTTC, method, note, createdBy } = req.body;
-  if (!amountTTC || amountTTC <= 0) return res.status(400).json({ error: 'Montant invalide.' });
+  const { amountTTC, dischargeIds, method, note, createdBy } = req.body;
+  const hasAmount = amountTTC != null && parseFloat(amountTTC) > 0;
+  const hasIds    = Array.isArray(dischargeIds) && dischargeIds.length > 0;
+  if (!hasAmount && !hasIds)
+    return res.status(400).json({ error: 'Montant ou sélection de dépôts requis.' });
   const dbClient = await pool.connect();
   try {
     await dbClient.query('BEGIN');
-
     const { rows: bills } = await dbClient.query(
       'SELECT * FROM bills WHERE id=$1 FOR UPDATE', [req.params.billId]
     );
@@ -985,61 +1133,36 @@ app.post('/api/bills/:billId/payments', async (req, res) => {
       await dbClient.query('ROLLBACK'); dbClient.release();
       return res.status(400).json({ error: 'Cette facture est déjà soldée.' });
     }
-
     const { rows: cls } = await dbClient.query(
       'SELECT vat_subject FROM clients WHERE id=$1', [bill.client_id]
     );
     const vatSubject = cls.length ? (cls[0].vat_subject || false) : false;
-
     // Fetch discharges with live remaining balance, locked FOR UPDATE, FIFO order
     const { rows: discs } = await dbClient.query(`
-      SELECT d.id, d.ts, d.waste_type, d.unit_price,
+      SELECT d.id, d.ts, d.waste_type, d.unit_price, d.pay_method,
         (CASE WHEN $2 THEN d.total * 1.19 ELSE d.total END)
-          - COALESCE((
-              SELECT SUM(dp.applied_amount_ttc) FROM discharge_payments dp
-              WHERE dp.discharge_id = d.id
-            ), 0) AS remaining_ttc
+          - COALESCE((SELECT SUM(dp.applied_amount_ttc) FROM discharge_payments dp
+                      WHERE dp.discharge_id = d.id), 0) AS remaining_ttc
       FROM discharges d
       JOIN bill_discharges bd ON bd.discharge_id = d.id
       WHERE bd.bill_id = $1
       ORDER BY d.ts ASC, d.id ASC
       FOR UPDATE OF d
     `, [req.params.billId, vatSubject]);
-
-    let P_c = Math.round(amountTTC * 100); // work in integer centimes
-    const allocations = [];
-
-    for (const d of discs) {
-      const due_c = Math.round(parseFloat(d.remaining_ttc) * 100);
-      if (due_c <= 0) continue;
-      if (P_c <= 0) break;
-      const applied_c  = Math.min(P_c, due_c);
-      const appliedTTC = applied_c / 100;
-      const appliedHT  = toHT(appliedTTC, vatSubject);
-      const unitP      = parseFloat(d.unit_price) || 0;
-      const appliedQty = unitP > 0 ? Math.round((appliedHT / unitP) * 1000) / 1000 : 0;
-      allocations.push({ discharge_id: d.id, waste_type: d.waste_type, unit_price: unitP,
-                         applied_c, appliedTTC, appliedHT, appliedQty });
-      P_c -= applied_c;
-    }
-
-    const unappliedAmount = P_c / 100;
-    const appliedAmount   = Math.round((amountTTC - unappliedAmount) * 100) / 100;
-
-    if (appliedAmount <= 0) {
+    const input  = hasIds ? { dischargeIds } : { amountTTC: parseFloat(amountTTC) };
+    const result = computeFifoAllocation(discs, input, vatSubject);
+    if (result.appliedAmount <= 0) {
       await dbClient.query('ROLLBACK'); dbClient.release();
       return res.status(400).json({ error: 'Aucune allocation possible — solde déjà soldé ?' });
     }
-
     const paymentId = `PY-${Date.now().toString(36).toUpperCase()}`;
     await dbClient.query(
       `INSERT INTO payments(id,client_id,bill_id,amount_ttc,method,note,created_by)
        VALUES($1,$2,$3,$4,$5,$6,$7)`,
-      [paymentId, bill.client_id, req.params.billId, appliedAmount,
+      [paymentId, bill.client_id, req.params.billId, result.appliedAmount,
        method||null, note||null, createdBy||null]
     );
-
-    for (const a of allocations) {
+    for (const a of result.allocations) {
       await dbClient.query(
         `INSERT INTO discharge_payments
            (discharge_id,payment_id,bill_id,applied_amount_ttc,applied_amount_ht,applied_qty)
@@ -1047,7 +1170,6 @@ app.post('/api/bills/:billId/payments', async (req, res) => {
         [a.discharge_id, paymentId, req.params.billId, a.appliedTTC, a.appliedHT, a.appliedQty]
       );
     }
-
     // Recompute bill status
     const { rows: rem } = await dbClient.query(`
       SELECT COALESCE(SUM(
@@ -1059,36 +1181,12 @@ app.post('/api/bills/:billId/payments', async (req, res) => {
       JOIN bill_discharges bd ON bd.discharge_id = d.id
       WHERE bd.bill_id = $1
     `, [req.params.billId, vatSubject]);
-
     const newStatus = parseFloat(rem[0].remaining) < 0.005 ? 'paid' : 'partial';
     await dbClient.query('UPDATE bills SET status=$1 WHERE id=$2', [newStatus, req.params.billId]);
-
-    // Phase 3.3 — receipt grouped by (waste_type, unit_price) — separate sub-lines for mixed tariffs
-    const groups = {};
-    for (const a of allocations) {
-      const key = `${a.waste_type}||${a.unit_price}`;
-      if (!groups[key]) groups[key] = { wasteType: a.waste_type, unitPrice: a.unit_price, ht: 0, qty: 0 };
-      groups[key].ht  += a.appliedHT;
-      groups[key].qty += a.appliedQty;
-    }
-    const receiptLines = Object.values(groups).map(g => ({
-      wasteType:  g.wasteType,
-      unitPrice:  Math.round(g.unitPrice * 100) / 100,
-      qty:        Math.round(g.qty * 1000) / 1000,
-      montantHT:  Math.round(g.ht * 100) / 100,
-      montantTTC: toTTC(Math.round(g.ht * 100) / 100, vatSubject),
-    }));
-
-    // Phase 3.3 assertion: receipt total must exactly equal applied amount
-    const receiptTTC = Math.round(receiptLines.reduce((s, l) => s + l.montantTTC, 0) * 100) / 100;
-    if (Math.abs(receiptTTC - appliedAmount) > 0.02) {
-      console.error(`[RECEIPT ASSERTION FAILED] receipt=${receiptTTC} applied=${appliedAmount}`);
-    }
-
     await dbClient.query('COMMIT');
     dbClient.release();
-    ok(res, { paymentId, appliedAmount, unappliedAmount, billStatus: newStatus,
-              allocations, receiptLines });
+    ok(res, { paymentId, appliedAmount: result.appliedAmount, unappliedAmount: result.unappliedAmount,
+              billStatus: newStatus, allocations: result.allocations, receiptLines: result.receiptByType });
   } catch(e) {
     await dbClient.query('ROLLBACK'); dbClient.release();
     er(res, e);
@@ -1102,6 +1200,29 @@ app.get('/api/bills/:billId/payments', async (req, res) => {
       [req.params.billId]
     );
     ok(res, rows);
+  } catch(e) { er(res, e); }
+});
+
+/* GET /api/clients/:clientId/discharge-payments — per-discharge payment summary (Phase 3B.4)
+   Returns a map of discharge_id → {paidTTC, details:[{paymentId,billId,appliedTTC,createdAt}]} */
+app.get('/api/clients/:clientId/discharge-payments', async (req, res) => {
+  try {
+    const { rows } = await q(`
+      SELECT dp.discharge_id,
+        COALESCE(SUM(dp.applied_amount_ttc), 0) AS paid_ttc,
+        json_agg(json_build_object(
+          'paymentId', dp.payment_id, 'billId', dp.bill_id,
+          'appliedTTC', dp.applied_amount_ttc, 'createdAt', dp.created_at
+        ) ORDER BY dp.created_at) AS payment_details
+      FROM discharge_payments dp
+      JOIN discharges d ON d.id = dp.discharge_id
+      WHERE d.client_id = $1
+      GROUP BY dp.discharge_id
+    `, [req.params.clientId]);
+    const map = {};
+    for (const r of rows)
+      map[r.discharge_id] = { paidTTC: parseFloat(r.paid_ttc), details: r.payment_details };
+    ok(res, map);
   } catch(e) { er(res, e); }
 });
 

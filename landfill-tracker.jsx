@@ -3018,6 +3018,16 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
   const c = clients.find(c=>c.id===sel);
   const cd = sel ? discharges.filter(d=>d.clientId===sel) : [];
 
+  // Per-discharge payment progress (Phase 3B.4) — fetched when client is selected
+  const [discPayments, setDiscPayments] = useState({});
+  useEffect(() => {
+    if (!sel) { setDiscPayments({}); return; }
+    fetch(`/api/clients/${sel}/discharge-payments`)
+      .then(r => r.json())
+      .then(data => { if (data && typeof data === 'object' && !Array.isArray(data) && !data.error) setDiscPayments(data); })
+      .catch(() => {});
+  }, [sel]);
+
   const [approveMode, setApproveMode] = useState("weight"); // "weight" | "credit" | "rotation"
   const [weightInput, setWeightInput] = useState("");
   const [rotationInput, setRotationInput] = useState("");
@@ -3593,18 +3603,35 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                   <div className="ph"><span className="pt">{t("Historique des dépôts","سجل التفريغ")}</span><span className="tsm tmu">{cd.length} {t("entrées","سجل")}</span></div>
                   <div className="tw">
                     <table>
-                      <thead><tr><th>{t("Date","التاريخ")}</th><th>{t("Site","الموقع")}</th><th>{t("Camion","الشاحنة")}</th><th>{t("Net(t)","الصافي(ط)")}</th><th>{t("Total","المجموع")}</th><th>{t("Statut","الحالة")}</th></tr></thead>
+                      <thead><tr><th>{t("Date","التاريخ")}</th><th>{t("Site","الموقع")}</th><th>{t("Camion","الشاحنة")}</th><th>{t("Net(t)","الصافي(ط)")}</th><th>{t("Total","المجموع")}</th><th>{t("Paiement","الدفع")}</th><th>{t("Statut","الحالة")}</th></tr></thead>
                       <tbody>
-                        {cd.map(d=>(
+                        {cd.map(d=>{
+                          const dp = discPayments[d.id];
+                          const paidTTC = dp?.paidTTC || 0;
+                          const totalTTC = c?.vatSubject ? Math.round(d.total * 1.19 * 100)/100 : d.total;
+                          const remTTC   = Math.max(0, totalTTC - paidTTC);
+                          return (
                           <tr key={d.id}>
                             <td className="mn">{fmtTs(d.ts)}</td>
                             <td><span className="badge b-info">{d.siteId}</span></td>
                             <td className="mn">{d.truck}</td>
                             <td className="mn">{fmtN(d.net)}</td>
                             <td className="mn tg">{fmt(d.total)}</td>
+                            <td style={{minWidth:110}}>
+                              {paidTTC <= 0
+                                ? <span style={{color:"var(--muted)",fontSize:11}}>—</span>
+                                : remTTC < 0.005
+                                  ? <span style={{color:"var(--g)",fontSize:11,fontWeight:700}}>✅ Soldé</span>
+                                  : <div style={{fontSize:10,lineHeight:1.5}}>
+                                      <span style={{color:"var(--g)",fontWeight:700}}>{fmt(paidTTC)}</span>
+                                      <span style={{color:"var(--muted)"}}> / {fmt(totalTTC)}</span>
+                                      <div style={{color:"var(--warn)",fontWeight:600}}>reste {fmt(remTTC)}</div>
+                                    </div>}
+                            </td>
                             <td><StatusBadge s={d.status}/></td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -5396,12 +5423,124 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [partialCalcMode,    setPartialCalcMode]    = useState("tonnage"); // "tonnage" | "rotation"
   const [partialCalcPrinted, setPartialCalcPrinted] = useState(false);
 
+  // Bill-based payment modal — Phase 3B three-strategy engine
+  const [billPayModal,    setBillPayModal]    = useState(null);  // {bill, cl}
+  const [billPayStrategy, setBillPayStrategy] = useState("libre"); // "libre"|"specifique"|"integral"
+  const [billPayAmt,      setBillPayAmt]      = useState("");
+  const [billPaySelDiscs, setBillPaySelDiscs] = useState([]);   // for "specifique"
+  const [billPayPreview,  setBillPayPreview]  = useState(null); // result from preview endpoint
+  const [billPayPrinted,  setBillPayPrinted]  = useState(false);
+  const [billPayLoading,  setBillPayLoading]  = useState(false);
+
   const openPartialCalcModal = (inv, cl) => {
     setPartialCalcModal({inv, cl});
     setPartialCalcAmt("");
     setPartialCalcWT(wasteTypes[0]?.id || "");
     setPartialCalcMode("tonnage");
     setPartialCalcPrinted(false);
+  };
+
+  /* ── Bill-payment engine (Phase 3B) ─────────────────────────────────────── */
+  const openBillPayModal = async (cl) => {
+    setBillPayLoading(true);
+    try {
+      const bRes  = await fetch(`/api/bills?clientId=${cl.id}`);
+      const bills = await bRes.json();
+      const openB = Array.isArray(bills) ? bills.find(b => b.status === 'open' || b.status === 'partial') : null;
+      let bill;
+      if (openB) {
+        const dRes = await fetch(`/api/bills/${openB.id}`);
+        bill = await dRes.json();
+      } else {
+        const genRes  = await fetch('/api/bills', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ clientId: cl.id })
+        });
+        const genData = await genRes.json();
+        if (genData.error) { alert(`⚠️ ${genData.error}`); return; }
+        // Fetch full bill detail (with remaining_ttc per discharge)
+        const dRes = await fetch(`/api/bills/${genData.id}`);
+        bill = await dRes.json();
+      }
+      setBillPayModal({ bill, cl });
+      setBillPayStrategy("libre");
+      setBillPayAmt("");
+      setBillPaySelDiscs([]);
+      setBillPayPreview(null);
+      setBillPayPrinted(false);
+    } catch(e) { alert("Erreur lors du chargement de la facture."); }
+    finally { setBillPayLoading(false); }
+  };
+
+  const doBillPayPreview = async () => {
+    if (!billPayModal || billPayLoading) return;
+    setBillPayLoading(true);
+    setBillPayPreview(null);
+    setBillPayPrinted(false);
+    try {
+      const body = billPayStrategy === "specifique"
+        ? { dischargeIds: billPaySelDiscs }
+        : { amountTTC: parseFloat(billPayStrategy === "integral"
+              ? billPayModal.bill.remainingTotal
+              : billPayAmt) };
+      const res  = await fetch(`/api/bills/${billPayModal.bill.id}/payments/preview`, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.error) { alert(`⚠️ ${data.error}`); return; }
+      if (data.unappliedAmount > 0.005) {
+        alert(`⚠️ Le montant saisi dépasse le reste dû.\nNon affecté : ${fmt(data.unappliedAmount)} DA.\nCorrigez le montant avant de continuer.`);
+        return;
+      }
+      setBillPayPreview(data);
+    } catch(e) { alert("Erreur lors de la prévisualisation."); }
+    finally { setBillPayLoading(false); }
+  };
+
+  const doBillPayGenerate = () => {
+    if (!billPayPreview || !billPayModal) return;
+    const { cl, bill } = billPayModal;
+    const { receiptByType } = billPayPreview;
+    const billNum = `FAC-PAY-${Date.now().toString(36).toUpperCase()}`;
+    const precomputedRows = receiptByType.map((r, i) => ({
+      num: i + 1,
+      label: `${r.partial ? '[Partiel] ' : ''}Traitement — ${wasteTypes.find(w => w.id === r.wasteType)?.label || r.wasteType}${r.note ? ` (${r.note})` : ''}`,
+      isRotation: r.billingMode === 'rotation',
+      qty:        r.qty,
+      unitPrice:  r.unitPrice,
+      tva:        cl.vatSubject ? 19 : 0,
+      ht:         r.montantHT,
+    }));
+    const html = generateOfficialBillHTML(cl, [], company, '', billNum, wasteTypes, { precomputedRows });
+    const win  = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
+    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `${billNum}.doc`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    setBillPayPrinted(true);
+  };
+
+  const doBillPayConfirm = async () => {
+    if (!billPayModal || !billPayPreview || !billPayPrinted || billPayLoading) return;
+    setBillPayLoading(true);
+    try {
+      const body = billPayStrategy === "specifique"
+        ? { dischargeIds: billPaySelDiscs, method: 'convention' }
+        : { amountTTC: parseFloat(billPayStrategy === "integral"
+              ? billPayModal.bill.remainingTotal
+              : billPayAmt), method: 'convention' };
+      const res  = await fetch(`/api/bills/${billPayModal.bill.id}/payments`, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.error) { alert(`⚠️ ${data.error}`); return; }
+      alert(`✅ Paiement enregistré.\nMontant appliqué : ${fmt(data.appliedAmount)} DA\nStatut : ${data.billStatus === 'paid' ? 'Facture soldée ✅' : 'Paiement partiel ⏳'}`);
+      setBillPayModal(null);
+    } catch(e) { alert("Erreur lors de la confirmation du paiement."); }
+    finally { setBillPayLoading(false); }
   };
 
   // Step 1: generate & print the bill (no invoice update yet)
@@ -5783,6 +5922,14 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                             {inv&&inv.status!=="paid"&&(
                               <button className="btn bsm" style={{fontSize:10,background:"var(--indigo)",color:"#fff",borderColor:"var(--indigo)"}} onClick={()=>openPartialCalcModal(inv,cl)}>💳 Paiement Partiel</button>
                             )}
+                            <button className="btn bsm"
+                              style={{fontSize:10,background:"#0891b2",color:"#fff",borderColor:"#0891b2",
+                                opacity:billPayLoading?.6:1}}
+                              disabled={billPayLoading}
+                              onClick={()=>openBillPayModal(cl)}
+                              title="Régler via le système de factures (Montant libre, Par décharge, Paiement intégral)">
+                              💰 Régler Facture
+                            </button>
                             {inv&&inv.status==="pending"&&(
                               <button className="btn be bsm" style={{fontSize:10}} onClick={()=>markOverdue(inv)}>🔴 Impayée</button>
                             )}
@@ -6628,6 +6775,195 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                       ✓ Confirmer la réception du paiement
                     </button>
                 }
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Bill-Payment Modal (Phase 3B) — Montant libre / Par décharge / Paiement intégral ── */}
+      {billPayModal&&(()=>{
+        const { bill, cl } = billPayModal;
+        const discs = (bill.discharges || []).filter(d => parseFloat(d.remaining_ttc) > 0.005);
+        const billRemaining = bill.remainingTotal || 0;
+        const enteredAmt = billPayStrategy === "integral"
+          ? billRemaining
+          : (parseFloat(billPayAmt) || 0);
+        const canPreview = billPayStrategy === "specifique"
+          ? billPaySelDiscs.length > 0
+          : enteredAmt > 0 && enteredAmt <= billRemaining + 0.01;
+        return (
+          <div className="ov">
+            <div className="modal" style={{maxWidth:560}}>
+              <div className="mh">
+                <span className="mh-title">💰 Régler une Facture</span>
+                <button className="btn bg bsm" onClick={()=>setBillPayModal(null)}>✕</button>
+              </div>
+              <div className="mb2">
+
+                {/* Bill summary */}
+                <div className="cost-box mb4">
+                  <div className="cl"><span className="clb">Client</span><span className="clv mn fw7">{cl.name}</span></div>
+                  <div className="cl"><span className="clb">Facture</span><span className="clv mn tmu" style={{fontSize:11}}>{bill.id}</span></div>
+                  <div className="cl"><span className="clb">Total facturé</span><span className="clv mn">{fmt(bill.total_ttc)}</span></div>
+                  <div className="cl"><span className="clb">Déjà réglé</span><span className="clv mn" style={{color:"var(--g)"}}>{fmt(Math.max(0, (bill.total_ttc||0) - billRemaining))}</span></div>
+                  <div className="cl ct"><span style={{fontWeight:700}}>Reste à régler</span><span className="ctv">{fmt(billRemaining)}</span></div>
+                </div>
+
+                {/* Strategy toggle */}
+                <div className="field mb3" style={{marginBottom:14}}>
+                  <label>Mode de sélection du paiement</label>
+                  <div className="seg" style={{marginTop:4,width:"100%"}}>
+                    {[
+                      {id:"libre",     label:"💵 Montant libre"},
+                      {id:"specifique",label:"☑️ Par décharge"},
+                      {id:"integral",  label:"✅ Intégral"},
+                    ].map(s=>(
+                      <button key={s.id}
+                        className={`seg-btn${billPayStrategy===s.id?" active":""}`}
+                        onClick={()=>{
+                          setBillPayStrategy(s.id);
+                          setBillPayPreview(null);
+                          setBillPayPrinted(false);
+                          if(s.id==="specifique") setBillPaySelDiscs([]);
+                        }}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Montant libre — amount input */}
+                {billPayStrategy==="libre"&&(
+                  <div className="field mb3" style={{marginBottom:14}}>
+                    <label>Montant versé (DA TTC)</label>
+                    <input className="fi" type="number" min="0.01" step="0.01"
+                      value={billPayAmt} placeholder={`Max ${fmt(billRemaining)} DA`}
+                      onChange={e=>{setBillPayAmt(e.target.value); setBillPayPreview(null); setBillPayPrinted(false);}}/>
+                    {parseFloat(billPayAmt)>billRemaining+0.01&&(
+                      <div style={{fontSize:10,color:"var(--err)",marginTop:3}}>⚠ Dépasse le reste dû ({fmt(billRemaining)} DA)</div>
+                    )}
+                  </div>
+                )}
+
+                {/* Paiement intégral — locked amount display */}
+                {billPayStrategy==="integral"&&(
+                  <div style={{background:"rgba(46,201,92,.06)",border:"1px solid rgba(46,201,92,.2)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+                    <div style={{fontWeight:700,fontSize:12,color:"var(--g)",marginBottom:4}}>✅ Paiement intégral</div>
+                    <div style={{fontSize:12}}>Montant à régler : <strong className="mn">{fmt(billRemaining)} DA</strong> — solde complet de cette facture</div>
+                  </div>
+                )}
+
+                {/* Par décharge spécifique — discharge checklist */}
+                {billPayStrategy==="specifique"&&(
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Sélectionner les dépôts à solder :</div>
+                    {discs.length===0
+                      ? <div style={{textAlign:"center",padding:20,color:"var(--muted)",fontSize:12}}>Aucun dépôt à régler dans cette facture.</div>
+                      : <div style={{maxHeight:200,overflowY:"auto",border:"1px solid var(--bdr)",borderRadius:8}}>
+                          {discs.map(d=>{
+                            const rem = Math.max(0, parseFloat(d.remaining_ttc));
+                            const chk = billPaySelDiscs.includes(d.id);
+                            return (
+                              <label key={d.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
+                                borderBottom:"1px solid var(--bdr)",cursor:"pointer",
+                                background:chk?"rgba(99,102,241,.06)":"transparent"}}>
+                                <input type="checkbox" checked={chk}
+                                  onChange={()=>{
+                                    setBillPayPreview(null); setBillPayPrinted(false);
+                                    setBillPaySelDiscs(prev=>prev.includes(d.id)?prev.filter(x=>x!==d.id):[...prev,d.id]);
+                                  }}/>
+                                <div style={{flex:1,fontSize:12}}>
+                                  <div className="fw7">{fmtTs(d.ts)} — {wasteTypes.find(w=>w.id===d.waste_type)?.label||d.waste_type}</div>
+                                  <div style={{color:"var(--muted)",fontSize:11}}>
+                                    {d.pay_method==="rotation"?"🔄 Rotation":"⚖️ Net: "+fmtN(d.net)+" t"}
+                                    {" · "}{fmt(d.unit_price)} DA/{d.pay_method==="rotation"?"rot.":"t"}
+                                  </div>
+                                </div>
+                                <div style={{fontSize:12,fontFamily:"var(--mono)",color:"var(--err)",fontWeight:700}}>
+                                  {fmt(rem)} DA
+                                </div>
+                              </label>
+                            );
+                          })}
+                        </div>
+                    }
+                    {billPaySelDiscs.length>0&&(
+                      <div style={{fontSize:12,marginTop:8,fontWeight:700,color:"var(--indigo)"}}>
+                        {billPaySelDiscs.length} dépôt(s) — {fmt(
+                          discs.filter(d=>billPaySelDiscs.includes(d.id))
+                            .reduce((s,d)=>s+Math.max(0,parseFloat(d.remaining_ttc)),0)
+                        )} DA
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Preview result */}
+                {billPayPreview&&(
+                  <div style={{background:"rgba(99,102,241,.06)",border:"1px solid rgba(99,102,241,.25)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+                    <div style={{fontWeight:700,fontSize:12,color:"var(--indigo)",marginBottom:8}}>📊 Prévisualisation de l'allocation FIFO</div>
+                    {billPayPreview.receiptByType.map((r,i)=>(
+                      <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:3}}>
+                        <span style={{color:"var(--muted)"}}>
+                          {r.partial&&<strong style={{color:"var(--warn)"}}>[Partiel] </strong>}
+                          {wasteTypes.find(w=>w.id===r.wasteType)?.label||r.wasteType}
+                          {r.billingMode==="rotation"
+                            ? ` — ${r.qty} rot.`
+                            : ` — ${r.qty.toLocaleString("fr-FR",{maximumFractionDigits:3})} t`}
+                          {" @ "}{fmt(r.unitPrice)} DA
+                          {r.note&&<span style={{fontSize:10,color:"var(--warn)"}}> ({r.note})</span>}
+                        </span>
+                        <span className="mn fw7">{fmt(r.montantTTC)} DA</span>
+                      </div>
+                    ))}
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:13,fontWeight:800,
+                      borderTop:"1px solid rgba(99,102,241,.2)",paddingTop:6,marginTop:4}}>
+                      <span>Total appliqué</span>
+                      <span className="mn" style={{color:"var(--indigo)"}}>{fmt(billPayPreview.totalApplied)} DA</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Printed confirmation */}
+                {billPayPrinted&&(
+                  <div style={{background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.3)",borderRadius:10,padding:"12px 14px",marginTop:8}}>
+                    <div style={{fontWeight:700,fontSize:12,color:"var(--g)",marginBottom:4}}>✅ Facture générée et téléchargée</div>
+                    <div style={{fontSize:12,color:"var(--muted)"}}>Confirmez la réception du paiement pour l'enregistrer dans le système. Si vous changez la sélection, la facture devra être régénérée.</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mf">
+                <button className="btn bg" onClick={()=>setBillPayModal(null)}>Annuler</button>
+                {/* Step 1: Preview */}
+                {!billPayPreview&&(
+                  <button className="btn bsm"
+                    style={{background:"var(--indigo)",color:"#fff",borderColor:"var(--indigo)",opacity:canPreview?1:.5}}
+                    disabled={!canPreview||billPayLoading}
+                    onClick={doBillPayPreview}>
+                    {billPayLoading?"⏳ Calcul…":"🔍 Prévisualiser l'allocation"}
+                  </button>
+                )}
+                {/* Step 2: Generate bill document */}
+                {billPayPreview&&!billPayPrinted&&(
+                  <button className="btn bsm"
+                    style={{background:"var(--indigo)",color:"#fff",borderColor:"var(--indigo)"}}
+                    disabled={billPayLoading}
+                    onClick={doBillPayGenerate}>
+                    🖨️ Générer la facture de ce paiement
+                  </button>
+                )}
+                {/* Step 3: Confirm (only after document generated) */}
+                {billPayPrinted&&(
+                  <button className="btn bsm"
+                    style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)",
+                      opacity:billPayLoading?.6:1}}
+                    disabled={billPayLoading}
+                    onClick={doBillPayConfirm}>
+                    {billPayLoading?"⏳ Enregistrement…":"✓ Confirmer la réception du paiement"}
+                  </button>
+                )}
               </div>
             </div>
           </div>
