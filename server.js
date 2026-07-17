@@ -244,7 +244,7 @@ app.post('/api/discharges', async (req, res) => {
           const pfx = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
           const { rows: rRows } = await dbClient.query(
             `SELECT COUNT(*) AS cnt FROM discharges
-             WHERE client_id=$1 AND pay_method='rotation' AND status!='cancelled' AND ts LIKE $2`,
+             WHERE client_id=$1 AND pay_method='rotation' AND status!='cancelled' AND ts::text LIKE $2`,
             [d.clientId, pfx + '%']
           );
           if ((parseInt(rRows[0].cnt) || 0) >= parseInt(cl.rotation_limit)) forcedStatus = 'flagged';
@@ -260,8 +260,8 @@ app.post('/api/discharges', async (req, res) => {
           const isRot = d.payMethod === 'rotation';
           const { rows: wRows } = await dbClient.query(
             isRot
-              ? `SELECT COUNT(*) AS val FROM discharges WHERE client_id=$1 AND status!='cancelled' AND ts LIKE $2`
-              : `SELECT COALESCE(SUM(net),0) AS val FROM discharges WHERE client_id=$1 AND status!='cancelled' AND ts LIKE $2`,
+              ? `SELECT COUNT(*) AS val FROM discharges WHERE client_id=$1 AND status!='cancelled' AND ts::text LIKE $2`
+              : `SELECT COALESCE(SUM(net),0) AS val FROM discharges WHERE client_id=$1 AND status!='cancelled' AND ts::text LIKE $2`,
             [d.clientId, pfx + '%']
           );
           const used     = parseFloat(wRows[0].val) || 0;

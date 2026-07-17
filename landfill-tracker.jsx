@@ -5924,7 +5924,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                             )}
                             <button className="btn bsm"
                               style={{fontSize:10,background:"#0891b2",color:"#fff",borderColor:"#0891b2",
-                                opacity:billPayLoading?.6:1}}
+                                opacity:billPayLoading ? 0.6 : 1}}
                               disabled={billPayLoading}
                               onClick={()=>openBillPayModal(cl)}
                               title="Régler via le système de factures (Montant libre, Par décharge, Paiement intégral)">
@@ -6958,7 +6958,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 {billPayPrinted&&(
                   <button className="btn bsm"
                     style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)",
-                      opacity:billPayLoading?.6:1}}
+                      opacity:billPayLoading ? 0.6 : 1}}
                     disabled={billPayLoading}
                     onClick={doBillPayConfirm}>
                     {billPayLoading?"⏳ Enregistrement…":"✓ Confirmer la réception du paiement"}
