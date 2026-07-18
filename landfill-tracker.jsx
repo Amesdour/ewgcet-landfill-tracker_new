@@ -4790,341 +4790,6 @@ ${(()=>{const alreadyPaid=opts.alreadyPaid||0;const netAPayer=alreadyPaid>0?Math
 
 </div></body></html>`;
 }
-function generatePartialBillHTML(c, company, invNum, wtLabel, qty, isRotation, unitPrice, amountHT, remainingAfter) {
-  const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
-  const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
-  const TVA = c.vatSubject ? 19 : 0;
-  const tvaAmt = amountHT * TVA / 100;
-  const totalTTC = amountHT + tvaAmt;
-  const remainingTTC = remainingAfter;
-  const date = new Date().toLocaleDateString('fr-DZ');
-  const qtyDisplay = isRotation ? `${Math.round(qty)} rotation${Math.round(qty)>1?'s':''}` : `${fQ(qty)} t`;
-  const unitDisplay = isRotation ? 'rot.' : 't';
-  const rowHTML = `
-    <tr>
-      <td style="text-align:center;">1</td>
-      <td><strong>Traitement — ${wtLabel}</strong></td>
-      <td style="text-align:right;">${qtyDisplay}</td>
-      <td style="text-align:right;">${fB(unitPrice)}&nbsp;/&nbsp;${unitDisplay}</td>
-      <td style="text-align:center;">${TVA}%</td>
-      <td style="text-align:right;">${fB(amountHT)}</td>
-    </tr>`;
-  return `<!DOCTYPE html>
-<html xmlns:o='urn:schemas-microsoft-com:office:office'
-      xmlns:w='urn:schemas-microsoft-com:office:word'
-      xmlns='http://www.w3.org/TR/REC-html40' lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<title>Facture Partielle ${invNum}</title>
-<!--[if gte mso 9]><xml>
-<w:WordDocument>
-  <w:View>Print</w:View>
-  <w:Zoom>100</w:Zoom>
-  <w:DoNotOptimizeForBrowser/>
-</w:WordDocument>
-</xml><![endif]-->
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#000}
-  table{border-collapse:collapse;width:100%}
-  th,td{border:1px solid #000;padding:6px 10px}
-  th{background:#f0f0f0;font-weight:bold;text-align:center;font-size:13px}
-  .nb td,.nb th{border:none;padding:3px 5px}
-  .sep{border-top:2.5px solid #000;margin:6px 0}
-  .sep2{border-top:1px solid #000;margin:5px 0}
-  .r{text-align:right}.c{text-align:center}.b{font-weight:bold}
-  @page WordSection1{size:21.0cm 29.7cm;margin:1.5cm 1.8cm;mso-page-orientation:portrait}
-  @page{size:21.0cm 29.7cm;margin:1.5cm 1.8cm}
-  div.WordSection1{page:WordSection1}
-  @media print{body{padding:0} .WordSection1{padding-bottom:32px}}
-</style>
-</head>
-<body>
-<div class="WordSection1">
-
-<div style="text-align:center;font-size:15px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-bottom:8px;color:#000">
-  الجمهورية الجزائرية الديموقراطية الشعبية
-</div>
-
-<table class="nb" style="width:100%;margin-bottom:6px">
-  <tr>
-    <td style="border:none;vertical-align:top;width:70%">
-      <div style="font-size:12px;line-height:2;color:#000">
-        <div style="font-size:13.5px;font-weight:bold;margin-bottom:4px">
-          Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL
-        </div>
-        <div>Cité Administrative, 01ème Étage, Ayouf Ouest — Jijel</div>
-        <div>IF&nbsp;: 000918044299126 &nbsp;·&nbsp; RC&nbsp;: 18/000442991H09</div>
-        <div>Tél&nbsp;: 034 47 37 62 &nbsp;·&nbsp; Fax&nbsp;: 034 47 37 62</div>
-        <div>BNQ&nbsp;: BADR Jijel — 00300676300261300093</div>
-      </div>
-    </td>
-    <td style="border:none;text-align:right;vertical-align:middle;width:30%">
-      <img src="/logo.png" alt="EPWGCET" style="width:90px;height:90px;object-fit:contain"/>
-    </td>
-  </tr>
-</table>
-
-<div class="sep"></div>
-
-<div style="display:flex;justify-content:space-between;padding:6px 2px;font-weight:bold;font-size:13.5px">
-  <span>FACTURE PARTIELLE / ACOMPTE : ${invNum}</span>
-  <span>JIJEL, LE : ${date}</span>
-</div>
-<div style="margin:4px 2px 0;font-size:11px;color:#7c3aed;font-weight:bold;letter-spacing:.03em">⚠ Ce document constitue un acompte partiel et non un règlement définitif.</div>
-
-<div class="sep"></div>
-
-<div style="margin:10px 2px 14px;font-size:12.5px;line-height:1.9">
-  <div style="font-weight:bold;font-size:13px;margin-bottom:3px">FACTURÉ À :</div>
-  <div>${c.id} — ${c.name}</div>
-  ${c.nif    ? `<div>M.F.&nbsp;: ${c.nif}</div>` : ''}
-  ${c.rc     ? `<div>R.C.&nbsp;: ${c.rc}</div>`  : ''}
-  ${c.address? `<div>${c.address}</div>`           : ''}
-  <div style="margin-top:4px;font-size:11.5px;color:#555">
-    Régime TVA&nbsp;: ${TVA > 0 ? `Assujetti — ${TVA}%` : 'Non assujetti (exonéré)'}
-  </div>
-</div>
-
-<table>
-  <thead>
-    <tr>
-      <th style="width:36px">N°</th>
-      <th style="text-align:left;padding-left:10px">DÉSIGNATION</th>
-      <th style="width:100px">QUANTITÉ</th>
-      <th style="width:110px">PRIX U. (DA)</th>
-      <th style="width:64px">% TVA</th>
-      <th style="width:110px">MONTANT HT</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${rowHTML}
-    <tr style="background:#f5f5f5">
-      <td colspan="2" class="b" style="font-size:13px">TOTAL GÉNÉRAL (1 ligne)</td>
-      <td class="c" style="color:#999;font-size:11px">—</td>
-      <td></td><td></td>
-      <td class="r b">${fB(amountHT)}</td>
-    </tr>
-  </tbody>
-</table>
-
-<div style="margin-top:10px;border:1px solid #000;padding:7px 12px;font-size:12px">
-  <strong>Arrêtée la présente facture partielle à la somme de :</strong><br>
-  <span style="font-weight:bold;text-transform:uppercase;letter-spacing:.02em">${amountToWords(totalTTC)}</span>
-</div>
-
-<div style="display:flex;gap:16px;margin-top:12px;align-items:flex-start">
-  <table style="width:46%">
-    <thead>
-      <tr><th>TVA %</th><th>BASE HT</th><th>MONTANT TVA</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="c">${TVA > 0 ? TVA+',00 %' : 'Exonéré'}</td>
-        <td class="r">${fB(amountHT)}</td>
-        <td class="r">${fB(tvaAmt)}</td>
-      </tr>
-      <tr class="b">
-        <td class="c b">TOTAL</td>
-        <td class="r b">${fB(amountHT)}</td>
-        <td class="r b">${fB(tvaAmt)}</td>
-      </tr>
-    </tbody>
-  </table>
-  <table style="width:52%;margin-left:auto">
-    <tbody>
-      <tr><td style="width:58%">Montant H.T.</td><td class="r">${fB(amountHT)}</td></tr>
-      <tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(tvaAmt)}</td></tr>
-      <tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>
-      <tr style="background:#ede9fe">
-        <td class="b" style="font-size:14px">NET À PAYER</td>
-        <td class="r b" style="font-size:15px;color:#7c3aed">${fB(totalTTC)}</td>
-      </tr>
-    </tbody>
-  </table>
-</div>
-
-<div style="margin-top:48px;display:flex;justify-content:flex-start;padding-left:8%">
-  <div style="text-align:center;min-width:200px">
-    <div style="font-weight:bold;font-size:13px;margin-bottom:60px;text-transform:uppercase">Le Directeur</div>
-    <div style="border-top:1px solid #000;padding-top:5px;font-size:11px;color:#555">Signature &amp; Cachet</div>
-  </div>
-</div>
-
-<div style="position:fixed;bottom:0;left:0;right:0;border-top:1.5px solid #000;padding:5px 1.8cm;font-size:9.5px;color:#333;text-align:center;background:#fff;font-family:Arial,Helvetica,sans-serif">
-  Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL &nbsp;—&nbsp; Cité Administrative 3ème étage, Jijel 18000 &nbsp;—&nbsp; Tél&nbsp;: 030 49 05 94 &nbsp;—&nbsp; contact@epwgcet-jijel.dz
-</div>
-
-</div></body></html>`;
-}
-
-function generatePartialPaymentBillHTML(c, company, billNum, selectedDischarges, wasteTypes, remainingTTC) {
-  const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
-  const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
-  const TVA = c.vatSubject ? 19 : 0;
-  const groups = {};
-  selectedDischarges.forEach(d => {
-    const opT  = d.opType === 'collect' ? 'collect' : 'treatment';
-    const isRot = d.payMethod === 'rotation';
-    const key = `${opT}__${d.wasteType}__${isRot?'rotation':'tonnage'}__${d.unitPrice}`;
-    if (!groups[key]) groups[key] = {opType:opT, wasteType:d.wasteType, isRotation:isRot, count:0, net:0, total:0, unitPrice:d.unitPrice};
-    groups[key].count += 1;
-    groups[key].net   += d.net || 0;
-    groups[key].total += d.total || 0;
-  });
-  const rows = Object.values(groups).map((g,i) => ({
-    num: i+1,
-    label: `${g.opType==='collect'?'Collecte et Traitement — ':'Traitement — '}${wasteTypes.find(w=>w.id===g.wasteType)?.label||g.wasteType}`,
-    isRotation: g.isRotation,
-    qty: g.isRotation ? g.count : g.net,
-    unitPrice: g.unitPrice,
-    ht: g.total,
-  }));
-  const totalHT  = rows.reduce((s,r) => s+r.ht, 0);
-  const totalTVA = totalHT * TVA / 100;
-  const totalTTC = totalHT + totalTVA;
-  const date = new Date().toLocaleDateString('fr-DZ');
-  const rowsHTML = rows.map(r => `
-    <tr>
-      <td style="text-align:center;">${r.num}</td>
-      <td><strong>${r.label}</strong></td>
-      <td style="text-align:right;">${r.isRotation ? r.qty+' rot.' : fQ(r.qty)+' t'}</td>
-      <td style="text-align:right;">${fB(r.unitPrice)}&nbsp;/&nbsp;${r.isRotation?'rot.':'t'}</td>
-      <td style="text-align:center;">${TVA}%</td>
-      <td style="text-align:right;">${fB(r.ht)}</td>
-    </tr>`).join('');
-  return `<!DOCTYPE html>
-<html xmlns:o='urn:schemas-microsoft-com:office:office'
-      xmlns:w='urn:schemas-microsoft-com:office:word'
-      xmlns='http://www.w3.org/TR/REC-html40' lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<title>Facture Partielle ${billNum}</title>
-<!--[if gte mso 9]><xml>
-<w:WordDocument>
-  <w:View>Print</w:View>
-  <w:Zoom>100</w:Zoom>
-  <w:DoNotOptimizeForBrowser/>
-</w:WordDocument>
-</xml><![endif]-->
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#000}
-  table{border-collapse:collapse;width:100%}
-  th,td{border:1px solid #000;padding:6px 10px}
-  th{background:#f0f0f0;font-weight:bold;text-align:center;font-size:13px}
-  .nb td,.nb th{border:none;padding:3px 5px}
-  .sep{border-top:2.5px solid #000;margin:6px 0}
-  .r{text-align:right}.c{text-align:center}.b{font-weight:bold}
-  @page WordSection1{size:21.0cm 29.7cm;margin:1.5cm 1.8cm;mso-page-orientation:portrait}
-  @page{size:21.0cm 29.7cm;margin:1.5cm 1.8cm}
-  div.WordSection1{page:WordSection1}
-  @media print{body{padding:0} .WordSection1{padding-bottom:32px}}
-</style>
-</head>
-<body>
-<div class="WordSection1">
-<div style="text-align:center;font-size:15px;font-weight:bold;direction:rtl;font-family:'Traditional Arabic',Arial,sans-serif;margin-bottom:8px;color:#000">
-  الجمهورية الجزائرية الديموقراطية الشعبية
-</div>
-<table class="nb" style="width:100%;margin-bottom:6px">
-  <tr>
-    <td style="border:none;vertical-align:top;width:70%">
-      <div style="font-size:12px;line-height:2;color:#000">
-        <div style="font-size:13.5px;font-weight:bold;margin-bottom:4px">Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL</div>
-        <div>Cité Administrative, 01ème Étage, Ayouf Ouest — Jijel</div>
-        <div>IF&nbsp;: 000918044299126 &nbsp;·&nbsp; RC&nbsp;: 18/000442991H09</div>
-        <div>Tél&nbsp;: 034 47 37 62 &nbsp;·&nbsp; Fax&nbsp;: 034 47 37 62</div>
-        <div>BNQ&nbsp;: BADR Jijel — 00300676300261300093</div>
-      </div>
-    </td>
-    <td style="border:none;text-align:right;vertical-align:middle;width:30%">
-      <img src="/logo.png" alt="EPWGCET" style="width:90px;height:90px;object-fit:contain"/>
-    </td>
-  </tr>
-</table>
-<div class="sep"></div>
-<div style="display:flex;justify-content:space-between;padding:6px 2px;font-weight:bold;font-size:13.5px">
-  <span>FACTURE PARTIELLE / ACOMPTE : ${billNum}</span>
-  <span>JIJEL, LE : ${date}</span>
-</div>
-<div style="margin:4px 2px 0;font-size:11px;color:#7c3aed;font-weight:bold;letter-spacing:.03em">⚠ Ce document constitue un acompte partiel et non un règlement définitif.</div>
-<div class="sep"></div>
-<div style="margin:10px 2px 14px;font-size:12.5px;line-height:1.9">
-  <div style="font-weight:bold;font-size:13px;margin-bottom:3px">FACTURÉ À :</div>
-  <div>${c.id} — ${c.name}</div>
-  ${c.nif    ? `<div>M.F.&nbsp;: ${c.nif}</div>` : ''}
-  ${c.rc     ? `<div>R.C.&nbsp;: ${c.rc}</div>`  : ''}
-  ${c.address? `<div>${c.address}</div>`           : ''}
-  <div style="margin-top:4px;font-size:11.5px;color:#555">Régime TVA&nbsp;: ${TVA>0?`Assujetti — ${TVA}%`:'Non assujetti (exonéré)'}</div>
-</div>
-<table>
-  <thead>
-    <tr>
-      <th style="width:36px">N°</th>
-      <th style="text-align:left;padding-left:10px">DÉSIGNATION</th>
-      <th style="width:100px">QUANTITÉ</th>
-      <th style="width:110px">PRIX U. (DA)</th>
-      <th style="width:64px">% TVA</th>
-      <th style="width:110px">MONTANT HT</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${rowsHTML}
-    <tr style="background:#f5f5f5">
-      <td colspan="2" class="b" style="font-size:13px">TOTAL GÉNÉRAL (${rows.length} ligne${rows.length>1?'s':''})</td>
-      <td class="c" style="color:#999;font-size:11px">—</td>
-      <td></td><td></td>
-      <td class="r b">${fB(totalHT)}</td>
-    </tr>
-  </tbody>
-</table>
-<div style="margin-top:10px;border:1px solid #000;padding:7px 12px;font-size:12px">
-  <strong>Arrêtée la présente facture partielle à la somme de :</strong><br>
-  <span style="font-weight:bold;text-transform:uppercase;letter-spacing:.02em">${amountToWords(totalTTC)}</span>
-</div>
-<div style="display:flex;gap:16px;margin-top:12px;align-items:flex-start">
-  <table style="width:46%">
-    <thead><tr><th>TVA %</th><th>BASE HT</th><th>MONTANT TVA</th></tr></thead>
-    <tbody>
-      <tr>
-        <td class="c">${TVA>0?TVA+',00 %':'Exonéré'}</td>
-        <td class="r">${fB(totalHT)}</td>
-        <td class="r">${fB(totalTVA)}</td>
-      </tr>
-      <tr class="b">
-        <td class="c b">TOTAL</td>
-        <td class="r b">${fB(totalHT)}</td>
-        <td class="r b">${fB(totalTVA)}</td>
-      </tr>
-    </tbody>
-  </table>
-  <table style="width:52%;margin-left:auto">
-    <tbody>
-      <tr><td style="width:58%">Montant H.T.</td><td class="r">${fB(totalHT)}</td></tr>
-      <tr><td>T.V.A. (${TVA}%)</td><td class="r">${fB(totalTVA)}</td></tr>
-      <tr><td>Montant T.T.C.</td><td class="r">${fB(totalTTC)}</td></tr>
-      <tr style="background:#ede9fe">
-        <td class="b" style="font-size:14px">NET À PAYER</td>
-        <td class="r b" style="font-size:15px;color:#7c3aed">${fB(totalTTC)}</td>
-      </tr>
-      ${remainingTTC > 0 ? `<tr style="background:#fff7ed"><td style="font-size:11px;color:#b45309">Solde restant dû</td><td class="r" style="font-size:11px;color:#b45309">${fB(remainingTTC)}</td></tr>` : ''}
-    </tbody>
-  </table>
-</div>
-<div style="margin-top:48px;display:flex;justify-content:flex-start;padding-left:8%">
-  <div style="text-align:center;min-width:200px">
-    <div style="font-weight:bold;font-size:13px;margin-bottom:60px;text-transform:uppercase">Le Directeur</div>
-    <div style="border-top:1px solid #000;padding-top:5px;font-size:11px;color:#555">Signature &amp; Cachet</div>
-  </div>
-</div>
-<div style="position:fixed;bottom:0;left:0;right:0;border-top:1.5px solid #000;padding:5px 1.8cm;font-size:9.5px;color:#333;text-align:center;background:#fff;font-family:Arial,Helvetica,sans-serif">
-  Etablissement Publique de Wilaya de Gestion des Centres d'Enfouissement Technique JIJEL &nbsp;—&nbsp; Cité Administrative 3ème étage, Jijel 18000 &nbsp;—&nbsp; Tél&nbsp;: 030 49 05 94 &nbsp;—&nbsp; contact@epwgcet-jijel.dz
-</div>
-</div></body></html>`;
-}
 
 function generateEmptyBillHTML(c, company) {
   const TVA = c.vatSubject ? 19 : 0;
@@ -5315,6 +4980,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [view,  setView]  = useState("global"); // "global" | "client" | "debts"
   const [selC,  setSelC]  = useState("");
   const [month, setMonth] = useState(defaultMonth);
+  // Per-discharge payment data for the selected client (Relevé Client view)
+  const [clientDiscPayments, setClientDiscPayments] = useState({});
 
   const billed = clients.filter(c=>(c.type==="convention"||c.type==="rotation"||c.type==="prepaid")&&c.status==="approved");
   const c       = billed.find(c=>c.id===selC) || billed[0];
@@ -5341,6 +5008,35 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       return acc;
     }, {})
   );
+  // Per-wasteType payment totals from discharge_payments ledger (for Relevé Client annotations)
+  const wtPayMap = entries.reduce((acc, d) => {
+    const dp = clientDiscPayments[d.id];
+    if (!dp || dp.paidTTC <= 0) return acc;
+    if (!acc[d.wasteType]) acc[d.wasteType] = { paidTTC: 0, details: [] };
+    acc[d.wasteType].paidTTC = Math.round((acc[d.wasteType].paidTTC + dp.paidTTC) * 100) / 100;
+    (dp.details || []).forEach(det => acc[d.wasteType].details.push(det));
+    return acc;
+  }, {});
+  // Distinct payment transactions that touched this period's discharges — for the history panel
+  const periodPayTxns = Object.values(
+    entries.reduce((acc, d) => {
+      const dp = clientDiscPayments[d.id];
+      if (!dp) return acc;
+      const wt = wasteTypes.find(w => w.id === d.wasteType);
+      (dp.details || []).forEach(det => {
+        if (!acc[det.paymentId]) acc[det.paymentId] = {
+          paymentId: det.paymentId, billId: det.billId,
+          createdAt: det.createdAt, totalApplied: 0, lines: []
+        };
+        acc[det.paymentId].totalApplied = Math.round((acc[det.paymentId].totalApplied + det.appliedTTC) * 100) / 100;
+        acc[det.paymentId].lines.push({ label: wt?.label || d.wasteType, appliedTTC: det.appliedTTC });
+        if (!acc[det.paymentId].createdAt || (det.createdAt && det.createdAt < acc[det.paymentId].createdAt))
+          acc[det.paymentId].createdAt = det.createdAt;
+      });
+      return acc;
+    }, {})
+  ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
   const invNum    = `FAC-${selPeriod.replace("-","")}-${selCId}`;
   const currentInv = invoices.find(i=>i.id===invNum) || invoices.find(i=>i.clientId===selCId&&i.month===selPeriod);
 
@@ -5395,6 +5091,15 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
 
   const switchToClient = (id) => { setSelC(id); setView("client"); };
 
+  // Fetch discharge payments for the selected client whenever it changes
+  useEffect(() => {
+    if (!selCId) { setClientDiscPayments({}); return; }
+    fetch(`/api/clients/${selCId}/discharge-payments`)
+      .then(r => r.json())
+      .then(data => { if (data && typeof data === 'object' && !data.error) setClientDiscPayments(data); })
+      .catch(() => {});
+  }, [selCId]);
+
   // Generate/update invoice for a client+month (totalAmount stored as TTC)
   const generateInvoice = async (cl, costHT) => {
     const ttc = toTTC(costHT, cl.vatSubject);
@@ -5447,23 +5152,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     }
   };
 
-  const [payInvModal, setPayInvModal] = useState(null);
-  const [selectedDischarges, setSelectedDischarges] = useState([]);
-  const [partialAmt,  setPartialAmt]  = useState("");
-  const [payConfirm,  setPayConfirm]  = useState(false);
-  const [partialBillPrinted, setPartialBillPrinted] = useState(false);
-  const [payInvMode,         setPayInvMode]          = useState("bill"); // "bill" | "confirm"
   const [notifModal,  setNotifModal]  = useState(null);
   const [notifCopied, setNotifCopied] = useState(false);
   const [smsInvModal, setSmsInvModal] = useState(null); // {inv, cl, totalHT, totalTTC}
   const [smsInvCopied,setSmsInvCopied]= useState(false);
-
-  // Paiement Partiel par Calcul state
-  const [partialCalcModal, setPartialCalcModal] = useState(null); // {inv, cl}
-  const [partialCalcAmt,     setPartialCalcAmt]     = useState("");
-  const [partialCalcWT,      setPartialCalcWT]      = useState("");
-  const [partialCalcMode,    setPartialCalcMode]    = useState("tonnage"); // "tonnage" | "rotation"
-  const [partialCalcPrinted, setPartialCalcPrinted] = useState(false);
 
   // Bill-based payment modal — Phase 3B three-strategy engine
   const [billPayModal,    setBillPayModal]    = useState(null);  // {bill, cl}
@@ -5473,14 +5165,6 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [billPayPreview,  setBillPayPreview]  = useState(null); // result from preview endpoint
   const [billPayPrinted,  setBillPayPrinted]  = useState(false);
   const [billPayLoading,  setBillPayLoading]  = useState(false);
-
-  const openPartialCalcModal = (inv, cl) => {
-    setPartialCalcModal({inv, cl});
-    setPartialCalcAmt("");
-    setPartialCalcWT(wasteTypes[0]?.id || "");
-    setPartialCalcMode("tonnage");
-    setPartialCalcPrinted(false);
-  };
 
   /* ── Bill-payment engine (Phase 3B) ─────────────────────────────────────── */
   const openBillPayModal = async (cl) => {
@@ -5586,129 +5270,6 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   };
 
   // Step 1: generate & print the bill (no invoice update yet)
-  const doGeneratePartialBill = () => {
-    if (!partialCalcModal) return;
-    const {inv, cl} = partialCalcModal;
-    const enteredAmt = parseFloat(partialCalcAmt) || 0;
-    if (enteredAmt <= 0) return;
-    const wt = wasteTypes.find(w => w.id === partialCalcWT);
-    if (!wt) return;
-    const isRotation = partialCalcMode === "rotation";
-    const unitPrice  = isRotation ? (wt.rotationPrice || 0) : (wt.price || 0);
-    if (unitPrice <= 0) return;
-    const TVA = cl.vatSubject ? 0.19 : 0;
-    const amountHT = enteredAmt / (1 + TVA);
-    const qty = amountHT / unitPrice;
-    const remaining = Math.max(0, (inv.totalAmount - (inv.paidAmount || 0)) - enteredAmt);
-    const ts      = Date.now();
-    const partNum = `FAC-PARTIAL-${ts}-${cl.id}`;
-    const html    = generatePartialBillHTML(cl, company, partNum, wt.label, qty, isRotation, unitPrice, amountHT, remaining);
-    // PDF: open print window
-    const win = window.open('', '_blank');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
-    // Word: auto-download .doc
-    const blob = new Blob(['\ufeff', html], {type: 'application/msword'});
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `${partNum}.doc`;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
-    setPartialCalcPrinted(true);
-  };
-
-  // Step 2: confirm the payment after the bill has been printed
-  const doConfirmPartialPayment = async () => {
-    if (!partialCalcModal) return;
-    const {inv, cl} = partialCalcModal;
-    const enteredAmt = parseFloat(partialCalcAmt) || 0;
-    if (enteredAmt <= 0) return;
-    const newPaid = (inv.paidAmount || 0) + enteredAmt;
-    const isFull  = newPaid >= inv.totalAmount;
-    await updateInvoice({...inv,
-      paidAmount: newPaid,
-      status: isFull ? "paid" : "partial",
-      paidAt: isFull ? new Date().toISOString().slice(0,10) : null,
-    });
-    setPartialCalcModal(null);
-    setPartialCalcPrinted(false);
-  };
-
-  const doGeneratePartialBillFromDischarges = () => {
-    if (!payInvModal || selectedDischarges.length === 0) return;
-    const cl = clients.find(x => x.id === payInvModal.clientId);
-    if (!cl) return;
-    const TVArate = cl.vatSubject ? 0.19 : 0;
-    const selectedHT  = selectedDischarges.reduce((s,d) => s+(d.total||0), 0);
-    const selectedTTC = Math.round(selectedHT * (1 + TVArate) * 100) / 100;
-    const alreadyPaid = payInvModal.paidAmount || 0;
-    const remainingTTC = Math.max(0, payInvModal.totalAmount - alreadyPaid - selectedTTC);
-    const billNum = `FAC-PARTIAL-${Date.now()}-${cl.id}`;
-    const html = generatePartialPaymentBillHTML(cl, company, billNum, selectedDischarges, wasteTypes, remainingTTC);
-    const win = window.open('', '_blank');
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
-    const blob = new Blob(['\ufeff', html], {type:'application/msword'});
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `${billNum}.doc`;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
-    if (payInvMode === "bill") {
-      setPayInvModal(null);
-    } else {
-      setPartialBillPrinted(true);
-    }
-  };
-
-  const openPayModal = (inv, mode = "bill") => {
-    setPayInvModal(inv);
-    setPayInvMode(mode);
-    setSelectedDischarges([]);
-    setPayConfirm(false);
-    setPartialBillPrinted(false);
-  };
-
- const doMarkPaid = async (inv) => {
-    const cl = clients.find(x => x.id === inv.clientId);
-    const TVArate = cl?.vatSubject ? 0.19 : 0;
-    const selectedHT  = selectedDischarges.reduce((s,d) => s+(d.total||0), 0);
-    const amt = Math.round(selectedHT * (1 + TVArate) * 100) / 100;
-    if (amt <= 0) return;
-    const newPaid = (inv.paidAmount||0) + amt;
-    const isFull  = newPaid >= inv.totalAmount;
-    await updateInvoice({...inv,
-      paidAmount: newPaid,
-      status: isFull ? "paid" : "partial",
-      paidAt: isFull ? new Date().toISOString().slice(0,10) : null,
-    });
-    // Phase 5.7: when fully paid, mark ALL the period's unpaid discharges as paid
-    // (not just the manually selected ones — so nothing is left in a limbo state)
-    if (isFull) {
-      const periodDs = discharges.filter(d =>
-        d.clientId === inv.clientId &&
-        tsMatchesPfx(d.ts, inv.month) &&
-        d.status !== 'cancelled' && d.status !== 'paid'
-      );
-      for (const d of periodDs) {
-        await updateDischarge({...d, status: "paid", statusOnly: true});
-      }
-    } else {
-      // Partial: only mark the admin-selected discharges
-      for (const d of selectedDischarges) {
-        await updateDischarge({...d, status: "paid"});
-      }
-    }
-    setPayInvModal(null);
-    setPayConfirm(false);
-    setPartialBillPrinted(false);
-    if (isFull && cl && entries.length > 0) {
-      const html = generateOfficialBillHTML(cl, entries, company, month, inv.id, wasteTypes);
-      const win = window.open('', '_blank');
-      if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(), 600); }
-    }
-  };
-
-  const markPaid = async (inv) => openPayModal(inv);
-
   const markOverdue = async (inv) => {
     await updateInvoice({...inv, status:"overdue"});
   };
@@ -5973,11 +5534,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                               <button className="btn bp bsm" style={{fontSize:10}} onClick={()=>generateInvoice(cl,clC)}>🧾 Facturer</button>
                             )}
                             {inv&&inv.status!=="paid"&&(
-                              <button className="btn bsm" style={{fontSize:10,background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(inv)}>✓ Payée</button>
-                            )}
-                            {inv&&inv.status!=="paid"&&(
-                              <button className="btn bsm" style={{fontSize:10,background:"var(--indigo)",color:"#fff",borderColor:"var(--indigo)"}} onClick={()=>openPartialCalcModal(inv,cl)}>💳 Paiement Partiel</button>
-                            )}
+                               <button className="btn bsm" style={{fontSize:10,background:"var(--indigo)",color:"#fff",borderColor:"var(--indigo)"}} onClick={()=>openBillPayModal(cl)}>💳 Paiement</button>
+                             )}
                             <button className="btn bsm"
                               style={{fontSize:10,background:"#0891b2",color:"#fff",borderColor:"#0891b2",
                                 opacity:billPayLoading ? 0.6 : 1}}
@@ -6092,7 +5650,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         <td><InvoiceStatusBadge s={inv.status}/></td>
                         <td>
                           <div className="fx aic g2" style={{flexWrap:"wrap",gap:4}}>
-                            <button className="btn bsm" style={{fontSize:10,background:"var(--g)",color:"#fff",borderColor:"var(--g)"}} onClick={()=>markPaid(inv)}>💳 Payer</button>
+                            <button className="btn bsm" style={{fontSize:10,background:"var(--indigo)",color:"#fff",borderColor:"var(--indigo)"}} onClick={()=>{const icl=clients.find(x=>x.id===inv.clientId);if(icl)openBillPayModal(icl);}}>💳 Paiement</button>
                             {inv.status==="pending"&&(
                               <button className="btn be bsm" style={{fontSize:10}} onClick={()=>markOverdue(inv)}>🔴 Impayée</button>
                             )}
@@ -6410,6 +5968,44 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                               {isPaid&&<span style={{fontSize:9,fontWeight:800,color:'var(--g)',background:'rgba(46,201,92,.18)',border:'1px solid var(--g)',borderRadius:4,padding:'1px 6px',letterSpacing:'.05em'}}>✓ PAYÉ</span>}
                               {isPartial&&<span style={{fontSize:9,fontWeight:800,color:'var(--warn)',background:'rgba(234,179,8,.18)',border:'1px solid var(--warn)',borderRadius:4,padding:'1px 6px',letterSpacing:'.05em'}}>⏳ PARTIEL</span>}
                               {isUnpaid&&currentInv&&currentInv.paidAmount>0&&<span style={{fontSize:9,fontWeight:800,color:'var(--err)',background:'rgba(239,68,68,.12)',border:'1px solid var(--err)',borderRadius:4,padding:'1px 6px',letterSpacing:'.05em'}}>À PAYER</span>}
+                             {/* 💳 Payment detail from discharge_payments ledger */}
+                             {(()=>{
+                               const wp = wtPayMap[item.wasteTypeId];
+                               if (!wp || wp.paidTTC <= 0) return null;
+                               const sorted = [...wp.details].sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
+                               const totalTTCItem = c.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total;
+                               const remItem = Math.max(0, Math.round((totalTTCItem - wp.paidTTC)*100)/100);
+                               return (
+                                 <div style={{marginTop:6,paddingTop:6,borderTop:"1px dashed var(--bdr)"}}>
+                                   <div style={{fontSize:10,color:"var(--indigo)",fontWeight:700,marginBottom:4}}>
+                                     💳 Paiements enregistrés (ledger officiel)
+                                   </div>
+                                   {sorted.map((p,pi)=>(
+                                     <div key={pi} style={{display:"flex",alignItems:"center",gap:8,fontSize:10,marginBottom:2,flexWrap:"wrap"}}>
+                                       <span style={{color:"var(--muted)",fontFamily:"var(--mono)",minWidth:68}}>
+                                         {p.createdAt ? new Date(p.createdAt).toLocaleDateString("fr-DZ") : "—"}
+                                       </span>
+                                       <span style={{color:"var(--g)",fontWeight:800,fontFamily:"var(--mono)"}}>+{fmt(p.appliedTTC)} DA</span>
+                                       <span style={{color:"var(--muted)",fontSize:9,fontFamily:"var(--mono)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}
+                                         title={`Pmt: ${p.paymentId} · Fact: ${p.billId||'—'}`}>
+                                         {p.paymentId}
+                                       </span>
+                                     </div>
+                                   ))}
+                                   <div style={{display:"flex",justifyContent:"space-between",marginTop:4,paddingTop:3,
+                                     borderTop:"1px solid var(--bdr)",fontSize:10,fontWeight:700}}>
+                                     <span style={{color:"var(--indigo)"}}>Total réglé</span>
+                                     <span style={{fontFamily:"var(--mono)",color:"var(--g)"}}>{fmt(wp.paidTTC)} DA</span>
+                                   </div>
+                                   {remItem > 0.005 && (
+                                     <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:700,marginTop:2}}>
+                                       <span style={{color:"var(--warn)"}}>Reste dû</span>
+                                       <span style={{fontFamily:"var(--mono)",color:"var(--warn)"}}>{fmt(remItem)} DA</span>
+                                     </div>
+                                   )}
+                                 </div>
+                               );
+                             })()}
                             </div>
                           </td>
                           <td className="mn" style={{textAlign:"right",color:isPaid?"var(--muted)":undefined}}>
@@ -6461,6 +6057,50 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               </tbody>
             </table>
           </div>
+          {/* 📊 Payment history from discharge_payments ledger — period summary */}
+          {periodPayTxns.length > 0 && (
+            <div className="print-hide" style={{padding:"16px 20px",borderTop:"1px solid var(--bdr)"}}>
+              <div style={{fontWeight:700,fontSize:12,color:"var(--indigo)",marginBottom:10}}>
+                📊 Récapitulatif des paiements — {selPeriodLabel}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {periodPayTxns.map((txn,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"8px 12px",
+                    background:"rgba(99,102,241,.04)",border:"1px solid rgba(99,102,241,.15)",borderRadius:8}}>
+                    <div style={{minWidth:90,fontSize:11,color:"var(--muted)",fontFamily:"var(--mono)",paddingTop:2}}>
+                      {txn.createdAt ? new Date(txn.createdAt).toLocaleDateString("fr-DZ") : "—"}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:11,color:"var(--muted)",fontFamily:"var(--mono)",marginBottom:4}}>
+                        Réf: <span style={{color:"var(--indigo)",fontWeight:700}}>{txn.paymentId}</span>
+                        {txn.billId&&<> · Facture: <span style={{color:"var(--muted)"}}>{txn.billId}</span></>}
+                      </div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                        {txn.lines.map((l,j)=>(
+                          <span key={j} style={{fontSize:10,background:"rgba(46,201,92,.1)",
+                            border:"1px solid rgba(46,201,92,.2)",borderRadius:4,padding:"1px 6px",
+                            color:"var(--g)",fontFamily:"var(--mono)"}}>
+                            {l.label}: {fmt(l.appliedTTC)} DA
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{fontFamily:"var(--head)",fontSize:14,fontWeight:800,color:"var(--g)",minWidth:80,textAlign:"right"}}>
+                      {fmt(txn.totalApplied)} DA
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginTop:8,paddingTop:8,
+                borderTop:"1px solid var(--bdr)",fontSize:13,fontWeight:800,alignItems:"center"}}>
+                <span style={{color:"var(--muted)"}}>Total réglé (période) :</span>
+                <span style={{fontFamily:"var(--mono)",color:"var(--g)"}}>
+                  {fmt(periodPayTxns.reduce((s,t)=>s+t.totalApplied,0))} DA
+                </span>
+              </div>
+            </div>
+          )}
+
 
           {/* Print-only signature footer */}
           <div className="print-only inv-print-footer" style={{padding:"0 20px 20px"}}>
@@ -6498,14 +6138,6 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
             {/* Actions for unpaid / partial invoices */}
             {currentInv&&currentInv.status!=="paid"&&(
               <>
-                <button className="btn bsm" style={{background:"var(--indigo)",color:"#fff",borderColor:"var(--indigo)"}}
-                  onClick={()=>openPayModal(currentInv,"bill")} disabled={!currentInv}>
-                  📄 Facture Partielle
-                </button>
-                <button className="btn bsm" style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}}
-                  onClick={()=>openPayModal(currentInv,"confirm")} disabled={!currentInv}>
-                  💳 Confirmer Paiement
-                </button>
                 {(currentInv.status==="pending"||currentInv.status==="partial")&&(
                   <button className="btn be bsm" onClick={()=>markOverdue(currentInv)}>🔴 Marquer Impayée</button>
                 )}
@@ -6717,137 +6349,6 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
         );
       })()}
 
-      {partialCalcModal&&(()=>{
-        const {inv, cl} = partialCalcModal;
-        const wt = wasteTypes.find(w => w.id === partialCalcWT);
-        const isRotation = partialCalcMode === "rotation";
-        const unitPrice  = wt ? (isRotation ? (wt.rotationPrice||0) : (wt.price||0)) : 0;
-        const TVA = cl.vatSubject ? 0.19 : 0;
-        const enteredAmt = parseFloat(partialCalcAmt) || 0;
-        const amountHT   = enteredAmt > 0 && (1+TVA) > 0 ? enteredAmt / (1+TVA) : 0;
-        const qty        = unitPrice > 0 ? amountHT / unitPrice : 0;
-        const remaining  = Math.max(0, (inv.totalAmount - (inv.paidAmount||0)) - enteredAmt);
-        const resteDu    = inv.totalAmount - (inv.paidAmount||0);
-        const canConfirm = enteredAmt > 0 && enteredAmt <= resteDu && wt && unitPrice > 0;
-        return (
-          <div className="ov">
-            <div className="modal" style={{maxWidth:520}}>
-              <div className="mh">
-                <span className="mh-title">💳 Paiement Partiel par Calcul</span>
-                <button className="btn bg bsm" onClick={()=>setPartialCalcModal(null)}>✕</button>
-              </div>
-              <div className="mb2">
-                {/* Client + Debt summary */}
-                <div className="cost-box mb4">
-                  <div className="cl"><span className="clb">Client</span><span className="clv mn fw7">{cl.name}</span></div>
-                  <div className="cl"><span className="clb">Référence facture</span><span className="clv mn">{inv.id}</span></div>
-                  <div className="cl"><span className="clb">Total facturé</span><span className="clv mn">{fmt(inv.totalAmount)}</span></div>
-                  {(inv.paidAmount||0)>0&&<div className="cl"><span className="clb">Déjà réglé</span><span className="clv mn" style={{color:"var(--g)"}}>{fmt(inv.paidAmount)}</span></div>}
-                  <div className="cl ct"><span style={{fontWeight:700}}>Montant Dû restant</span><span className="ctv">{fmt(resteDu)}</span></div>
-                </div>
-
-                {/* Amount input */}
-                <div className="field mb3" style={{marginBottom:14}}>
-                  <label>Montant versé (DA) — TTC</label>
-                  <input className="fi" type="number" min="0" max={resteDu}
-                    value={partialCalcAmt} placeholder="Saisir le montant versé..."
-                    onChange={e=>setPartialCalcAmt(e.target.value)}/>
-                  {enteredAmt > resteDu && <div style={{fontSize:10,color:"var(--err)",marginTop:3}}>⚠ Montant supérieur au reste dû</div>}
-                </div>
-
-                {/* Waste type selector */}
-                <div className="field mb3" style={{marginBottom:14}}>
-                  <label>Type de déchet</label>
-                  <select className="fi" value={partialCalcWT} onChange={e=>setPartialCalcWT(e.target.value)}>
-                    {wasteTypes.map(w=>(
-                      <option key={w.id} value={w.id}>
-                        {w.label} — Tonne: {fmt(w.price||0)} DA / Rot: {fmt(w.rotationPrice||0)} DA
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Billing mode toggle */}
-                <div className="field mb3" style={{marginBottom:14}}>
-                  <label>Mode de facturation</label>
-                  <div className="seg" style={{width:"fit-content",marginTop:4}}>
-                    <button className={`seg-btn${partialCalcMode==="tonnage"?" active":""}`} onClick={()=>setPartialCalcMode("tonnage")}>⚖️ Tonnage</button>
-                    <button className={`seg-btn${partialCalcMode==="rotation"?" active":""}`} onClick={()=>setPartialCalcMode("rotation")}>🔄 Rotation</button>
-                  </div>
-                </div>
-
-                {/* Auto-calculated quantity */}
-                {wt && unitPrice > 0 && enteredAmt > 0 && (
-                  <div style={{background:"rgba(99,102,241,.07)",border:"1px solid rgba(99,102,241,.25)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
-                    <div style={{fontWeight:700,fontSize:12,color:"var(--indigo)",marginBottom:8}}>📐 Calcul automatique</div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-                      <span style={{color:"var(--muted)"}}>Prix unitaire</span>
-                      <span className="mn fw7">{fmt(unitPrice)} DA / {isRotation?"rot.":"t"}</span>
-                    </div>
-                    {cl.vatSubject&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-                      <span style={{color:"var(--muted)"}}>Montant HT (base)</span>
-                      <span className="mn">{fmt(Math.round(amountHT*100)/100)} DA</span>
-                    </div>}
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:13,fontWeight:800,borderTop:"1px solid rgba(99,102,241,.2)",paddingTop:6,marginTop:4}}>
-                      <span>Quantité équivalente</span>
-                      <span className="mn" style={{color:"var(--indigo)"}}>
-                        {isRotation ? `${Math.round(qty)} rotation${Math.round(qty)>1?"s":""}` : `${qty.toLocaleString("fr-FR",{minimumFractionDigits:3,maximumFractionDigits:3})} t`}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Preview bill summary */}
-                {wt && unitPrice > 0 && enteredAmt > 0 && enteredAmt <= resteDu && (
-                  <div style={{background:"rgba(46,201,92,.06)",border:"1px solid rgba(46,201,92,.2)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
-                    <div style={{fontWeight:700,fontSize:12,color:"var(--g)",marginBottom:8}}>🧾 Aperçu de la facture partielle</div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
-                      <span style={{color:"var(--muted)"}}>Désignation</span>
-                      <span className="fw7">Traitement — {wt.label}</span>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
-                      <span style={{color:"var(--muted)"}}>Quantité</span>
-                      <span className="fw7">{isRotation ? `${Math.round(qty)} rot.` : `${qty.toLocaleString("fr-FR",{minimumFractionDigits:3,maximumFractionDigits:3})} t`}</span>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
-                      <span style={{color:"var(--muted)"}}>Prix unitaire</span>
-                      <span className="mn">{fmt(unitPrice)} DA / {isRotation?"rot.":"t"}</span>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:700,borderTop:"1px solid rgba(46,201,92,.25)",paddingTop:6,marginTop:4}}>
-                      <span>Montant de l'acompte</span>
-                      <span className="mn tg">{fmt(enteredAmt)} DA</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Step 2: confirmation block — appears after bill is printed */}
-                {partialCalcPrinted&&(
-                  <div style={{background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.3)",borderRadius:10,padding:"12px 14px",marginTop:8}}>
-                    <div style={{fontWeight:700,fontSize:12,color:"var(--g)",marginBottom:6}}>✅ Facture générée et imprimée</div>
-                    <div style={{fontSize:12,color:"var(--muted)"}}>Confirmez la réception effective du paiement pour mettre à jour le statut de la facture.</div>
-                  </div>
-                )}
-              </div>
-              <div className="mf">
-                <button className="btn bg" onClick={()=>{ setPartialCalcModal(null); setPartialCalcPrinted(false); }}>Annuler</button>
-                {!partialCalcPrinted
-                  ? <button className="btn bsm" disabled={!canConfirm}
-                      style={{background:"var(--indigo)",color:"#fff",borderColor:"var(--indigo)",opacity:canConfirm?1:.5}}
-                      onClick={doGeneratePartialBill}>
-                      🖨️ Imprimer et Télécharger la Facture
-                    </button>
-                  : <button className="btn bsm"
-                      style={{background:"var(--g)",color:"#fff",borderColor:"var(--g)"}}
-                      onClick={doConfirmPartialPayment}>
-                      ✓ Confirmer la réception du paiement
-                    </button>
-                }
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* ── Bill-Payment Modal (Phase 3B) — Montant libre / Par décharge / Paiement intégral ── */}
       {billPayModal&&(()=>{
         const { bill, cl } = billPayModal;
@@ -7034,160 +6535,6 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
               </div>
             </div>
           </div>
-        );
-      })()}
-
-      {payInvModal&&(()=>{
-        const payInvCl = clients.find(x=>x.id===payInvModal.clientId);
-        const TVArate  = payInvCl?.vatSubject ? 0.19 : 0;
-        const unpaidForInv = discharges.filter(d=>
-          d.clientId===payInvModal.clientId &&
-          tsMatchesPfx(d.ts, payInvModal.month) &&
-          d.status!=="cancelled" && d.status!=="paid"
-        ).sort((a,b)=>new Date(a.ts)-new Date(b.ts));
-        const selHT  = selectedDischarges.reduce((s,d)=>s+(d.total||0),0);
-        const selTTC = Math.round(selHT*(1+TVArate)*100)/100;
-        const resteDu = payInvModal.totalAmount-(payInvModal.paidAmount||0);
-        const isFull  = selTTC>=resteDu-0.01;
-        const toggleDischarge = (d) => {
-          setPartialBillPrinted(false);
-          setPayConfirm(false);
-          setSelectedDischarges(prev=>
-            prev.find(x=>x.id===d.id) ? prev.filter(x=>x.id!==d.id) : [...prev,d]
-          );
-        };
-        const isBillMode = payInvMode === "bill";
-        return(
-        <div className="ov">
-          <div className="modal" style={{maxWidth:560}}>
-            <div className="mh">
-              <span className="mh-title">
-                {isBillMode ? "📄 Générer Facture Partielle" : "💳 Confirmer Paiement"}
-              </span>
-              <button className="btn bg bsm" onClick={()=>setPayInvModal(null)}>✕</button>
-            </div>
-            <div className="mb2">
-              {/* Invoice summary */}
-              <div className="cost-box mb4">
-                <div className="cl"><span className="clb">Client</span><span className="clv mn">{payInvCl?.name||payInvModal.clientId}</span></div>
-                <div className="cl"><span className="clb">Référence</span><span className="clv mn">{payInvModal.id}</span></div>
-                <div className="cl"><span className="clb">Montant total</span><span className="clv mn fw7">{fmt(payInvModal.totalAmount)}</span></div>
-                {(payInvModal.paidAmount||0)>0&&<div className="cl"><span className="clb">Déjà payé</span><span className="clv mn" style={{color:"var(--g)"}}>{fmt(payInvModal.paidAmount)}</span></div>}
-                <div className="cl ct"><span style={{fontWeight:700}}>RESTE DÛ</span><span className="ctv">{fmt(resteDu)}</span></div>
-              </div>
-
-              {/* Mode hint */}
-              <div style={{fontSize:11,color:"var(--muted)",marginBottom:10,padding:"6px 10px",background:"var(--bg2)",borderRadius:6,border:"1px solid var(--border)"}}>
-                {isBillMode
-                  ? "Sélectionnez les dépôts à facturer et générez la facture partielle à remettre au client."
-                  : "Sélectionnez les dépôts que le client a réglés, puis confirmez la réception du paiement."}
-              </div>
-
-              {/* Discharge checklist */}
-              <div style={{marginBottom:14}}>
-                <div style={{fontWeight:700,fontSize:12,marginBottom:8,color:"var(--muted)"}}>
-                  {isBillMode ? "Dépôts à inclure dans la facture :" : "Dépôts réglés par le client :"}
-                </div>
-                {unpaidForInv.length===0
-                  ? <div style={{fontSize:12,color:"var(--muted)",padding:"8px 0"}}>Aucun dépôt non réglé pour ce mois.</div>
-                  : <div style={{border:"1px solid var(--border)",borderRadius:8,overflow:"hidden"}}>
-                    {unpaidForInv.map((d,i)=>{
-                      const checked = !!selectedDischarges.find(x=>x.id===d.id);
-                      const dNetAPayer = Math.round(d.total * (1 + TVArate) * 100) / 100;
-                      return(
-                        <label key={d.id} onClick={()=>toggleDischarge(d)} style={{
-                          display:"flex",alignItems:"center",gap:10,padding:"8px 12px",
-                          cursor:"pointer",
-                          background:checked?(isBillMode?"rgba(99,102,241,.07)":"rgba(46,201,92,.07)"):"transparent",
-                          borderBottom:i<unpaidForInv.length-1?"1px solid var(--border)":"none",
-                          userSelect:"none"
-                        }}>
-                          <input type="checkbox" readOnly checked={checked} style={{flexShrink:0}}/>
-                          <span style={{flex:1,fontSize:12}}>
-                            <span style={{color:"var(--muted)"}}>{d.ts.slice(0,10)}</span>
-                            {" — "}
-                            <span style={{fontWeight:600}}>{d.truck}</span>
-                            {" · "}
-                            <span style={{fontSize:11,color:"var(--muted)"}}>{d.wasteType} · {d.net}t</span>
-                          </span>
-                          <div style={{textAlign:"right",flexShrink:0}}>
-                            <div style={{fontFamily:"var(--mono)",fontWeight:700,fontSize:12,
-                              color:checked?(isBillMode?"var(--purple)":"var(--g)"):"var(--muted)"}}>
-                              {fmt(dNetAPayer)}
-                            </div>
-                            {TVArate>0&&<div style={{fontFamily:"var(--mono)",fontSize:9,color:"var(--muted)"}}>
-                              HT: {fmt(d.total)}
-                            </div>}
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                }
-              </div>
-
-              {/* Running total */}
-              {selectedDischarges.length>0&&(
-                <div style={{
-                  background: isBillMode?"rgba(99,102,241,.07)":"rgba(46,201,92,.07)",
-                  border:`1px solid ${isBillMode?"rgba(99,102,241,.2)":"rgba(46,201,92,.2)"}`,
-                  borderRadius:8,padding:"10px 14px",marginBottom:14
-                }}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-                    <span style={{color:"var(--muted)"}}>Montant HT sélectionné</span>
-                    <span style={{fontFamily:"var(--mono)",fontWeight:700}}>{fmt(selHT)}</span>
-                  </div>
-                  {TVArate>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-                    <span style={{color:"var(--muted)"}}>TVA (19%)</span>
-                    <span style={{fontFamily:"var(--mono)"}}>{fmt(Math.round((selTTC-selHT)*100)/100)}</span>
-                  </div>}
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,fontWeight:700,
-                    borderTop:`1px solid ${isBillMode?"rgba(99,102,241,.2)":"rgba(46,201,92,.2)"}`,paddingTop:6,marginTop:4}}>
-                    <span>Montant TTC</span>
-                    <span style={{fontFamily:"var(--mono)",color:isBillMode?"var(--purple)":"var(--g)"}}>{fmt(selTTC)}</span>
-                  </div>
-                  <div style={{fontSize:11,marginTop:6,color:isFull?"var(--g)":"var(--warn)",fontWeight:600}}>
-                    {isFull?"✅ Règlement intégral — facture soldée":
-                      `⏳ Paiement partiel — reste après : ${fmt(Math.max(0,resteDu-selTTC))}`}
-                  </div>
-                </div>
-              )}
-
-              {/* Bill mode: generate button only */}
-              {isBillMode&&(
-                <button
-                  className="btn bsm"
-                  style={{width:"100%",background:"var(--indigo)",color:"#fff",borderColor:"var(--indigo)",
-                    opacity:selectedDischarges.length===0?.5:1,justifyContent:"center",display:"flex",alignItems:"center",gap:8}}
-                  disabled={selectedDischarges.length===0}
-                  onClick={doGeneratePartialBillFromDischarges}
-                >
-                  🖨 Générer la facture partielle (PDF + Word)
-                </button>
-              )}
-
-              {/* Confirm mode: confirm checkbox */}
-              {!isBillMode&&(
-                <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",
-                  background:"rgba(46,201,92,.08)",border:"1px solid rgba(46,201,92,.2)",borderRadius:8,padding:"12px 14px",
-                  opacity:selectedDischarges.length===0?.5:1,pointerEvents:selectedDischarges.length===0?"none":"auto"}}>
-                  <input type="checkbox" checked={payConfirm} onChange={e=>setPayConfirm(e.target.checked)} disabled={selectedDischarges.length===0}/>
-                  <span style={{fontWeight:600}}>✅ Confirmer la réception du paiement</span>
-                </label>
-              )}
-            </div>
-            <div className="mf">
-              <button className="btn bg" onClick={()=>setPayInvModal(null)}>Annuler</button>
-              {!isBillMode&&(
-                <button className="btn bp"
-                  disabled={!payConfirm||selectedDischarges.length===0}
-                  onClick={()=>doMarkPaid(payInvModal)}>
-                  🟢 Valider le paiement
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
         );
       })()}
     </>

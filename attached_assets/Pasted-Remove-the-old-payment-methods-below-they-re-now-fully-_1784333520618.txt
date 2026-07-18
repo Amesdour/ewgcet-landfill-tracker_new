@@ -1,0 +1,60 @@
+Remove the old payment methods below — they're now fully superseded by the unified 3-strategy payment modal (Par décharge spécifique / Montant libre / Paiement intégral) already built. Do not remove anything else. Before deleting each function, grep for any other call site to make sure nothing outside what's listed here depends on it — if you find one, stop and tell me instead of leaving a dangling reference.
+
+---
+
+## 1. Remove the old "Paiement Partiel par Calcul" flow (waste-type + manual quantity calculator)
+
+Delete these entirely from `PageInvoice`:
+- State: `partialCalcModal`, `partialCalcAmt`, `partialCalcWT`, `partialCalcMode`, `partialCalcPrinted`
+- Function: `openPartialCalcModal`
+- Function: `doGeneratePartialBill`
+- Function: `doConfirmPartialPayment`
+- The entire `{partialCalcModal && (...)}` modal render block
+- The button that opens it: `<button ... onClick={()=>openPartialCalcModal(inv,cl)}>💳 Paiement Partiel</button>` in the "Vue Mensuelle" global table's actions column
+- The standalone helper function `generatePartialBillHTML` (outside the component) — only if nothing else calls it after the above is removed
+
+## 2. Remove the old manual discharge-checklist flow (separate "bill" / "confirm" buttons)
+
+Delete these entirely:
+- State: `payInvModal`, `selectedDischarges`, `partialAmt`, `payConfirm`, `partialBillPrinted`, `payInvMode`
+- Function: `openPayModal`
+- Function: `doMarkPaid`
+- Function: `doGeneratePartialBillFromDischarges`
+- The entire `{payInvModal && (...)}` modal render block
+- These two buttons in the client-detail invoice view:
+  ```jsx
+  <button ... onClick={()=>openPayModal(currentInv,"bill")} disabled={!currentInv}>📄 Facture Partielle</button>
+  <button ... onClick={()=>openPayModal(currentInv,"confirm")} disabled={!currentInv}>💳 Confirmer Paiement</button>
+  ```
+- The standalone helper function `generatePartialPaymentBillHTML` (outside the component) — only if nothing else calls it after the above is removed
+
+## 3. Remove the old `markPaid`/quick "✓ Payée" / "💳 Payer" one-click buttons
+
+These currently call `markPaid(inv)`, which just opens the old `payInvModal`. Since that modal is being deleted, replace every one of these buttons with a single button that opens the new unified payment modal instead:
+
+- The `"✓ Payée"` button in the "Vue Mensuelle" global table's actions column
+- The `"💳 Payer"` button in the "Dettes" tab's actions column
+
+Replace both with one consistent button, e.g.:
+```jsx
+<button className="btn bsm" style={{fontSize:10,background:"var(--indigo)",color:"#fff",borderColor:"var(--indigo)"}}
+  onClick={()=>openNewPaymentModal(inv)}>
+  💳 Paiement
+</button>
+```
+Wire `openNewPaymentModal` to whatever function/state you already built to open the new unified 3-strategy payment modal — reuse it, don't create a second one. If that modal is currently only wired to the "💳 Montant libre" button added in the Dettes tab, generalize its trigger so this same button in both the "Vue Mensuelle" tab and the "Dettes" tab opens it, defaulting to whichever strategy tab makes sense (e.g. default to "Montant libre").
+
+After this, `markPaid` itself can be deleted if nothing else calls it.
+
+---
+
+## Validation — required before reporting done
+
+1. Confirm the "Vue Mensuelle" tab's actions column no longer shows "✓ Payée" or "💳 Paiement Partiel" — only the single new "💳 Paiement" button (opening the unified modal) remains, alongside the existing "🧾 Facturer" / "🔴 Impayée" buttons that are unrelated to this cleanup.
+2. Confirm the "Dettes" tab's actions column no longer shows "💳 Payer" as a separate old button — only the new unified "💳 Paiement" button remains.
+3. Confirm the client-detail invoice view no longer shows "📄 Facture Partielle" or "💳 Confirmer Paiement" as separate buttons.
+4. Open the app, go to each of the three places above, and confirm clicking the remaining button correctly opens the new 3-strategy modal, and all three strategies (Par décharge spécifique / Montant libre / Paiement intégral) still work exactly as before this cleanup.
+5. Confirm no console errors on load (a sign of a leftover reference to a deleted function/state).
+6. Re-run the validation from the previous fix (partial payment shows correctly in the relevé) to confirm this cleanup didn't regress it.
+
+Report the exact result of each check, and list anything you found still referencing the deleted functions/state that you had to stop and flag instead of silently removing.
