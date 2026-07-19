@@ -565,7 +565,18 @@ app.post('/api/invoices', async (req, res) => {
     await q(
       `INSERT INTO invoices(id,client_id,month,total_amount,paid_amount,status,note,period_type)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8)
-       ON CONFLICT(id) DO UPDATE SET total_amount=$4,paid_amount=$5,status=$6,note=$7,period_type=COALESCE($8,invoices.period_type)`,
+       ON CONFLICT(id) DO UPDATE SET
+         total_amount = EXCLUDED.total_amount,
+         -- Never lower paid_amount; stale frontend state must never erase a recorded payment
+         paid_amount  = GREATEST(invoices.paid_amount, EXCLUDED.paid_amount),
+         -- Never regress status: paid is terminal; partial cannot go back to pending
+         status = CASE
+           WHEN invoices.status = 'paid'                                  THEN 'paid'
+           WHEN invoices.status = 'partial' AND EXCLUDED.status = 'pending' THEN 'partial'
+           ELSE EXCLUDED.status
+         END,
+         note         = EXCLUDED.note,
+         period_type  = COALESCE(EXCLUDED.period_type, invoices.period_type)`,
       [inv.id, inv.clientId, inv.month, inv.totalAmount, inv.paidAmount||0,
        inv.status||'pending', inv.note||'', inv.periodType||'monthly']
     );
@@ -579,7 +590,20 @@ app.put('/api/invoices/:id', async (req, res) => {
   try {
     await dbClient.query('BEGIN');
     await dbClient.query(
-      'UPDATE invoices SET status=$1,paid_at=$2,paid_amount=$3,note=$4,total_amount=$5,period_type=COALESCE($6,period_type) WHERE id=$7',
+      `UPDATE invoices SET
+         -- Never regress status: paid is terminal; partial cannot be sent back to pending
+         status   = CASE
+           WHEN status = 'paid'                          THEN 'paid'
+           WHEN status = 'partial' AND $1 = 'pending'   THEN 'partial'
+           ELSE $1
+         END,
+         paid_at  = CASE WHEN status = 'paid' THEN paid_at ELSE $2 END,
+         -- Never lower paid_amount below what is already recorded
+         paid_amount  = GREATEST(paid_amount, $3),
+         note         = $4,
+         total_amount = $5,
+         period_type  = COALESCE($6, period_type)
+       WHERE id = $7`,
       [inv.status, inv.paidAt||null, inv.paidAmount||0, inv.note||'', inv.totalAmount||0,
        inv.periodType||null, req.params.id]
     );
