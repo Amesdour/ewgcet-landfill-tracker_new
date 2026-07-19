@@ -1183,6 +1183,62 @@ app.post('/api/bills/:billId/payments', async (req, res) => {
     `, [req.params.billId, vatSubject]);
     const newStatus = parseFloat(rem[0].remaining) < 0.005 ? 'paid' : 'partial';
     await dbClient.query('UPDATE bills SET status=$1 WHERE id=$2', [newStatus, req.params.billId]);
+
+    // ── Sync invoices table with bill payment ─────────────────────────────
+    // Derive the billing period from the earliest discharge in this bill
+    const { rows: syncRows } = await dbClient.query(`
+      SELECT MIN(d.ts) AS earliest_ts, c.pay_frequency
+      FROM discharges d
+      JOIN bill_discharges bd ON bd.discharge_id = d.id
+      JOIN clients c ON c.id = $2
+      WHERE bd.bill_id = $1
+      GROUP BY c.pay_frequency
+    `, [req.params.billId, bill.client_id]);
+    if (syncRows.length > 0 && syncRows[0].earliest_ts) {
+      const payFreq  = syncRows[0].pay_frequency || 'monthly';
+      const earliest = new Date(syncRows[0].earliest_ts);
+      const period   = payFreq === 'annual'
+        ? String(earliest.getUTCFullYear())
+        : `${earliest.getUTCFullYear()}-${String(earliest.getUTCMonth()+1).padStart(2,'0')}`;
+      // Sum every cent allocated to discharges of this client+period
+      const { rows: paidRows } = await dbClient.query(`
+        SELECT COALESCE(SUM(dp.applied_amount_ttc), 0) AS total_paid
+        FROM discharge_payments dp
+        JOIN discharges d ON d.id = dp.discharge_id
+        WHERE d.client_id = $1
+          AND LEFT(d.ts::text, $2) = $3
+      `, [bill.client_id, period.length, period]);
+      const totalPaidTTC = parseFloat(paidRows[0].total_paid);
+      // Find the matching invoice row; never downgrade a fully-paid invoice
+      const { rows: invRows } = await dbClient.query(
+        'SELECT * FROM invoices WHERE client_id=$1 AND month=$2 FOR UPDATE',
+        [bill.client_id, period]
+      );
+      if (invRows.length > 0 && invRows[0].status !== 'paid') {
+        const inv          = invRows[0];
+        const totalTTC     = parseFloat(inv.total_amount);
+        const newPaid      = Math.min(totalPaidTTC, totalTTC);
+        const newInvStatus = newPaid >= totalTTC - 0.005 ? 'paid' : 'partial';
+        const newPaidAt    = newInvStatus === 'paid'
+          ? (inv.paid_at || new Date().toISOString().slice(0, 10))
+          : inv.paid_at;
+        await dbClient.query(
+          'UPDATE invoices SET paid_amount=$1, status=$2, paid_at=$3 WHERE id=$4',
+          [newPaid, newInvStatus, newPaidAt, inv.id]
+        );
+        // Mirror the discharge cascade from PUT /api/invoices when fully paid
+        if (newInvStatus === 'paid') {
+          await dbClient.query(
+            `UPDATE discharges SET status='paid'
+             WHERE client_id=$1 AND status NOT IN ('paid','cancelled')
+               AND LEFT(ts::text, $2) = $3`,
+            [bill.client_id, period.length, period]
+          );
+        }
+      }
+    }
+    // ── End invoice sync ──────────────────────────────────────────────────
+
     await dbClient.query('COMMIT');
     dbClient.release();
     ok(res, { paymentId, appliedAmount: result.appliedAmount, unappliedAmount: result.unappliedAmount,
@@ -1199,6 +1255,39 @@ app.get('/api/bills/:billId/payments', async (req, res) => {
       'SELECT * FROM payments WHERE bill_id=$1 ORDER BY created_at DESC',
       [req.params.billId]
     );
+    ok(res, rows);
+  } catch(e) { er(res, e); }
+});
+
+/* GET /api/payments — unified payment journal across all clients.
+   Optional ?clientId= filter. Returns payments with allocations per discharge. */
+app.get('/api/payments', async (req, res) => {
+  const clientId = req.query.clientId || null;
+  try {
+    const { rows } = await q(`
+      SELECT
+        p.id, p.client_id, p.bill_id, p.amount_ttc, p.method, p.note,
+        p.created_at, p.created_by,
+        c.name AS client_name,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'dischargeId', dp.discharge_id,
+              'appliedTTC',  dp.applied_amount_ttc,
+              'appliedHT',   dp.applied_amount_ht
+            ) ORDER BY dp.id
+          ) FILTER (WHERE dp.discharge_id IS NOT NULL),
+          '[]'::json
+        ) AS allocations
+      FROM payments p
+      JOIN clients c ON c.id = p.client_id
+      LEFT JOIN discharge_payments dp ON dp.payment_id = p.id
+      WHERE ($1::varchar IS NULL OR p.client_id = $1)
+      GROUP BY p.id, p.client_id, p.bill_id, p.amount_ttc, p.method, p.note,
+               p.created_at, p.created_by, c.name
+      ORDER BY p.created_at DESC
+      LIMIT 500
+    `, [clientId]);
     ok(res, rows);
   } catch(e) { er(res, e); }
 });

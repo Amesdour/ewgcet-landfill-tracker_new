@@ -1,0 +1,92 @@
+CONTEXT
+My landfill/waste-management app (EPWGCET Landfill Tracker) has two 
+payment-tracking systems that are NOT connected to each other:
+
+1. OLD SYSTEM: `invoices` table (fields: totalAmount, paidAmount, status, 
+   paidAt) — updated by `generateInvoice()` and `updateInvoice()` in 
+   PageInvoice.jsx (frontend) and PUT /api/invoices/:id (backend).
+
+2. NEW SYSTEM: `bills` + `payments` + `discharge_payments` tables — 
+   updated by the FIFO bill-payment engine when admin uses the 
+   "💰 Régler Facture" modal (three payment modes: "libre" = free 
+   amount, "specifique" = per-discharge, "integral" = full payment). 
+   This hits POST /api/bills/:billId/payments in server.js and writes 
+   to `payments` and `discharge_payments` — but it NEVER updates the 
+   `invoices` table.
+
+THE BUG
+Because of this disconnect, when admin confirms a client payment via 
+any of the three bill-payment options:
+- The payment IS recorded in `payments` / `discharge_payments` 
+  (confirmed by doBillPayConfirm in PageInvoice.jsx)
+- The payment is NOT reflected in `invoices.paidAmount`
+- The Debt page (PageInvoice.jsx, view==="debts") reads ONLY from 
+  `invoices`, so it still shows the client owing the full original 
+  amount even after they've paid, in full or in part.
+- There's also no journal/audit trail showing "who confirmed what 
+  payment when, via which of the three methods" in one unified place.
+
+WHAT I NEED YOU TO DO
+
+1. BACKEND (server.js):
+   In the POST /api/bills/:billId/payments endpoint, after a payment 
+   is successfully committed (after inserting into `payments` and 
+   `discharge_payments`, and updating `bills.status`), also locate 
+   or create the matching `invoices` row for that client + billing 
+   period and update its `paidAmount` and `status` to reflect the 
+   new payment total. Use the same logic already in the frontend's 
+   `generateInvoice()` for status transitions (pending → partial → paid), 
+   but move/duplicate it server-side so it's atomic with the bill 
+   payment (same DB transaction if possible). If no matching invoice 
+   exists yet for that period, either create one or skip — but make 
+   sure this never silently loses data (never overwrite a paid invoice 
+   downward).
+
+2. DEBT PAGE CALCULATION (PageInvoice.jsx, view==="debts"):
+   Verify that after the backend fix above, `debtInvoices` and 
+   `debtTotal` correctly reflect confirmed bill payments. Add a 
+   regression check: create a bill, confirm a partial payment via 
+   each of the three modes (libre, specifique, integral), and confirm 
+   the Debt page's "reste dû" (amount remaining) updates correctly 
+   for each case without a manual page refresh being required beyond 
+   normal React state refresh patterns already in use (invoices state 
+   refetch/update after successful payment).
+
+3. PAYMENT JOURNAL / AUDIT TRAIL:
+   Add a visible, unified payment history somewhere in the invoicing 
+   UI (either a new tab in PageInvoice, or a panel in the client 
+   detail view) that lists every confirmed payment across all clients, 
+   showing: date/time, client name, amount applied, payment mode used 
+   (Montant libre / Par décharge / Intégral), payment ID, related bill 
+   ID, and which discharges it was applied to. This can pull from the 
+   existing `payments` + `discharge_payments` tables via a new GET 
+   endpoint (e.g. GET /api/payments?clientId=... or GET /api/payments 
+   for all) — don't duplicate data, just expose what's already being 
+   written.
+
+4. TESTING / VERIFICATION:
+   After implementing, walk through this scenario end-to-end and 
+   confirm each step works:
+   a. Generate a bill for a convention client with several discharges.
+   b. Pay a partial "libre" amount, confirm it → check it shows in 
+      the new journal AND reduces the amount shown on the Debt page.
+   c. Pay a "specifique" (per-discharge) amount on the same bill, 
+      confirm it → same checks.
+   d. Pay the remaining "integral" balance, confirm it → bill and 
+      invoice should both show as fully paid, and the client should 
+      disappear from (or show 0 remaining in) the Debt page.
+
+CONSTRAINTS
+- Do not break the existing FIFO allocation logic in 
+  computeFifoAllocation() — that part works correctly.
+- Do not change the three payment mode names/behavior in the 
+  bill-payment modal — only fix what happens to `invoices` and the 
+  Debt page after a payment is confirmed.
+- Preserve all existing audit/compliance logging (Loi 18-07 / 25-11 
+  consent and audit_log entries) — don't touch that code.
+- Test that VAT (TTC/HT) calculations stay correct throughout — the 
+  app has two TVA modes (assujetti/non-assujetti) and existing helper 
+  functions toTTC()/toHT() should be reused, not reimplemented.
+
+Please implement this, then summarize exactly what files and functions 
+you changed so I can review the diff.

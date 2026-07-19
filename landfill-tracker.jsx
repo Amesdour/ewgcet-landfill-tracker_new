@@ -1225,6 +1225,13 @@ export default function App() {
       return inv;
     }));
   };
+  // Refetch the full invoices list from the server (called after bill payments to sync paid_amount)
+  const refreshInvoices = async () => {
+    try {
+      const inv = await fetch('/api/invoices').then(r=>r.json());
+      setInvoices(Array.isArray(inv)?inv:[]);
+    } catch(e) {}
+  };
 
   const flagged = discharges.filter(d=>d.status==="flagged").length;
   const pendingOps = users.filter(u=>u.role==="operator"&&u.status==="pending").length;
@@ -1311,7 +1318,7 @@ onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.
             {page==="discharges" && <PageDischarges discharges={discharges} setDischarges={setDischarges} sites={sites} wasteTypes={wasteTypes} users={users} clients={clients} invoices={invoices} updateClient={updateClient} updateDischarge={updateDischarge} isAdmin={isAdmin} authUser={authUser} company={company}/>}
             {page==="clients"    && <PageClients clients={clients} discharges={discharges} updateClient={updateClient} addClient={addClient} deleteClient={deleteClient} isAdmin={isAdmin} docTypes={docTypes} sites={sites} company={company} wasteTypes={wasteTypes} authUser={authUser}/>}
             {page==="operators"  && <PageOperators users={users} sites={sites} addUser={addUser} updateUser={updateUser} deleteUser={deleteUser} authUser={authUser}/>}
-            {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} updateDischarge={updateDischarge} company={company}/>}
+            {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} updateDischarge={updateDischarge} company={company} refreshInvoices={refreshInvoices}/>}
             {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany} companyTrucks={companyTrucks} addCompanyTruck={addCompanyTruck} updateCompanyTruck={updateCompanyTruck} deleteCompanyTruck={deleteCompanyTruck} clients={clients} updateClient={updateClient}/>}
             {page==="schema"     && <PageSchema/>}
           </div>
@@ -4960,7 +4967,7 @@ function generateEmptyBillHTML(c, company) {
 /* ═══════════════════════════════════════════════════════════════════════════
    INVOICE / RELEVÉ MENSUEL
 ═══════════════════════════════════════════════════════════════════════════ */
-function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,updateInvoice,updateDischarge,company}) {
+function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,updateInvoice,updateDischarge,company,refreshInvoices}) {
   const t = useT();
   const now = new Date();
          const findBestDischarges = (budget, discharges) => {
@@ -5100,6 +5107,17 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       .catch(() => {});
   }, [selCId]);
 
+  // Fetch payment journal when the journal tab is active
+  useEffect(() => {
+    if (view !== "journal") return;
+    setJournalLoading(true);
+    fetch('/api/payments')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setJournalPayments(data); })
+      .catch(() => {})
+      .finally(() => setJournalLoading(false));
+  }, [view]);
+
   // Generate/update invoice for a client+month (totalAmount stored as TTC)
   const generateInvoice = async (cl, costHT) => {
     const ttc = toTTC(costHT, cl.vatSubject);
@@ -5165,6 +5183,9 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [billPayPreview,  setBillPayPreview]  = useState(null); // result from preview endpoint
   const [billPayPrinted,  setBillPayPrinted]  = useState(false);
   const [billPayLoading,  setBillPayLoading]  = useState(false);
+  // Payment journal state
+  const [journalPayments, setJournalPayments] = useState([]);
+  const [journalLoading,  setJournalLoading]  = useState(false);
 
   /* ── Bill-payment engine (Phase 3B) ─────────────────────────────────────── */
   const openBillPayModal = async (cl) => {
@@ -5254,10 +5275,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     setBillPayLoading(true);
     try {
       const body = billPayStrategy === "specifique"
-        ? { dischargeIds: billPaySelDiscs, method: 'convention' }
+        ? { dischargeIds: billPaySelDiscs, method: billPayStrategy }
         : { amountTTC: parseFloat(billPayStrategy === "integral"
               ? billPayModal.bill.remainingTotal
-              : billPayAmt), method: 'convention' };
+              : billPayAmt), method: billPayStrategy };
       const res  = await fetch(`/api/bills/${billPayModal.bill.id}/payments`, {
         method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
       });
@@ -5265,6 +5286,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       if (data.error) { alert(`⚠️ ${data.error}`); return; }
       alert(`✅ Paiement enregistré.\nMontant appliqué : ${fmt(data.appliedAmount)} DA\nStatut : ${data.billStatus === 'paid' ? 'Facture soldée ✅' : 'Paiement partiel ⏳'}`);
       setBillPayModal(null);
+      // Sync invoices state so Debt page updates immediately
+      if (refreshInvoices) await refreshInvoices();
     } catch(e) { alert("Erreur lors de la confirmation du paiement."); }
     finally { setBillPayLoading(false); }
   };
@@ -5384,7 +5407,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       {/* View tabs + month picker */}
       <div className="fx aic jsb mb4" style={{flexWrap:"wrap",gap:12}}>
         <div className="seg" style={{width:"fit-content"}}>
-          {[["global","🗓 Vue Mensuelle"],["client","📋 Relevé Client"],["debts",`🔴 Dettes${debtInvoices.length>0?` (${debtInvoices.length})`:""}`]].map(([v,l])=>(
+          {[["global","🗓 Vue Mensuelle"],["client","📋 Relevé Client"],["debts",`🔴 Dettes${debtInvoices.length>0?` (${debtInvoices.length})`:""}`],["journal","📒 Journal"]].map(([v,l])=>(
             <button key={v} className={`seg-btn${view===v?" active":""}`} onClick={()=>setView(v)}>{l}</button>
           ))}
         </div>
@@ -5683,6 +5706,80 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 </tbody>
               </table>
             </div>
+          </div>
+        </>
+      )}
+
+      {/* ── PAYMENT JOURNAL ── */}
+      {view==="journal"&&(
+        <>
+          <div className="panel">
+            <div className="ph">
+              <span className="pt">Journal des Paiements</span>
+              <span className="tsm tmu">{journalLoading ? "Chargement…" : `${journalPayments.length} paiement(s)`}</span>
+            </div>
+            {journalLoading ? (
+              <div style={{textAlign:"center",padding:40,color:"var(--muted)"}}>Chargement…</div>
+            ) : (
+              <div className="tw">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Date / Heure</th>
+                      <th>Client</th>
+                      <th>Montant TTC</th>
+                      <th>Mode</th>
+                      <th>Réf. Paiement</th>
+                      <th>Réf. Facture</th>
+                      <th>Décharges couvertes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {journalPayments.length===0?(
+                      <tr><td colSpan={7} style={{textAlign:"center",padding:40,color:"var(--muted)"}}>
+                        <div style={{fontSize:32,marginBottom:8}}>📭</div>Aucun paiement enregistré
+                      </td></tr>
+                    ):journalPayments.map(p=>{
+                      const modeLabel = p.method==="specifique" ? "Par décharge"
+                                      : p.method==="integral"   ? "Intégral"
+                                      : p.method==="libre"      ? "Montant libre"
+                                      : p.method || "—";
+                      const modeColor = p.method==="integral" ? "var(--g)"
+                                      : p.method==="specifique" ? "var(--indigo)"
+                                      : "var(--warn)";
+                      const allocs = Array.isArray(p.allocations) ? p.allocations : [];
+                      return (
+                        <tr key={p.id}>
+                          <td><span className="mn" style={{fontSize:11}}>{new Date(p.created_at).toLocaleString("fr-FR")}</span></td>
+                          <td style={{fontWeight:700}}>{p.client_name}</td>
+                          <td><span className="mn fw7" style={{color:"var(--g)"}}>{fmt(parseFloat(p.amount_ttc))} DA</span></td>
+                          <td>
+                            <span style={{fontSize:11,fontWeight:700,color:modeColor,
+                              background:modeColor+"18",borderRadius:4,padding:"2px 7px"}}>
+                              {modeLabel}
+                            </span>
+                          </td>
+                          <td><span className="mn tmu" style={{fontSize:11}}>{p.id}</span></td>
+                          <td><span className="mn tmu" style={{fontSize:11}}>{p.bill_id||"—"}</span></td>
+                          <td>
+                            {allocs.length===0 ? <span className="tmu">—</span> : (
+                              <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+                                {allocs.map((a,i)=>(
+                                  <span key={i} style={{fontSize:10,background:"var(--s2)",borderRadius:3,
+                                    padding:"1px 5px",border:"1px solid var(--bdr)",whiteSpace:"nowrap"}}>
+                                    {a.dischargeId} · {fmt(parseFloat(a.appliedTTC))} DA
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}
