@@ -5412,7 +5412,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
           ))}
         </div>
         <div className="fx aic g2">
-          {view!=="debts"&&(
+          {view!=="debts"&&view!=="journal"&&(
             <div className="field" style={{margin:0}}>
               <input className="fi" type="month" value={month} onChange={e=>setMonth(e.target.value)} style={{width:160}}/>
             </div>
@@ -5740,9 +5740,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         <div style={{fontSize:32,marginBottom:8}}>📭</div>Aucun paiement enregistré
                       </td></tr>
                     ):journalPayments.map(p=>{
-                      const modeLabel = p.method==="specifique" ? "Par décharge"
-                                      : p.method==="integral"   ? "Intégral"
-                                      : p.method==="libre"      ? "Montant libre"
+                      const modeLabel = p.method==="specifique"  ? "Par décharge"
+                                      : p.method==="integral"    ? "Intégral"
+                                      : p.method==="libre"       ? "Montant libre"
+                                      : p.method==="convention"  ? "Convention"
                                       : p.method || "—";
                       const modeColor = p.method==="integral" ? "var(--g)"
                                       : p.method==="specifique" ? "var(--indigo)"
