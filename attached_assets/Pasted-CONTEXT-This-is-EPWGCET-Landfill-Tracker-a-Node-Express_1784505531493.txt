@@ -1,0 +1,182 @@
+CONTEXT
+This is EPWGCET Landfill Tracker — a Node/Express + PostgreSQL backend 
+(server.js) with a React frontend, used by an Algerian public waste 
+management entity. It handles client billing, personal data (Loi 18-07), 
+and financial records. The director has asked for full security hardening 
+before wider production rollout.
+
+CRITICAL FINDING (must fix first)
+Login (POST /api/auth/login) checks email/password with bcrypt and returns 
+a user object — but issues NO session token (no JWT, no signed cookie). 
+The frontend just stores that user object in localStorage and treats 
+`role === "admin"` as a UI-only gate. EVERY other backend endpoint 
+(/api/clients, /api/discharges, /api/users, /api/sites, /api/waste-types, 
+/api/company-trucks, /api/invoices, /api/bills, /api/compliance/*, etc.) 
+has NO server-side check that the caller is logged in, let alone that 
+they're an admin. Right now anyone with network access to the API can, 
+without any credentials:
+- create/edit/delete clients, discharges, users, sites, pricing
+- read the compliance audit log and breach reports
+- run POST /api/compliance/purge-expired and permanently delete data
+- approve/reject client conventions, change credit limits
+- confirm payments and manipulate invoices/bills
+
+FIX THIS FIRST, THEN DO THE REST BELOW.
+
+═══════════════════════════════════════════════════════════
+PART 1 — REAL AUTHENTICATION (highest priority)
+═══════════════════════════════════════════════════════════
+
+1. Add JWT-based auth:
+   - On successful login, sign a JWT (jsonwebtoken package) containing 
+     { userId, role, siteId } with a reasonable expiry (e.g. 8-12h).
+   - Return the token to the frontend; frontend stores it and sends it 
+     as `Authorization: Bearer <token>` on every API call (replace raw 
+     fetch calls with a small wrapper that adds this header — there are 
+     many fetch() calls throughout PageGate, PageClients, PageInvoice, 
+     PageOperators, PageSettings, App.jsx — find and update all of them).
+   - Use a strong secret from an environment variable (never hardcoded), 
+     e.g. process.env.JWT_SECRET. Fail startup loudly if it's missing 
+     in production.
+
+2. Add two Express middleware functions and apply them to every route 
+   that currently has none:
+   - `requireAuth` — verifies the JWT, attaches decoded user to req.user, 
+     returns 401 if missing/invalid/expired.
+   - `requireAdmin` — runs after requireAuth, returns 403 if req.user.role 
+     !== 'admin'.
+   
+   Apply requireAuth to ALL /api/* routes except:
+   - POST /api/auth/login
+   - POST /api/users (operator self-registration — but see hardening below)
+   - POST /api/users/:id/verify-email
+   
+   Apply requireAdmin additionally to:
+   - all /api/compliance/* routes except GET /api/compliance/consent/:userId 
+     and GET /api/compliance/my-data/:userId (which should instead check 
+     req.user.id === :userId OR req.user.role === 'admin')
+   - POST/PUT/DELETE /api/clients, /api/sites, /api/waste-types, 
+     /api/company-trucks, /api/users/:id (except a user editing their 
+     own profile — check req.user.id === :id OR isAdmin)
+   - PUT /api/invoices/:id, POST/PUT /api/bills*, /api/bills/:id/payments
+   - operator approval/rejection endpoints
+
+3. Verify req.user.siteId matches the site being written to for 
+   non-admin operators wherever site-scoped writes happen (discharges, 
+   gate entries) — operators should not be able to submit discharges 
+   for a site they're not assigned to, even if the frontend normally 
+   prevents it.
+
+4. Add a logout mechanism (client-side token discard is fine for JWT; 
+   optionally add a short server-side blocklist for immediate revocation 
+   if you want it, but not required for MVP).
+
+5. Rotate/replace the current plaintext-in-localStorage authUser object 
+   with just the JWT + minimal display info (name, role) — don't store 
+   sensitive fields client-side unnecessarily.
+
+═══════════════════════════════════════════════════════════
+PART 2 — NETWORK / TRANSPORT HARDENING
+═══════════════════════════════════════════════════════════
+
+6. Lock down CORS: replace `app.use(cors())` (wide open) with an 
+   explicit allowed-origins list read from an environment variable 
+   (e.g. your production domain + localhost for dev), using the 
+   `cors` package's origin option.
+
+7. Rate limiting: currently only /api/auth/login is rate limited. Add 
+   a general rate limiter (e.g. express-rate-limit) to all /api/* 
+   routes — more generous than login's, but enough to blunt scraping 
+   and brute-force attempts on other endpoints.
+
+8. Ensure HSTS, and all the existing security headers in the current 
+   security-headers middleware, are also applied correctly behind 
+   Render/Replit's reverse proxy — confirm `X-Forwarded-Proto` is 
+   trusted (app.set('trust proxy', 1) if not already) so IS_PROD/HSTS 
+   logic works correctly.
+
+═══════════════════════════════════════════════════════════
+PART 3 — INPUT VALIDATION & INJECTION SAFETY
+═══════════════════════════════════════════════════════════
+
+9. Add server-side input validation (e.g. using zod or express-validator) 
+   on all POST/PUT bodies — especially clients, discharges, users, and 
+   bill-payment endpoints. Reject malformed types (e.g. non-numeric 
+   amounts, missing required fields) with 400 before they hit the DB.
+
+10. Confirm every SQL query uses parameterized queries (pg's $1,$2 
+    placeholders) — do a full pass of server.js to check for any 
+    string-concatenated SQL. (From what I've seen so far this looks 
+    OK, but verify systematically, including any dynamic column names 
+    like in the audit-log endpoint's conditional WHERE clause.)
+
+11. Sanitize any user-supplied text that gets rendered into generated 
+    HTML documents (generateOfficialBillHTML, generateEmptyBillHTML, 
+    receipt printing) — client names/addresses/notes are interpolated 
+    directly into HTML strings; escape them to prevent stored XSS if 
+    these are ever viewed in a browser context (not just printed).
+
+═══════════════════════════════════════════════════════════
+PART 4 — ACCOUNT & CREDENTIAL SECURITY
+═══════════════════════════════════════════════════════════
+
+12. Operator email-verification codes (genCode(), 6 digits) are stored 
+    in plaintext in the DB. Hash them (bcrypt or even sha256) before 
+    storing, compare hashes on verification.
+
+13. Enforce the existing password strength rule (validatePasswordStrength) 
+    server-side on ALL password-setting paths, not just change-password 
+    — currently POST /api/users (registration/admin-created accounts) 
+    doesn't seem to call it. Confirm and fix.
+
+14. Add account lockout or exponential backoff after repeated failed 
+    logins for a specific account (current rate limiter is IP-based 
+    only — add a per-account failure counter too).
+
+15. Ensure the "changeme" default password fallback in POST /api/users 
+    (`u.password || 'changeme'`) is removed or replaced with a forced 
+    random temp password + required first-login reset.
+
+═══════════════════════════════════════════════════════════
+PART 5 — AUDIT & COMPLIANCE INTEGRITY
+═══════════════════════════════════════════════════════════
+
+16. Once requireAuth is in place, use req.user (not client-supplied 
+    IDs) for all "who did this" fields in audit logging, invoice 
+    updates, payment confirmations, consent records, etc. — currently 
+    many of these trust an ID passed in the request body, which could 
+    be spoofed.
+
+17. Confirm the breach-report and audit-log endpoints (already admin- 
+    gated by this plan) can't be used to enumerate all users' PII 
+    beyond what's needed — review response payloads for over-exposure.
+
+═══════════════════════════════════════════════════════════
+PART 6 — TESTING
+═══════════════════════════════════════════════════════════
+
+18. After implementing, test explicitly:
+    a. Every /api/* endpoint returns 401 when called with no token.
+    b. Admin-only endpoints return 403 when called with a valid operator 
+       token.
+    c. Normal app flows (login, gate entry, client management, billing, 
+       payments, compliance panel) still work end-to-end for both admin 
+       and operator roles.
+    d. Token expiry correctly forces re-login.
+    e. CORS blocks a request from an arbitrary origin (test with curl 
+       from a different Origin header) but allows the real frontend.
+
+CONSTRAINTS
+- Don't change the FIFO billing/payment logic, VAT calculations, or 
+  the three payment-mode names (libre/specifique/integral).
+- Don't break the existing Loi 18-07 consent and audit-log flows — 
+  extend them to use req.user, don't remove them.
+- Keep all changes backward-compatible with the current DB schema 
+  where possible; if you must add columns (e.g. hashed verification 
+  codes), write a migration file consistent with the existing 
+  migrations/ folder pattern already used by runMigrations().
+
+Please implement Part 1 first as a standalone, testable change, then 
+proceed through Parts 2-5. Summarize every file and endpoint you 
+modified, and specifically confirm that all previously-unprotected 
+admin routes now require requireAdmin.

@@ -714,6 +714,34 @@ function PayProgress({inv, compact=false}) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   AUTHENTICATED FETCH WRAPPER
+   Adds Authorization: Bearer <token> to every request that is not the
+   login endpoint.  Handles 401 → auto-logout so the user is never silently
+   stuck in a broken state.
+═══════════════════════════════════════════════════════════════════════════ */
+let _authLogout = null;
+const registerLogout = fn => { _authLogout = fn; };
+
+const apiFetch = async (url, opts = {}) => {
+  const token = localStorage.getItem('authToken');
+  const res = await apiFetch(url, {
+    ...opts,
+    headers: {
+      ...(opts.headers || {}),
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+  });
+  if (res.status === 401) {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('authUser');
+    localStorage.removeItem('currentPage');
+    if (_authLogout) _authLogout();
+    throw new Error('Session expirée. Veuillez vous reconnecter.');
+  }
+  return res;
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
    LOGIN SCREEN
 ═══════════════════════════════════════════════════════════════════════════ */
 function LoginScreen({onLogin, onRegister, company, lang, toggleLang}) {
@@ -727,6 +755,7 @@ function LoginScreen({onLogin, onRegister, company, lang, toggleLang}) {
     setError("");
     setLoading(true);
     try {
+      // Use plain fetch (not apiFetch) — a 401 here means wrong password, not session expiry
       const res = await fetch('/api/auth/login',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -735,7 +764,8 @@ function LoginScreen({onLogin, onRegister, company, lang, toggleLang}) {
       const data = await res.json();
       if (!res.ok) { setError(data.error||"Identifiants incorrects."); setLoading(false); return; }
       setLoading(false);
-      onLogin(data);
+      // Server now returns { token, user }
+      onLogin(data.user, data.token);
     } catch {
       setError("Erreur de connexion au serveur.");
       setLoading(false);
@@ -807,9 +837,9 @@ function RegisterScreen({onBack, onRegistered, sites, company, lang, toggleLang}
       role:"operator", status:"pending", phone:form.phone, siteId:form.siteId,
       matricule:"", createdAt:new Date().toISOString().slice(0,10),
     };
-    await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newUser)});
+    await apiFetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(newUser)});
     try {
-      await fetch('/api/compliance/consent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:newUser.id,scope:'registration'})});
+      await apiFetch('/api/compliance/consent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:newUser.id,scope:'registration'})});
     } catch(e) {}
     onRegistered(newUser);
     setPendingUser(newUser);
@@ -819,7 +849,7 @@ function RegisterScreen({onBack, onRegistered, sites, company, lang, toggleLang}
   const handleVerifyCode = async () => {
     if (!codeInput.trim()) { setCodeError("Veuillez saisir le code."); return; }
     setCodeError("");
-    const res = await fetch(`/api/users/${pendingUser.id}/verify-email`, {
+    const res = await apiFetch(`/api/users/${pendingUser.id}/verify-email`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({code: codeInput.trim()}),
     });
@@ -962,7 +992,7 @@ function ConsentModal({ user, lang, onAccepted }) {
   const handleAccept = async () => {
     setLoading(true);
     try {
-      await fetch('/api/compliance/consent', {
+      await apiFetch('/api/compliance/consent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id, scope: 'system_access' }),
@@ -1081,25 +1111,36 @@ export default function App() {
   });
   const updateCompany = c => { setCompany(c); localStorage.setItem('ewgcet_company', JSON.stringify(c)); };
 
+  // Register the logout handler so apiFetch can trigger it on 401
+  useEffect(()=>{
+    registerLogout(()=>{ setAuthUser(null); setAuthScreen("login"); });
+  },[]);
+
   useEffect(()=>{ const t=setInterval(()=>setClock(new Date()),60000); return()=>clearInterval(t); },[]);
   useEffect(()=>{ document.documentElement.setAttribute("data-theme", theme); },[theme]);
   useEffect(()=>{
+    // Skip data load if there is no token — go straight to login screen
+    if (!localStorage.getItem('authToken')) { setLoading(false); return; }
+    const storedUser = (() => { try { return JSON.parse(localStorage.getItem('authUser')); } catch { return null; } })();
+    const isAdminBoot = storedUser?.role === 'admin';
+    // Admin-only endpoints (403 for operators) use a resolved empty array for non-admin boots
+    const adminOnly = p => isAdminBoot ? apiFetch(p).then(r=>r.json()) : Promise.resolve([]);
     Promise.all([
-      fetch('/api/sites').then(r=>r.json()),
-      fetch('/api/waste-types').then(r=>r.json()),
-      fetch('/api/clients').then(r=>r.json()),
-      fetch('/api/users').then(r=>r.json()),
-      fetch('/api/discharges').then(r=>r.json()),
-      fetch('/api/invoices').then(r=>r.json()),
-      fetch('/api/company-trucks').then(r=>r.json()),
-    ]).then(([s,wt,c,u,d,inv,ct])=>{
+      apiFetch('/api/sites').then(r=>r.json()),
+      apiFetch('/api/waste-types').then(r=>r.json()),
+      apiFetch('/api/clients').then(r=>r.json()),
+      apiFetch('/api/discharges').then(r=>r.json()),
+      apiFetch('/api/company-trucks').then(r=>r.json()),
+      adminOnly('/api/users'),
+      adminOnly('/api/invoices'),
+    ]).then(([s,wt,c,d,ct,u,inv])=>{
       setSites(Array.isArray(s)?s:[]);
       setWasteTypes(Array.isArray(wt)?wt:[]);
       setClients(Array.isArray(c)?c:[]);
-      setUsers(Array.isArray(u)?u:[]);
       setDischarges(Array.isArray(d)?d:[]);
-      setInvoices(Array.isArray(inv)?inv:[]);
       setCompanyTrucks(Array.isArray(ct)?ct:[]);
+      setUsers(Array.isArray(u)?u:[]);
+      setInvoices(Array.isArray(inv)?inv:[]);
       setLoading(false);
     }).catch(()=>setLoading(false));
   },[]);
@@ -1127,13 +1168,14 @@ export default function App() {
     return (
       <LangCtx.Provider value={lang}>
         <style>{STYLES}</style>
-        <LoginScreen onLogin={u=>{
+        <LoginScreen onLogin={(u, token)=>{
+          localStorage.setItem('authToken', token);
+          localStorage.setItem('authUser', JSON.stringify(u));
           setAuthUser(u);
-          localStorage.setItem('authUser',JSON.stringify(u));
           const p=u.role==="admin"?"dashboard":"gate";
           localStorage.setItem('currentPage',p);
           setPage(p);
-          fetch(`/api/compliance/consent/${u.id}`)
+          apiFetch(`/api/compliance/consent/${u.id}`)
             .then(r=>r.json())
             .then(d=>{ if(!d.consented) setShowConsent(true); })
             .catch(()=>{});
@@ -1148,67 +1190,67 @@ export default function App() {
   const opSite  = !isAdmin ? sites.find(s=>s.id===authUser.siteId) : null;
 
   const addDischarge = async d => {
-    await fetch('/api/discharges',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    await apiFetch('/api/discharges',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
     setDischarges(p=>[d,...p]);
     if (d.payMethod==="convention"||d.payMethod==="credit"||d.payMethod==="prepaid") {
       setClients(p=>p.map(c=>c.id===d.clientId?{...c,consumed:c.consumed+d.total}:c));
     }
   };
   const updateDischarge = async d => {
-    await fetch(`/api/discharges/${d.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    await apiFetch(`/api/discharges/${d.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
     setDischarges(p=>p.map(x=>x.id===d.id?d:x));
     // Refresh clients to get correct consumed from server
-    fetch('/api/clients').then(r=>r.json()).then(c=>{ if(Array.isArray(c)) setClients(c); });
+    apiFetch('/api/clients').then(r=>r.json()).then(c=>{ if(Array.isArray(c)) setClients(c); });
   };
 
   const addClient    = async c  => {
-    await fetch('/api/clients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});
+    await apiFetch('/api/clients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});
     setClients(p=>[...p,c]);
   };
   const updateClient = async c  => {
-    await fetch(`/api/clients/${c.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});
+    await apiFetch(`/api/clients/${c.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});
     setClients(p=>p.map(x=>x.id===c.id?c:x));
   };
   const deleteClient = async id => {
-    await fetch(`/api/clients/${id}`,{method:'DELETE'});
+    await apiFetch(`/api/clients/${id}`,{method:'DELETE'});
     setClients(p=>p.filter(c=>c.id!==id));
   };
   const addUser      = async u  => {
-    const res = await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
+    const res = await apiFetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
     const data = await res.json();
     setUsers(p=>[...p,{...u, verificationCode: data.verificationCode||null, emailVerified:false}]);
     return data;
   };
   const updateUser   = async u  => {
-    await fetch(`/api/users/${u.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
+    await apiFetch(`/api/users/${u.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
     setUsers(p=>p.map(x=>x.id===u.id?u:x));
   };
   const deleteUser   = async id => {
-    await fetch(`/api/users/${id}`,{method:'DELETE'});
+    await apiFetch(`/api/users/${id}`,{method:'DELETE'});
     setUsers(p=>p.filter(u=>u.id!==id));
   };
   const updateSite   = async s  => {
-    await fetch(`/api/sites/${s.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(s)});
+    await apiFetch(`/api/sites/${s.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(s)});
     setSites(p=>p.map(x=>x.id===s.id?s:x));
   };
   const updateWT     = async wt => {
-    await fetch(`/api/waste-types/${wt.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(wt)});
+    await apiFetch(`/api/waste-types/${wt.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(wt)});
     setWasteTypes(p=>p.map(x=>x.id===wt.id?wt:x));
   };
   const addCompanyTruck    = async t => {
-    await fetch('/api/company-trucks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(t)});
+    await apiFetch('/api/company-trucks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(t)});
     setCompanyTrucks(p=>[...p,t]);
   };
   const updateCompanyTruck = async t => {
-    await fetch(`/api/company-trucks/${t.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(t)});
+    await apiFetch(`/api/company-trucks/${t.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(t)});
     setCompanyTrucks(p=>p.map(x=>x.id===t.id?t:x));
   };
   const deleteCompanyTruck = async id => {
-    await fetch(`/api/company-trucks/${id}`,{method:'DELETE'});
+    await apiFetch(`/api/company-trucks/${id}`,{method:'DELETE'});
     setCompanyTrucks(p=>p.filter(t=>t.id!==id));
   };
   const addInvoice = async inv => {
-    await fetch('/api/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(inv)});
+    await apiFetch('/api/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(inv)});
     setInvoices(p=>{
       const ex=p.find(x=>x.id===inv.id);
       // Never overwrite a paid or partial invoice — payment data must never be erased
@@ -1217,7 +1259,7 @@ export default function App() {
     });
   };
   const updateInvoice = async inv => {
-    await fetch(`/api/invoices/${inv.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(inv)});
+    await apiFetch(`/api/invoices/${inv.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(inv)});
     setInvoices(p=>p.map(x=>{
       if(x.id!==inv.id) return x;
       // Never let an update silently erase payment data
@@ -1228,7 +1270,7 @@ export default function App() {
   // Refetch the full invoices list from the server (called after bill payments to sync paid_amount)
   const refreshInvoices = async () => {
     try {
-      const inv = await fetch('/api/invoices').then(r=>r.json());
+      const inv = await apiFetch('/api/invoices').then(r=>r.json());
       setInvoices(Array.isArray(inv)?inv:[]);
     } catch(e) {}
   };
@@ -1284,7 +1326,7 @@ export default function App() {
               <div className="role-name">{authUser.name}</div>
               <div className="role-detail">{isAdmin?(lang==="ar"?"👔 مدير":"👔 Administrateur"):(lang==="ar"?"🦺 مشغل":"🦺 Opérateur")}{opSite?` · ${opSite.name}`:""}</div>
             </div>
-            <button className="logout-btn" onClick={()=>{setAuthUser(null);localStorage.removeItem('authUser');localStorage.removeItem('currentPage');setAuthScreen("login");}}>
+            <button className="logout-btn" onClick={()=>{setAuthUser(null);localStorage.removeItem('authToken');localStorage.removeItem('authUser');localStorage.removeItem('currentPage');setAuthScreen("login");}}>
               🚪 {lang==="ar"?"تسجيل الخروج":"Déconnexion"}
             </button>
           </div>
@@ -2620,7 +2662,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
   const handleResolve = async () => {
     if (!selD) return;
     // Phase 0 fix: always send statusOnly:true so the backend never overwrites discharge data
-    await fetch(`/api/discharges/${selD.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:"settled",statusOnly:true})});
+    await apiFetch(`/api/discharges/${selD.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:"settled",statusOnly:true})});
     setDischarges(p=>p.map(d=>d.id===selD.id?{...d,status:"settled"}:d));
     setSelD(null);
   };
@@ -3030,7 +3072,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
   const [expandedDisc, setExpandedDisc] = useState(null); // discharge id whose payment trail is open
   useEffect(() => {
     if (!sel) { setDiscPayments({}); setExpandedDisc(null); return; }
-    fetch(`/api/clients/${sel}/discharge-payments`)
+    apiFetch(`/api/clients/${sel}/discharge-payments`)
       .then(r => r.json())
       .then(data => { if (data && typeof data === 'object' && !Array.isArray(data) && !data.error) setDiscPayments(data); })
       .catch(() => {});
@@ -3322,7 +3364,7 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                             const by  = authUser?.name||authUser?.id;
                             updateClient({...c, consentGiven:true, consentDate:now, consentBy:by});
                             try {
-                              await fetch('/api/compliance/consent',{
+                              await apiFetch('/api/compliance/consent',{
                                 method:'POST',headers:{'Content-Type':'application/json'},
                                 body:JSON.stringify({userId:`client_${c.id}`,scope:'client_consent',detail:`Client: ${c.name}`}),
                               });
@@ -4305,7 +4347,7 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
   };
 
   const regenerateCode = async (u) => {
-    const res = await fetch(`/api/users/${u.id}/regenerate-code`,{method:'POST'});
+    const res = await apiFetch(`/api/users/${u.id}/regenerate-code`,{method:'POST'});
     const data = await res.json();
     if (data.verificationCode) setCodes(c=>({...c,[u.id]:data.verificationCode}));
   };
@@ -5101,7 +5143,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   // Fetch discharge payments for the selected client whenever it changes
   useEffect(() => {
     if (!selCId) { setClientDiscPayments({}); return; }
-    fetch(`/api/clients/${selCId}/discharge-payments`)
+    apiFetch(`/api/clients/${selCId}/discharge-payments`)
       .then(r => r.json())
       .then(data => { if (data && typeof data === 'object' && !data.error) setClientDiscPayments(data); })
       .catch(() => {});
@@ -5111,7 +5153,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   useEffect(() => {
     if (view !== "journal") return;
     setJournalLoading(true);
-    fetch('/api/payments')
+    apiFetch('/api/payments')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setJournalPayments(data); })
       .catch(() => {})
@@ -5191,22 +5233,22 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const openBillPayModal = async (cl) => {
     setBillPayLoading(true);
     try {
-      const bRes  = await fetch(`/api/bills?clientId=${cl.id}`);
+      const bRes  = await apiFetch(`/api/bills?clientId=${cl.id}`);
       const bills = await bRes.json();
       const openB = Array.isArray(bills) ? bills.find(b => b.status === 'open' || b.status === 'partial') : null;
       let bill;
       if (openB) {
-        const dRes = await fetch(`/api/bills/${openB.id}`);
+        const dRes = await apiFetch(`/api/bills/${openB.id}`);
         bill = await dRes.json();
       } else {
-        const genRes  = await fetch('/api/bills', {
+        const genRes  = await apiFetch('/api/bills', {
           method: 'POST', headers: {'Content-Type':'application/json'},
           body: JSON.stringify({ clientId: cl.id })
         });
         const genData = await genRes.json();
         if (genData.error) { alert(`⚠️ ${genData.error}`); return; }
         // Fetch full bill detail (with remaining_ttc per discharge)
-        const dRes = await fetch(`/api/bills/${genData.id}`);
+        const dRes = await apiFetch(`/api/bills/${genData.id}`);
         bill = await dRes.json();
       }
       setBillPayModal({ bill, cl });
@@ -5230,7 +5272,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
         : { amountTTC: parseFloat(billPayStrategy === "integral"
               ? billPayModal.bill.remainingTotal
               : billPayAmt) };
-      const res  = await fetch(`/api/bills/${billPayModal.bill.id}/payments/preview`, {
+      const res  = await apiFetch(`/api/bills/${billPayModal.bill.id}/payments/preview`, {
         method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
       });
       const data = await res.json();
@@ -5279,7 +5321,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
         : { amountTTC: parseFloat(billPayStrategy === "integral"
               ? billPayModal.bill.remainingTotal
               : billPayAmt), method: billPayStrategy };
-      const res  = await fetch(`/api/bills/${billPayModal.bill.id}/payments`, {
+      const res  = await apiFetch(`/api/bills/${billPayModal.bill.id}/payments`, {
         method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
       });
       const data = await res.json();
@@ -6659,16 +6701,16 @@ function CompliancePanel({ authUser, isAdmin, clients, updateClient }) {
   const fmtDate = d => d ? new Date(d).toLocaleString("fr-DZ") : "—";
 
   useEffect(() => {
-    fetch(`/api/compliance/consent/${authUser.id}`)
+    apiFetch(`/api/compliance/consent/${authUser.id}`)
       .then(r=>r.json()).then(setConsentStatus).catch(()=>{});
     if (isAdmin) {
-      fetch('/api/compliance/data-requests').then(r=>r.json()).then(d=>setRequests(Array.isArray(d)?d:[])).catch(()=>{});
+      apiFetch('/api/compliance/data-requests').then(r=>r.json()).then(d=>setRequests(Array.isArray(d)?d:[])).catch(()=>{});
     }
   }, [authUser.id, isAdmin]);
 
   const loadMyData = async () => {
     setMyDataLoading(true);
-    const r = await fetch(`/api/compliance/my-data/${authUser.id}`);
+    const r = await apiFetch(`/api/compliance/my-data/${authUser.id}`);
     const d = await r.json();
     setMyData(d);
     setMyDataLoading(false);
@@ -6676,7 +6718,7 @@ function CompliancePanel({ authUser, isAdmin, clients, updateClient }) {
 
   const loadAuditLog = async () => {
     setAuditLoading(true);
-    const r = await fetch('/api/compliance/audit-log?limit=50');
+    const r = await apiFetch('/api/compliance/audit-log?limit=50');
     const d = await r.json();
     setAuditLog(d.rows||[]);
     setAuditLoading(false);
@@ -6684,7 +6726,7 @@ function CompliancePanel({ authUser, isAdmin, clients, updateClient }) {
 
   const loadBreachReport = async () => {
     setBrLoading(true);
-    const r = await fetch('/api/compliance/breach-report');
+    const r = await apiFetch('/api/compliance/breach-report');
     const d = await r.json();
     setBreachReport(d);
     setBrLoading(false);
@@ -6692,7 +6734,7 @@ function CompliancePanel({ authUser, isAdmin, clients, updateClient }) {
 
   const submitRequest = async () => {
     setReqMsg(null);
-    const r = await fetch('/api/compliance/data-request', {
+    const r = await apiFetch('/api/compliance/data-request', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ userId: authUser.id, requestType: reqForm.type, subjectName: authUser.name, subjectEmail: authUser.email, note: reqForm.note }),
     });
@@ -6702,7 +6744,7 @@ function CompliancePanel({ authUser, isAdmin, clients, updateClient }) {
   };
 
   const handleRequest = async (id, status) => {
-    await fetch(`/api/compliance/data-requests/${id}`, {
+    await apiFetch(`/api/compliance/data-requests/${id}`, {
       method:'PUT', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ status, handledBy: authUser.id }),
     });
@@ -6711,7 +6753,7 @@ function CompliancePanel({ authUser, isAdmin, clients, updateClient }) {
 
   const purgeOld = async () => {
     if (!window.confirm("Confirmer la purge des données de déchargement de plus de 10 ans ?")) return;
-    const r = await fetch('/api/compliance/purge-expired', {
+    const r = await apiFetch('/api/compliance/purge-expired', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ adminUserId: authUser.id, retentionYears: 10 }),
     });
@@ -6980,7 +7022,7 @@ function CompliancePanel({ authUser, isAdmin, clients, updateClient }) {
                           const by  = authUser?.name||authUser?.id;
                           updateClient({...cl, consentGiven:true, consentDate:now, consentBy:by});
                           try {
-                            await fetch('/api/compliance/consent',{
+                            await apiFetch('/api/compliance/consent',{
                               method:'POST',headers:{'Content-Type':'application/json'},
                               body:JSON.stringify({userId:`client_${cl.id}`,scope:'client_consent',detail:`Client: ${cl.name}`}),
                             });
@@ -7055,7 +7097,7 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
     if (!/[A-Za-z]/.test(pwForm.newPw)||!/[0-9]/.test(pwForm.newPw)) { setPwMsg({t:"err",m:"Le mot de passe doit contenir au moins une lettre et un chiffre."}); return; }
     if (pwForm.newPw !== pwForm.confirm) { setPwMsg({t:"err",m:"Les mots de passe ne correspondent pas."}); return; }
     try {
-      const r = await fetch('/api/auth/change-password', {
+      const r = await apiFetch('/api/auth/change-password', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({userId:authUser.id, currentPassword:pwForm.current, newPassword:pwForm.newPw})
       });
@@ -7074,7 +7116,7 @@ function PageSettings({sites,wasteTypes,updateSite,updateWT,authUser,updateUser,
     updateUser(updated);
     setAuthUser(updated);
     try {
-      await fetch('/api/compliance/consent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:authUser.id,scope:'profile_update'})});
+      await apiFetch('/api/compliance/consent',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:authUser.id,scope:'profile_update'})});
     } catch(e) {}
     setProfileMsg({t:"ok",m:"Profil mis à jour avec succès. Consentement enregistré."});
     setProfileConsent(false);

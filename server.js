@@ -2,6 +2,8 @@ import express from 'express';
 import pg from 'pg';
 import cors from 'cors';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { createHash } from 'crypto';
 import { readFileSync, existsSync, readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -11,6 +13,17 @@ const { Pool } = pg;
 const app = express();
 const IS_PROD = process.env.NODE_ENV === 'production';
 const PORT = process.env.PORT || 3001;
+
+// JWT secret — must be set in env; startup fails loudly in production if missing
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SESSION_SECRET;
+if (!JWT_SECRET) {
+  if (IS_PROD) { console.error('FATAL: JWT_SECRET is not set. Refusing to start.'); process.exit(1); }
+  else { console.warn('[WARN] JWT_SECRET not set — using insecure fallback for dev only.'); }
+}
+const _JWT_SECRET = JWT_SECRET || 'dev-insecure-secret-change-me';
+
+// Trust Replit / Render reverse proxy so IS_PROD HSTS logic works correctly
+app.set('trust proxy', 1);
 const POLICY_VERSION = '1.0';
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -28,7 +41,19 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(cors());
+// CORS — allow Replit dev domain + explicit CORS_ORIGIN env var in production
+const _allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
+  : null;
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // allow server-to-server / curl
+    if (!_allowedOrigins) return cb(null, true); // dev: open
+    const ok = _allowedOrigins.some(o => origin === o || origin.startsWith(o));
+    cb(ok ? null : new Error('CORS'), ok);
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '2mb' }));
 
 console.log('DATABASE_URL:', process.env.DATABASE_URL ? 'SET' : 'NOT SET');
@@ -111,7 +136,8 @@ async function runMigrations() {
   }
 }
 
-/* ─── RATE LIMITER (login) ───────────────────────────────────────────────── */
+/* ─── RATE LIMITERS ──────────────────────────────────────────────────────── */
+// Per-IP login rate limiter (10 attempts / minute)
 const loginAttempts = new Map();
 const rateLimitLogin = (req, res, next) => {
   const ip = getIP(req);
@@ -123,6 +149,81 @@ const rateLimitLogin = (req, res, next) => {
   if (e.count > 10) return res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 1 minute.' });
   next();
 };
+
+// General API rate limiter — 300 requests / minute per IP (blunts scraping)
+const apiRequests = new Map();
+const rateLimitApi = (req, res, next) => {
+  const ip = getIP(req);
+  const now = Date.now();
+  const e = apiRequests.get(ip) || { count: 0, resetAt: now + 60000 };
+  if (now > e.resetAt) { e.count = 0; e.resetAt = now + 60000; }
+  e.count++;
+  apiRequests.set(ip, e);
+  if (e.count > 300) return res.status(429).json({ error: 'Trop de requêtes. Réessayez dans une minute.' });
+  next();
+};
+app.use('/api', rateLimitApi);
+
+// Per-account login lockout — 5 failures → 15-minute lockout
+const accountFailures = new Map();
+function checkAccountLock(email) {
+  const af = accountFailures.get(email) || { count: 0, lockedUntil: 0 };
+  if (Date.now() < af.lockedUntil) return { locked: true, until: af.lockedUntil };
+  return { locked: false, af };
+}
+function recordFailure(email) {
+  const af = accountFailures.get(email) || { count: 0, lockedUntil: 0 };
+  af.count++;
+  if (af.count >= 5) af.lockedUntil = Date.now() + 15 * 60 * 1000;
+  accountFailures.set(email, af);
+}
+function clearFailure(email) { accountFailures.delete(email); }
+
+/* ─── VERIFICATION CODE HASHING ─────────────────────────────────────────── */
+function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
+function hashCode(code) { return createHash('sha256').update(String(code)).digest('hex'); }
+
+/* ─── JWT AUTH MIDDLEWARE ────────────────────────────────────────────────── */
+function requireAuth(req, res, next) {
+  const header = req.headers['authorization'] || '';
+  const token  = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Authentification requise.' });
+  try {
+    req.user = jwt.verify(token, _JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Session expirée ou invalide. Veuillez vous reconnecter.' });
+  }
+}
+
+function requireAdmin(req, res, next) {
+  requireAuth(req, res, () => {
+    if (req.user.role !== 'admin')
+      return res.status(403).json({ error: 'Accès réservé aux administrateurs.' });
+    next();
+  });
+}
+
+// Self-or-admin: user can act on their own record; admin can act on anyone
+function requireSelfOrAdmin(req, res, next) {
+  requireAuth(req, res, () => {
+    if (req.user.role === 'admin' || req.user.userId === req.params.id) return next();
+    return res.status(403).json({ error: 'Accès non autorisé.' });
+  });
+}
+
+// Global: all /api/* routes require a valid JWT except the three public endpoints
+const _PUBLIC = [
+  { method: 'POST', re: /^\/api\/auth\/login$/ },
+  { method: 'POST', re: /^\/api\/users$/ },
+  { method: 'POST', re: /^\/api\/users\/[^/]+\/verify-email$/ },
+];
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  const isPublic = _PUBLIC.some(p => req.method === p.method && p.re.test(req.path));
+  if (isPublic) return next();
+  return requireAuth(req, res, next);
+});
 
 /* ─── ROW MAPPERS ────────────────────────────────────────────────────────── */
 const mapDischarge = r => ({
@@ -165,10 +266,8 @@ const mapUser = r => ({
   role:r.role, status:r.status, phone:r.phone||'',
   matricule:r.matricule||'', siteId:r.site_id, createdAt:r.created_at,
   emailVerified:r.email_verified||false,
-  verificationCode:r.verification_code||null,
+  // verificationCode is never returned — admin gets plaintext only from POST/regenerate-code response
 });
-
-function genCode() { return String(Math.floor(100000 + Math.random() * 900000)); }
 
 const mapSite = r => ({
   id:r.id, name:r.name, type:r.type, region:r.region,
@@ -210,6 +309,13 @@ app.post('/api/discharges', async (req, res) => {
     await dbClient.query('BEGIN');
 
     let forcedStatus = d.status;
+
+    // Site-scope enforcement: operators can only submit discharges for their assigned site
+    if (req.user.role !== 'admin' && req.user.siteId !== 'all' && d.siteId && req.user.siteId !== d.siteId) {
+      await dbClient.query('ROLLBACK');
+      dbClient.release();
+      return res.status(403).json({ error: 'Vous ne pouvez pas soumettre des dépôts pour un autre site.' });
+    }
 
     if (d.clientId) {
       // Phase 4 — SELECT … FOR UPDATE so two concurrent requests can't both read stale consumption
@@ -374,7 +480,7 @@ app.get('/api/clients', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.post('/api/clients', async (req, res) => {
+app.post('/api/clients', requireAdmin, async (req, res) => {
   const c = req.body;
   try {
     await q(
@@ -392,7 +498,7 @@ app.post('/api/clients', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.put('/api/clients/:id', async (req, res) => {
+app.put('/api/clients/:id', requireAdmin, async (req, res) => {
   const c = req.body;
   try {
     await q(
@@ -416,7 +522,7 @@ app.put('/api/clients/:id', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.delete('/api/clients/:id', async (req, res) => {
+app.delete('/api/clients/:id', requireAdmin, async (req, res) => {
   try {
     await q('DELETE FROM clients WHERE id=$1',[req.params.id]);
     ok(res, { ok:true });
@@ -424,7 +530,7 @@ app.delete('/api/clients/:id', async (req, res) => {
 });
 
 /* ─── USERS ───────────────────────────────────────────────────────────────── */
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', requireAdmin, async (req, res) => {
   try {
     const { rows } = await q('SELECT * FROM users ORDER BY created_at');
     ok(res, rows.map(mapUser));
@@ -433,24 +539,30 @@ app.get('/api/users', async (req, res) => {
 
 app.post('/api/users', async (req, res) => {
   const u = req.body;
+  // Password is required — 'changeme' default is never allowed
+  if (!u.password) return res.status(400).json({ error: 'Mot de passe requis.' });
+  const pwError = validatePasswordStrength(u.password);
+  if (pwError) return res.status(400).json({ error: pwError });
   try {
-    const hashed = await bcrypt.hash(u.password || 'changeme', 10);
-    const code = (u.role === 'operator') ? genCode() : null;
-    const expires = code ? new Date(Date.now() + 48 * 60 * 60 * 1000) : null;
+    const hashed = await bcrypt.hash(u.password, 10);
+    const plainCode = (u.role === 'operator') ? genCode() : null;
+    const storedCode = plainCode ? hashCode(plainCode) : null; // store hash, never plaintext
+    const expires = plainCode ? new Date(Date.now() + 48 * 60 * 60 * 1000) : null;
     await q(
       `INSERT INTO users(id,name,email,password,role,status,phone,matricule,site_id,created_at,
         email_verified,verification_code,verification_expires_at)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(id) DO NOTHING`,
       [u.id,u.name,u.email,hashed,u.role,u.status,u.phone||'',
        u.matricule||'',u.siteId||'all',u.createdAt||new Date().toISOString().slice(0,10),
-       false, code, expires]
+       false, storedCode, expires]
     );
-    ok(res, { ok:true, verificationCode: code });
+    ok(res, { ok:true, verificationCode: plainCode }); // plaintext returned to admin only here
   } catch(e) { er(res,e); }
 });
 
 app.post('/api/users/:id/verify-email', async (req, res) => {
   const { code } = req.body;
+  if (!code) return res.status(400).json({ error: 'Code requis.' });
   try {
     const { rows } = await q(
       'SELECT verification_code, verification_expires_at FROM users WHERE id=$1',
@@ -460,7 +572,8 @@ app.post('/api/users/:id/verify-email', async (req, res) => {
     const { verification_code, verification_expires_at } = rows[0];
     if (!verification_code) return er(res, 'Aucun code de vérification actif', 400);
     if (new Date() > new Date(verification_expires_at)) return er(res, 'Code expiré', 400);
-    if (code !== verification_code) return er(res, 'Code incorrect', 400);
+    // Compare hash — stored value is sha256(plainCode)
+    if (hashCode(code.trim()) !== verification_code) return er(res, 'Code incorrect', 400);
     await q(
       'UPDATE users SET email_verified=TRUE, verification_code=NULL, verification_expires_at=NULL WHERE id=$1',
       [req.params.id]
@@ -469,19 +582,20 @@ app.post('/api/users/:id/verify-email', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.post('/api/users/:id/regenerate-code', async (req, res) => {
+app.post('/api/users/:id/regenerate-code', requireAdmin, async (req, res) => {
   try {
-    const code = genCode();
+    const plainCode = genCode();
+    const storedCode = hashCode(plainCode); // store hash only
     const expires = new Date(Date.now() + 48 * 60 * 60 * 1000);
     await q(
       'UPDATE users SET verification_code=$1, verification_expires_at=$2, email_verified=FALSE WHERE id=$3',
-      [code, expires, req.params.id]
+      [storedCode, expires, req.params.id]
     );
-    ok(res, { ok:true, verificationCode: code });
+    ok(res, { ok:true, verificationCode: plainCode }); // plaintext returned to admin only
   } catch(e) { er(res,e); }
 });
 
-app.put('/api/users/:id', async (req, res) => {
+app.put('/api/users/:id', requireSelfOrAdmin, async (req, res) => {
   const u = req.body;
   try {
     if (u.password && u.password.trim() && !u.password.startsWith('$2')) {
@@ -504,7 +618,7 @@ app.put('/api/users/:id', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.delete('/api/users/:id', async (req, res) => {
+app.delete('/api/users/:id', requireAdmin, async (req, res) => {
   try {
     await q('DELETE FROM users WHERE id=$1',[req.params.id]);
     ok(res, { ok:true });
@@ -519,7 +633,7 @@ app.get('/api/sites', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.put('/api/sites/:id', async (req, res) => {
+app.put('/api/sites/:id', requireAdmin, async (req, res) => {
   const s = req.body;
   try {
     await q(
@@ -540,7 +654,7 @@ app.get('/api/waste-types', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.put('/api/waste-types/:id', async (req, res) => {
+app.put('/api/waste-types/:id', requireAdmin, async (req, res) => {
   const w = req.body;
   try {
     await q(
@@ -552,14 +666,14 @@ app.put('/api/waste-types/:id', async (req, res) => {
 });
 
 /* ─── INVOICES ────────────────────────────────────────────────────────────── */
-app.get('/api/invoices', async (req, res) => {
+app.get('/api/invoices', requireAdmin, async (req, res) => {
   try {
     const { rows } = await q('SELECT * FROM invoices ORDER BY generated_at DESC');
     ok(res, rows.map(mapInvoice));
   } catch(e) { er(res,e); }
 });
 
-app.post('/api/invoices', async (req, res) => {
+app.post('/api/invoices', requireAdmin, async (req, res) => {
   const inv = req.body;
   try {
     await q(
@@ -584,7 +698,7 @@ app.post('/api/invoices', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.put('/api/invoices/:id', async (req, res) => {
+app.put('/api/invoices/:id', requireAdmin, async (req, res) => {
   const inv = req.body;
   const dbClient = await pool.connect();
   try {
@@ -633,28 +747,47 @@ app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
   const { email, password } = req.body;
   const ip = getIP(req);
   if (!email || !password) return res.status(400).json({ error: 'Champs requis manquants.' });
+
+  // Per-account lockout check
+  const lockCheck = checkAccountLock(email.toLowerCase());
+  if (lockCheck.locked) {
+    const mins = Math.ceil((lockCheck.until - Date.now()) / 60000);
+    return res.status(429).json({ error: `Compte temporairement verrouillé. Réessayez dans ${mins} minute(s).` });
+  }
+
   try {
     const { rows } = await q(
       'SELECT * FROM users WHERE email=$1 AND status=$2',
-      [email, 'active']
+      [email.toLowerCase().trim(), 'active']
     );
     if (rows.length === 0) {
+      recordFailure(email.toLowerCase());
       await logAudit({ eventType:'LOGIN_FAIL', ip, resource:'auth', detail:`Email inconnu ou compte inactif: ${email}`, outcome:'failure' });
       return res.status(401).json({ error: 'Identifiants invalides ou compte inactif.' });
     }
     const match = await bcrypt.compare(password, rows[0].password);
     if (!match) {
+      recordFailure(email.toLowerCase());
       await logAudit({ eventType:'LOGIN_FAIL', userId:rows[0].id, userName:rows[0].name, userRole:rows[0].role, ip, resource:'auth', detail:'Mot de passe incorrect', outcome:'failure' });
       return res.status(401).json({ error: 'Identifiants invalides ou compte inactif.' });
     }
+    clearFailure(email.toLowerCase());
+    const user = mapUser(rows[0]);
+    const token = jwt.sign(
+      { userId: rows[0].id, role: rows[0].role, siteId: rows[0].site_id },
+      _JWT_SECRET,
+      { expiresIn: '10h' }
+    );
     await logAudit({ eventType:'LOGIN_SUCCESS', userId:rows[0].id, userName:rows[0].name, userRole:rows[0].role, ip, resource:'auth', detail:'Connexion réussie', outcome:'success' });
-    ok(res, mapUser(rows[0]));
+    ok(res, { token, user });
   } catch(e) { er(res,e); }
 });
 
 app.post('/api/auth/change-password', async (req, res) => {
-  const { userId, currentPassword, newPassword } = req.body;
-  if (!userId || !currentPassword || !newPassword) return res.status(400).json({ error: 'Champs requis manquants.' });
+  const { currentPassword, newPassword } = req.body;
+  // userId comes from the verified JWT — never from the request body
+  const userId = req.user.userId;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Champs requis manquants.' });
   const pwError = validatePasswordStrength(newPassword);
   if (pwError) return res.status(400).json({ error: pwError });
   try {
@@ -680,7 +813,7 @@ app.get('/api/company-trucks', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.post('/api/company-trucks', async (req, res) => {
+app.post('/api/company-trucks', requireAdmin, async (req, res) => {
   const t = req.body;
   try {
     await q(
@@ -691,7 +824,7 @@ app.post('/api/company-trucks', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.put('/api/company-trucks/:id', async (req, res) => {
+app.put('/api/company-trucks/:id', requireAdmin, async (req, res) => {
   const t = req.body;
   try {
     await q(
@@ -702,7 +835,7 @@ app.put('/api/company-trucks/:id', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-app.delete('/api/company-trucks/:id', async (req, res) => {
+app.delete('/api/company-trucks/:id', requireAdmin, async (req, res) => {
   try {
     await q('DELETE FROM company_trucks WHERE id=$1',[req.params.id]);
     ok(res, { ok:true });
@@ -739,8 +872,10 @@ app.post('/api/compliance/consent', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-/* GET /api/compliance/consent/:userId — Check consent status */
+/* GET /api/compliance/consent/:userId — Check consent status (self or admin) */
 app.get('/api/compliance/consent/:userId', async (req, res) => {
+  if (req.user && req.user.role !== 'admin' && req.user.userId !== req.params.userId)
+    return res.status(403).json({ error: 'Accès non autorisé.' });
   try {
     const { rows } = await q(
       `SELECT id, consented_at, policy_ver, scope FROM consent_records
@@ -756,8 +891,10 @@ app.get('/api/compliance/consent/:userId', async (req, res) => {
   } catch(e) { er(res,e); }
 });
 
-/* GET /api/compliance/my-data/:userId — Right of Access (Law 18-07, Art. 20) */
+/* GET /api/compliance/my-data/:userId — Right of Access (Law 18-07, Art. 20) — self or admin */
 app.get('/api/compliance/my-data/:userId', async (req, res) => {
+  if (req.user && req.user.role !== 'admin' && req.user.userId !== req.params.userId)
+    return res.status(403).json({ error: 'Accès non autorisé.' });
   const uid = req.params.userId;
   const ip = getIP(req);
   try {
@@ -798,7 +935,7 @@ app.post('/api/compliance/data-request', async (req, res) => {
 });
 
 /* GET /api/compliance/data-requests — Admin: list all requests */
-app.get('/api/compliance/data-requests', async (req, res) => {
+app.get('/api/compliance/data-requests', requireAdmin, async (req, res) => {
   try {
     const { rows } = await q(
       `SELECT dr.*, u.name AS handler_name FROM data_requests dr
@@ -810,7 +947,7 @@ app.get('/api/compliance/data-requests', async (req, res) => {
 });
 
 /* PUT /api/compliance/data-requests/:id — Admin: handle a request */
-app.put('/api/compliance/data-requests/:id', async (req, res) => {
+app.put('/api/compliance/data-requests/:id', requireAdmin, async (req, res) => {
   const { status, handledBy, note } = req.body;
   const ip = getIP(req);
   try {
@@ -824,7 +961,7 @@ app.put('/api/compliance/data-requests/:id', async (req, res) => {
 });
 
 /* GET /api/compliance/audit-log — Admin: view security audit log (Law 25-11, Art. 16) */
-app.get('/api/compliance/audit-log', async (req, res) => {
+app.get('/api/compliance/audit-log', requireAdmin, async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit)||100, 500);
   const offset = parseInt(req.query.offset)||0;
   const eventType = req.query.event_type||null;
@@ -838,7 +975,7 @@ app.get('/api/compliance/audit-log', async (req, res) => {
 });
 
 /* GET /api/compliance/breach-report — Admin: generate incident/breach report (Law 25-11, Art. 18 — 72h window) */
-app.get('/api/compliance/breach-report', async (req, res) => {
+app.get('/api/compliance/breach-report', requireAdmin, async (req, res) => {
   const since = req.query.since ? new Date(req.query.since) : new Date(Date.now() - 72*3600*1000);
   try {
     const { rows: failures } = await q(
@@ -870,9 +1007,11 @@ app.get('/api/compliance/breach-report', async (req, res) => {
 });
 
 /* POST /api/compliance/purge-expired — Admin: enforce retention policy (Law 18-07, Art. 17) */
-app.post('/api/compliance/purge-expired', async (req, res) => {
+app.post('/api/compliance/purge-expired', requireAdmin, async (req, res) => {
   const ip = getIP(req);
-  const { adminUserId, retentionYears } = req.body;
+  // Use req.user from JWT — never trust a client-supplied adminUserId
+  const { retentionYears } = req.body;
+  const adminUserId = req.user.userId;
   const years = parseInt(retentionYears) || 10;
   try {
     const cutoff = new Date();
@@ -931,7 +1070,7 @@ app.get('/api/bills/:id', async (req, res) => {
 /* POST /api/bills — generate a new bill for a client (Phase 3.1)
    Picks up every discharge not already in an open/partial bill with remaining_ttc > 0,
    ordered by ts ASC.  A discharge can be in at most one open/partial bill at a time. */
-app.post('/api/bills', async (req, res) => {
+app.post('/api/bills', requireAdmin, async (req, res) => {
   const { clientId } = req.body;
   if (!clientId) return res.status(400).json({ error: 'clientId requis.' });
   const dbClient = await pool.connect();
@@ -1105,7 +1244,7 @@ function computeFifoAllocation(discs, input, vatSubject) {
 /* POST /api/bills/:billId/payments/preview — dry-run FIFO allocation (Phase 3B.2)
    Accepts {amountTTC} for waterfall or {dischargeIds:[...]} for specific selection.
    NO database writes — returns the allocation plan for the bill-generation step. */
-app.post('/api/bills/:billId/payments/preview', async (req, res) => {
+app.post('/api/bills/:billId/payments/preview', requireAdmin, async (req, res) => {
   const { amountTTC, dischargeIds } = req.body;
   const hasAmount = amountTTC != null && parseFloat(amountTTC) > 0;
   const hasIds    = Array.isArray(dischargeIds) && dischargeIds.length > 0;
@@ -1136,8 +1275,9 @@ app.post('/api/bills/:billId/payments/preview', async (req, res) => {
 /* POST /api/bills/:billId/payments — commit FIFO payment (Phase 3.2 + 3B)
    Accepts {amountTTC} for waterfall or {dischargeIds:[...]} for specific selection.
    Uses the same computeFifoAllocation function as the preview endpoint. */
-app.post('/api/bills/:billId/payments', async (req, res) => {
-  const { amountTTC, dischargeIds, method, note, createdBy } = req.body;
+app.post('/api/bills/:billId/payments', requireAdmin, async (req, res) => {
+  const { amountTTC, dischargeIds, method, note } = req.body;
+  const createdBy = req.user.userId; // from JWT — never trust body-supplied identity
   const hasAmount = amountTTC != null && parseFloat(amountTTC) > 0;
   const hasIds    = Array.isArray(dischargeIds) && dischargeIds.length > 0;
   if (!hasAmount && !hasIds)
