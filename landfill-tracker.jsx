@@ -724,7 +724,7 @@ const registerLogout = fn => { _authLogout = fn; };
 
 const apiFetch = async (url, opts = {}) => {
   const token = localStorage.getItem('authToken');
-  const res = await apiFetch(url, {
+  const res = await fetch(url, {
     ...opts,
     headers: {
       ...(opts.headers || {}),
