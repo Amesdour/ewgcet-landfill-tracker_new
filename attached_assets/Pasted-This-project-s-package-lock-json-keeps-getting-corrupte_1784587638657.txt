@@ -1,0 +1,82 @@
+This project's package-lock.json keeps getting corrupted with dead 
+registry URLs. Several packages (vite, update-browserslist-db, 
+source-map-js, yallist, side-channel, side-channel-map, 
+side-channel-weakmap, side-channel-list, semver, safe-buffer, rollup, 
+qs, postcss, object-inspect, node-releases, jsonwebtoken and its 
+sub-dependencies, lodash.* packages, jwa, jws, ecdsa-sig-formatter, 
+buffer-equal-constant-time) have had their "resolved" field in 
+package-lock.json pointing to http://package-firewall.replit.local/npm/ 
+instead of https://registry.npmjs.org/. This is a Replit-internal proxy 
+address that does not exist outside the Replit environment.
+
+This has repeatedly broken Render deployments: Render's Docker build 
+runs `npm ci`/`npm install`, which then tries to fetch those specific 
+packages from the dead replit.local address, retries 3 times over 
+~71 seconds, fails, and then npm 10.8.2's known "Exit handler never 
+called!" bug causes it to silently exit with code 0 anyway — leaving 
+critical packages (like vite) NOT actually installed. This makes 
+`npm run build` fail afterward with "vite: not found", with no clear 
+error at the install step itself.
+
+ROOT CAUSE
+Whenever `npm install` or similar is run inside the Replit shell, it 
+appears Replit's own environment has a registry override/proxy 
+configured (likely via an environment variable like NPM_CONFIG_REGISTRY, 
+or a global npm config, or Replit's own package management layer) that 
+silently rewrites some or all fetched packages' resolved URLs to go 
+through package-firewall.replit.local. This override does NOT appear in 
+the project's own .npmrc or package.json — it's coming from something 
+in Replit's environment itself, outside the repo.
+
+WHAT I NEED YOU TO DO
+
+1. Find where this registry override is coming from. Check, in order:
+   - `npm config list` (run this and show me the full output) — look 
+     for any "registry" line pointing to replit.local
+   - Environment variables: run `env | grep -i npm` and 
+     `env | grep -i registry` and show me the output
+   - Any global npm config files: check `~/.npmrc`, `/etc/npmrc`, and 
+     any Replit-specific config locations
+   - Whether Replit's Nix/package manager config (`.replit`, 
+     `replit.nix`, `.config/`) sets an npm registry anywhere
+
+2. Once found, either:
+   a. Permanently unset/remove that override so it never applies again 
+      in this workspace, OR
+   b. If it can't be permanently removed (e.g. it's baked into Replit's 
+      base environment and resets on every session), then create a 
+      project-local `.npmrc` file in the repo root containing:
+  registry=https://registry.npmjs.org/
+      This ensures that regardless of any global/environment-level 
+      override, any `npm install` run in THIS project folder always 
+      uses the correct public registry. This is safer than relying on 
+      remembering to pass `--registry` manually every time.
+
+3. After fixing the root cause, do a clean verification:
+rm -rf node_modules package-lock.json
+npm install
+grep -c "package-firewall.replit.local" package-lock.json
+   The grep command MUST return 0. If it returns anything else, the 
+   fix in step 2 didn't work — go back and find what else is 
+   overriding the registry.
+
+4. Once package-lock.json is confirmed clean (zero replit.local 
+   references), run `npm run build` to confirm it still builds 
+   successfully.
+
+5. Commit and push the fixed package-lock.json (and the new .npmrc 
+   file if you created one in step 2b):
+git add package-lock.json .npmrc
+git commit -m "Add project-local .npmrc to prevent registry override corruption"
+git push
+
+CONSTRAINTS
+- Do not change any dependency versions as part of this fix — this is 
+  purely about fixing WHERE packages are fetched from, not WHAT is 
+  installed. package.json's dependency versions should remain exactly 
+  as they are now.
+- Do not modify the Dockerfile as part of this task — it's already 
+  correct (uses `npm ci --include=dev --no-audit --no-fund`).
+- Please explain clearly what you found was causing the override 
+  (which config source it came from) so I understand it for next time, 
+  and confirm the final grep check returned 0 before finishing.
