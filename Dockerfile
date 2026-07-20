@@ -1,8 +1,7 @@
 FROM node:20-slim
 WORKDIR /app
-RUN npm install -g npm@latest
 COPY package*.json ./
-RUN npm ci --include=dev --no-audit --no-fund
+RUN npm ci --include=dev --no-audit --no-fund --loglevel=verbose
 COPY . .
 RUN npm run build
 ENV NODE_ENV=production
