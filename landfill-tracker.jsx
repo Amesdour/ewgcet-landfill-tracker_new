@@ -1,4 +1,8 @@
 import { useState, useEffect, createContext, useContext } from "react";
+import OfflineBanner from "./src/components/OfflineBanner";
+import ConflictReview from "./src/components/ConflictReview";
+import { queueDischarge, makeOfflineId } from "./src/lib/offlineDischargeQueue";
+import { saveReferenceData, loadReferenceData } from "./src/lib/offlineDataCache";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LANGUAGE CONTEXT
@@ -1134,15 +1138,31 @@ export default function App() {
       adminOnly('/api/users'),
       adminOnly('/api/invoices'),
     ]).then(([s,wt,c,d,ct,u,inv])=>{
-      setSites(Array.isArray(s)?s:[]);
-      setWasteTypes(Array.isArray(wt)?wt:[]);
-      setClients(Array.isArray(c)?c:[]);
-      setDischarges(Array.isArray(d)?d:[]);
-      setCompanyTrucks(Array.isArray(ct)?ct:[]);
+      const sites_=Array.isArray(s)?s:[], wasteTypes_=Array.isArray(wt)?wt:[];
+      const clients_=Array.isArray(c)?c:[], discharges_=Array.isArray(d)?d:[];
+      const companyTrucks_=Array.isArray(ct)?ct:[];
+      setSites(sites_);
+      setWasteTypes(wasteTypes_);
+      setClients(clients_);
+      setDischarges(discharges_);
+      setCompanyTrucks(companyTrucks_);
       setUsers(Array.isArray(u)?u:[]);
       setInvoices(Array.isArray(inv)?inv:[]);
       setLoading(false);
-    }).catch(()=>setLoading(false));
+      // Keep the essential dataset available for offline discharge entry.
+      saveReferenceData({ sites: sites_, wasteTypes: wasteTypes_, clients: clients_, discharges: discharges_, companyTrucks: companyTrucks_ }).catch(()=>{});
+    }).catch(()=>{
+      // Network unreachable at boot — fall back to the last cached dataset
+      // so gate operators can still open the app and log discharges offline.
+      loadReferenceData().then(cached=>{
+        setSites(cached.sites);
+        setWasteTypes(cached.wasteTypes);
+        setClients(cached.clients);
+        setDischarges(cached.discharges);
+        setCompanyTrucks(cached.companyTrucks);
+        setLoading(false);
+      }).catch(()=>setLoading(false));
+    });
   },[]);
 
   if (loading) return (
@@ -1190,10 +1210,27 @@ export default function App() {
   const opSite  = !isAdmin ? sites.find(s=>s.id===authUser.siteId) : null;
 
   const addDischarge = async d => {
-    await apiFetch('/api/discharges',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
-    setDischarges(p=>[d,...p]);
-    if (d.payMethod==="convention"||d.payMethod==="credit"||d.payMethod==="prepaid") {
-      setClients(p=>p.map(c=>c.id===d.clientId?{...c,consumed:c.consumed+d.total}:c));
+    const applyLocally = record => {
+      setDischarges(p=>[record,...p]);
+      if (record.payMethod==="convention"||record.payMethod==="credit"||record.payMethod==="prepaid") {
+        setClients(p=>p.map(c=>c.id===record.clientId?{...c,consumed:c.consumed+record.total}:c));
+      }
+    };
+    if (!navigator.onLine) {
+      const offlineRecord = { ...d, id: d.id || makeOfflineId(), _offlinePending: true };
+      await queueDischarge({ endpoint: '/api/discharges', method: 'POST', body: d });
+      applyLocally(offlineRecord);
+      return;
+    }
+    try {
+      await apiFetch('/api/discharges',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+      applyLocally(d);
+    } catch (e) {
+      // Request failed but we still have a connection reported — could be a
+      // dropped connection mid-request. Queue it rather than lose the entry.
+      const offlineRecord = { ...d, id: d.id || makeOfflineId(), _offlinePending: true };
+      await queueDischarge({ endpoint: '/api/discharges', method: 'POST', body: d });
+      applyLocally(offlineRecord);
     }
   };
   const updateDischarge = async d => {
@@ -1300,6 +1337,13 @@ export default function App() {
   return (
     <LangCtx.Provider value={lang}>
       <style>{STYLES}</style>
+      <OfflineBanner onSynced={()=>{
+        // Offline discharges just synced — refetch the real records so
+        // temporary offline entries are replaced and clients' consumed
+        // totals reflect what the server actually accepted.
+        apiFetch('/api/discharges').then(r=>r.json()).then(d=>{ if(Array.isArray(d)) setDischarges(d); }).catch(()=>{});
+        apiFetch('/api/clients').then(r=>r.json()).then(c=>{ if(Array.isArray(c)) setClients(c); }).catch(()=>{});
+      }}/>
       {showConsent && <ConsentModal user={authUser} lang={lang} onAccepted={()=>setShowConsent(false)}/>}
       <div className="shell" dir={lang==="ar"?"rtl":"ltr"}>
         <div className={`sidebar-backdrop${sidebarOpen?" open":""}`} onClick={closeSidebar}/>
@@ -1363,6 +1407,7 @@ onClick={()=>setTheme(t=>{ const next = t==="dark"?"light":"dark"; localStorage.
             {page==="invoice"    && <PageInvoice clients={clients} discharges={discharges} sites={sites} wasteTypes={wasteTypes} invoices={invoices} addInvoice={addInvoice} updateInvoice={updateInvoice} updateDischarge={updateDischarge} company={company} refreshInvoices={refreshInvoices}/>}
             {page==="settings"   && <PageSettings sites={sites} wasteTypes={wasteTypes} updateSite={updateSite} updateWT={updateWT} authUser={authUser} updateUser={updateUser} setAuthUser={setAuthUser} docTypes={docTypes} updateDocTypes={updateDocTypes} company={company} updateCompany={updateCompany} companyTrucks={companyTrucks} addCompanyTruck={addCompanyTruck} updateCompanyTruck={updateCompanyTruck} deleteCompanyTruck={deleteCompanyTruck} clients={clients} updateClient={updateClient}/>}
             {page==="schema"     && <PageSchema/>}
+            <ConflictReview/>
           </div>
           <nav className="mobile-bottom-nav">
             <div className="mbn-inner">
