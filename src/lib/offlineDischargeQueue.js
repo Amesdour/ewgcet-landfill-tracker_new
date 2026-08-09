@@ -1,23 +1,18 @@
-import { openDB } from 'idb';
+import { getDb } from './offlineDb';
 
-const DB_NAME = 'ewgcet-offline';
-const DB_VERSION = 1;
 const PENDING_STORE = 'pending-discharges';
 const CONFLICT_STORE = 'conflicts';
-
-async function getDb() {
-  return openDB(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      if (!db.objectStoreNames.contains(PENDING_STORE)) db.createObjectStore(PENDING_STORE, { keyPath: 'id', autoIncrement: true });
-      if (!db.objectStoreNames.contains(CONFLICT_STORE)) db.createObjectStore(CONFLICT_STORE, { keyPath: 'id', autoIncrement: true });
-    }
-  });
-}
 
 export async function queueDischarge(item) {
   const db = await getDb();
   const store = db.transaction(PENDING_STORE, 'readwrite').objectStore(PENDING_STORE);
   await store.add({ payload: item, createdAt: new Date().toISOString() });
+}
+
+// Local-only id for a discharge created while offline, so the UI can
+// reconcile it once flushQueue() sends the real record to the server.
+export function makeOfflineId() {
+  return `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export async function getPendingCount() {
@@ -58,6 +53,11 @@ async function moveToConflict(pendingId, queuedItem, serverRecord) {
   await tx.done;
 }
 
+function authHeaders() {
+  const token = localStorage.getItem('authToken');
+  return token ? { 'Authorization': `Bearer ${token}` } : {};
+}
+
 export async function flushQueue(onProgress) {
   const pending = await listPending();
   if (!pending.length) return { processed:0 };
@@ -67,7 +67,7 @@ export async function flushQueue(onProgress) {
     try {
       const res = await fetch(item.endpoint || '/api/discharges', {
         method: item.method || 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(item.body),
       });
       if (res.status === 409) {
@@ -102,7 +102,7 @@ export async function forceSubmitConflict(conflictId) {
     const body = { ...item.body, forceOverwrite: true };
     const res = await fetch(item.endpoint || '/api/discharges', {
       method: item.method || 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify(body),
     });
     if (res.ok) {
