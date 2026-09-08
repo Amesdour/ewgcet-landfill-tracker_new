@@ -1334,6 +1334,23 @@ app.post('/api/bills/:billId/payments', requireAdmin, async (req, res) => {
         [a.discharge_id, paymentId, req.params.billId, a.appliedTTC, a.appliedHT, a.appliedQty]
       );
     }
+    // Update each touched discharge's own status based on its own remaining balance —
+    // do NOT wait for the whole invoice period to be fully paid (that undercounts
+    // "settled" volume in analytics until every discharge in the period clears).
+    const touchedIds = result.allocations.map(a => a.discharge_id);
+    if (touchedIds.length > 0) {
+      await dbClient.query(`
+        UPDATE discharges d SET status = CASE
+          WHEN (
+            (CASE WHEN $2 THEN d.total * 1.19 ELSE d.total END)
+              - COALESCE((SELECT SUM(dp.applied_amount_ttc) FROM discharge_payments dp
+                          WHERE dp.discharge_id = d.id), 0)
+          ) < 0.005 THEN 'paid'
+          ELSE 'partial'
+        END
+        WHERE d.id = ANY($1) AND d.status NOT IN ('paid','cancelled')
+      `, [touchedIds, vatSubject]);
+    }
     // Recompute bill status
     const { rows: rem } = await dbClient.query(`
       SELECT COALESCE(SUM(
