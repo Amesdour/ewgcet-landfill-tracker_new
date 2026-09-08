@@ -5088,13 +5088,18 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const totalCost = entries.reduce((s,d)=>s+d.total,0);
 
   // Group entries into invoice line items by (opType, wasteType, billingMode, unitPrice)
+  const lineItemKey = (d) => {
+    const opT         = d.opType==="collect" ? "collect" : "treatment";
+    const billingMode = d.payMethod==="rotation" ? "rotation" : "tonnage";
+    return `${opT}|${d.wasteType}|${billingMode}|${d.unitPrice}`;
+  };
   const lineItems = Object.values(
     entries.reduce((acc, d) => {
       const opT         = d.opType==="collect" ? "collect" : "treatment";
       const billingMode = d.payMethod==="rotation" ? "rotation" : "tonnage";
       const wt          = wasteTypes.find(w=>w.id===d.wasteType);
-      const key         = `${opT}|${d.wasteType}|${billingMode}|${d.unitPrice}`;
-      if (!acc[key]) acc[key] = { opType:opT, wasteTypeId:d.wasteType, wtLabel:wt?.label||d.wasteType, billingMode, unitPrice:d.unitPrice||0, qty:0, count:0, total:0, minTs:d.ts };
+      const key         = lineItemKey(d);
+      if (!acc[key]) acc[key] = { key, opType:opT, wasteTypeId:d.wasteType, wtLabel:wt?.label||d.wasteType, billingMode, unitPrice:d.unitPrice||0, qty:0, count:0, total:0, minTs:d.ts };
       acc[key].count += 1;
       acc[key].qty   += billingMode==="rotation" ? 1 : (d.net||0);
       acc[key].total += d.total||0;
@@ -5102,6 +5107,15 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       return acc;
     }, {})
   );
+  // Real per-line-item paid totals from the discharge_payments ledger (same grouping key as lineItems),
+  // so the invoice preview reflects actual FIFO-applied payments instead of a flat equal split.
+  const lineItemPayMap = entries.reduce((acc, d) => {
+    const dp = clientDiscPayments[d.id];
+    if (!dp || dp.paidTTC <= 0) return acc;
+    const key = lineItemKey(d);
+    acc[key] = Math.round(((acc[key]||0) + dp.paidTTC) * 100) / 100;
+    return acc;
+  }, {});
   // Per-wasteType payment totals from discharge_payments ledger (for Relevé Client annotations)
   const wtPayMap = entries.reduce((acc, d) => {
     const dp = clientDiscPayments[d.id];
@@ -6112,22 +6126,22 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                         ? Math.round((item.total / totalHT) * invTTC * 100) / 100
                         : toTTC(item.total, c.vatSubject)
                     );
-                    // Distribute partial payment equally across all waste-type line items.
-                    // e.g. 3000 DA paid, 3 waste-type lines → 1000 DA allocated to each line.
+                    // Real paid status per line, from actual discharge_payments allocations
+                    // (falls back to 'unpaid' only when nothing has been applied to that line yet).
                     const payStatuses  = new Array(lineItems.length).fill('unpaid');
                     const partialPaids = new Array(lineItems.length).fill(0);
-                    const totalPaid = currentInv ? (currentInv.paidAmount||0) : 0;
-                    if (totalPaid > 0 && lineItems.length > 0) {
-                      const sharePerLine = totalPaid / lineItems.length;
-                      for (let idx = 0; idx < lineItems.length; idx++) {
-                        const itc = itemTTCs[idx];
-                        if (sharePerLine >= itc) {
-                          payStatuses[idx] = 'paid';
-                          partialPaids[idx] = itc;
-                        } else {
-                          payStatuses[idx] = 'partial';
-                          partialPaids[idx] = Math.round(sharePerLine * 100) / 100;
-                        }
+                    for (let idx = 0; idx < lineItems.length; idx++) {
+                      const itc  = itemTTCs[idx];
+                      const paid = Math.min(lineItemPayMap[lineItems[idx].key] || 0, itc);
+                      if (paid <= 0) {
+                        payStatuses[idx] = 'unpaid';
+                        partialPaids[idx] = 0;
+                      } else if (paid >= itc - 0.005) {
+                        payStatuses[idx] = 'paid';
+                        partialPaids[idx] = itc;
+                      } else {
+                        payStatuses[idx] = 'partial';
+                        partialPaids[idx] = Math.round(paid * 100) / 100;
                       }
                     }
                     return lineItems.map((item,i)=>{
