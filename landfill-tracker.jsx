@@ -622,6 +622,16 @@ textarea.fi{resize:vertical;min-height:80px}
 const fmt    = n => new Intl.NumberFormat("fr-DZ",{minimumFractionDigits:3,maximumFractionDigits:3}).format(n) + " DA";
 const fmtN   = n => new Intl.NumberFormat("fr-DZ",{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
 const fmtTs  = ts => new Date(ts).toLocaleString("fr-DZ",{dateStyle:"short",timeStyle:"short"});
+// Algeria is UTC+1 year-round with no DST, but `ts` is stored as a UTC ISO
+// string. Slicing the first 10 chars of that string gives the UTC calendar
+// date, not the Algeria one — a discharge logged at 00:00-00:59 local time
+// is still "yesterday" in UTC, so date-range filters silently excluded it.
+// This converts to the browser's local calendar date instead (correct for
+// any user actually viewing this from Algeria).
+const localDateStr = ts => {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
 const uid    = () => "D" + Date.now().toString(36).toUpperCase();
 const uidC   = () => "C" + Date.now().toString(36).toUpperCase();
 const uidU   = () => "U" + Date.now().toString(36).toUpperCase();
@@ -2681,7 +2691,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
     const mf  = filter==="all"||d.status===filter||d.payMethod===filter;
     const ms  = !search||d.truck.includes(search.toUpperCase())||d.clientName.toLowerCase().includes(search.toLowerCase());
     const msf = opSiteId ? d.siteId===opSiteId : (siteF==="all"||d.siteId===siteF);
-    const dts = d.ts.slice(0,10);
+    const dts = localDateStr(d.ts);
     const mdf = (!dateFrom || dts >= dateFrom) && (!dateTo || dts <= dateTo);
     const mcl = clientF==="all"||d.clientId===clientF;
     const mwt = wasteF==="all"||d.wasteType===wasteF;
