@@ -2631,6 +2631,7 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
   const [search,  setSearch]  = useState("");
   const [siteF,   setSiteF]   = useState(opSiteId||"all");
   const [dateFrom,setDateFrom] = useState("");
+  const [filtersApplied,setFiltersApplied] = useState(false);
   const [dateTo,  setDateTo]   = useState("");
   const [clientF, setClientF] = useState("all");
   const [wasteF,  setWasteF]  = useState("all");
@@ -2745,6 +2746,17 @@ function PageDischarges({discharges,setDischarges,sites,wasteTypes,users,clients
           <label style={{fontFamily:"var(--mono)",fontSize:8,color:"var(--muted)",textTransform:"uppercase",letterSpacing:".12em"}}>{t("Au","إلى")}</label>
           <input className="fi" type="date" style={{width:140}} value={dateTo} onChange={e=>setDateTo(e.target.value)}/>
         </div>
+        <button
+          className="btn bp bsm"
+          style={{alignSelf:"flex-end"}}
+          onClick={()=>{
+            document.activeElement?.blur?.();
+            setFiltersApplied(true);
+            setTimeout(()=>setFiltersApplied(false),1500);
+          }}
+        >
+          {filtersApplied ? `✓ ${t("Appliqué","تم التطبيق")}` : t("Appliquer","تطبيق")}
+        </button>
         {(dateFrom||dateTo)&&(
           <button className="btn bg bsm" style={{alignSelf:"flex-end"}} onClick={()=>{setDateFrom("");setDateTo("");}}>✕ Reset</button>
         )}
