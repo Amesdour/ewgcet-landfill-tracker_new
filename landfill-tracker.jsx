@@ -5138,13 +5138,18 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     acc[key] = Math.round(((acc[key]||0) + dp.paidTTC) * 100) / 100;
     return acc;
   }, {});
-  // Per-wasteType payment totals from discharge_payments ledger (for Relevé Client annotations)
+  // Per-line-item payment totals from discharge_payments ledger (for Relevé Client annotations).
+  // Keyed the same way as lineItems (opType|wasteType|billingMode|unitPrice) — NOT by wasteType
+  // alone — because a client can have both a "collect" line and a "treatment" line for the same
+  // waste type in one period; keying by wasteType alone made both lines show the full payment
+  // amount, double-counting it when read together.
   const wtPayMap = entries.reduce((acc, d) => {
     const dp = clientDiscPayments[d.id];
     if (!dp || dp.paidTTC <= 0) return acc;
-    if (!acc[d.wasteType]) acc[d.wasteType] = { paidTTC: 0, details: [] };
-    acc[d.wasteType].paidTTC = Math.round((acc[d.wasteType].paidTTC + dp.paidTTC) * 100) / 100;
-    (dp.details || []).forEach(det => acc[d.wasteType].details.push(det));
+    const key = lineItemKey(d);
+    if (!acc[key]) acc[key] = { paidTTC: 0, details: [] };
+    acc[key].paidTTC = Math.round((acc[key].paidTTC + dp.paidTTC) * 100) / 100;
+    (dp.details || []).forEach(det => acc[key].details.push(det));
     return acc;
   }, {});
   // Distinct payment transactions that touched this period's discharges — for the history panel
@@ -6191,7 +6196,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                               {isUnpaid&&currentInv&&currentInv.paidAmount>0&&<span style={{fontSize:9,fontWeight:800,color:'var(--err)',background:'rgba(239,68,68,.12)',border:'1px solid var(--err)',borderRadius:4,padding:'1px 6px',letterSpacing:'.05em'}}>À PAYER</span>}
                              {/* 💳 Payment detail from discharge_payments ledger */}
                              {(()=>{
-                               const wp = wtPayMap[item.wasteTypeId];
+                               const wp = wtPayMap[item.key];
                                if (!wp || wp.paidTTC <= 0) return null;
                                const sorted = [...wp.details].sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt));
                                const totalTTCItem = c.vatSubject ? Math.round(item.total*1.19*100)/100 : item.total;
