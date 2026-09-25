@@ -712,7 +712,7 @@ function PayProgress({inv, compact=false}) {
       <div style={{minWidth:90}}>
         <div style={{display:"flex",justifyContent:"space-between",fontSize:9,fontFamily:"var(--mono)",color:"var(--muted)",marginBottom:3}}>
           <span style={{color:col}}>{pct}%</span>
-          {rem>0&&<span style={{color:"var(--warn)",whiteSpace:"nowrap"}}>{fmt(rem)} DA</span>}
+          {rem>0&&<span style={{color:"var(--warn)",whiteSpace:"nowrap"}}>{fmt(rem)}</span>}
         </div>
         <div className="pay-bar-track"><div className="pay-bar-fill" style={{width:`${pct}%`,background:col}}/></div>
       </div>
@@ -721,7 +721,7 @@ function PayProgress({inv, compact=false}) {
   return (
     <div style={{minWidth:160,textAlign:"right"}}>
       <div style={{fontSize:9,fontFamily:"var(--mono)",color:col,fontWeight:700,marginBottom:2}}>{pct}% réglé</div>
-      {rem>0&&<div style={{fontSize:10,fontFamily:"var(--mono)",color:"var(--err)",fontWeight:700,whiteSpace:"nowrap",marginBottom:3}}>{fmt(rem)} DA restant</div>}
+      {rem>0&&<div style={{fontSize:10,fontFamily:"var(--mono)",color:"var(--err)",fontWeight:700,whiteSpace:"nowrap",marginBottom:3}}>{fmt(rem)} restant</div>}
       <div className="pay-bar-track"><div className="pay-bar-fill" style={{width:`${pct}%`,background:col}}/></div>
     </div>
   );
@@ -2135,7 +2135,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
                     :collectMode==="prepaid"
                     ?<><strong>Client Prépayé (Collecte) :</strong> Décharge imputée au solde prépayé.
                       <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11}}>
-                        {fmt(client.consumed)} / {fmt(client.creditLimit)} DA
+                        {fmt(client.consumed)} / {fmt(client.creditLimit)}
                       </span>
                       {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Solde prépayé insuffisant !</div>}
                     </>
@@ -2163,14 +2163,14 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
                     :mode==="prepaid"
                     ?<><strong>Client Bonus Prépayé :</strong> Solde consommé à chaque décharge.
                       <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11}}>
-                        {fmt(client.consumed)} / {fmt(client.creditLimit)} DA
+                        {fmt(client.consumed)} / {fmt(client.creditLimit)}
                       </span>
                       {(()=>{
                         const pp = creditPct(client);
                         const rem = Math.max(0, client.creditLimit - client.consumed);
                         if (wouldExceedCredit || pp>=100) return <div style={{color:"var(--err)",fontSize:11,marginTop:3,fontWeight:700}}>🔴 Solde épuisé — décharge impossible !</div>;
-                        if (pp>=90) return <div style={{color:"var(--err)",fontSize:11,marginTop:3,fontWeight:700}}>🔴 Solde critique : {fmt(rem)} DA restants ({100-pp}%)</div>;
-                        if (pp>=70) return <div style={{color:"var(--warn)",fontSize:11,marginTop:3,fontWeight:600}}>🟠 Solde bas : {fmt(rem)} DA restants ({100-pp}%)</div>;
+                        if (pp>=90) return <div style={{color:"var(--err)",fontSize:11,marginTop:3,fontWeight:700}}>🔴 Solde critique : {fmt(rem)} restants ({100-pp}%)</div>;
+                        if (pp>=70) return <div style={{color:"var(--warn)",fontSize:11,marginTop:3,fontWeight:600}}>🟠 Solde bas : {fmt(rem)} restants ({100-pp}%)</div>;
                         return null;
                       })()}
                     </>
@@ -2191,7 +2191,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
                     :client.creditEnabled
                     ?<><strong>Client Crédit (DA) :</strong> Décharge imputée au compte crédit.
                       <span style={{marginLeft:8,fontFamily:"var(--mono)",fontSize:11}}>
-                        {fmt(client.consumed)} / {fmt(client.creditLimit)} DA
+                        {fmt(client.consumed)} / {fmt(client.creditLimit)}
                       </span>
                       {wouldExceedCredit&&<div style={{color:"var(--err)",fontSize:11,marginTop:3}}>⚠ Limite de crédit dépassée ({creditPct(client)}% utilisé) !</div>}
                     </>
@@ -2269,7 +2269,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
                 <div style={{fontSize:11,marginTop:2,color:"var(--muted)"}}>Ce client est facturé au <strong>passage fixe</strong>. Chaque collecte enregistre <strong>1 rotation</strong> au tarif configuré. Aucun pesage requis.</div>
                 {remainingBalance!==null&&(
                   <div style={{marginTop:6,fontSize:12,fontWeight:600,color:remainingBalance===0?"var(--err)":remainingBalance<=(client.creditLimit*0.1)?"var(--warn)":"var(--g)"}}>
-                    Solde restant : {fmt(remainingBalance)} DA
+                    Solde restant : {fmt(remainingBalance)}
                     {remainingBalance===0&&<span style={{fontWeight:400,marginLeft:6,color:"var(--err)"}}>— solde épuisé</span>}
                     {remainingBalance>0&&remainingBalance<=(client.creditLimit*0.1)&&<span style={{fontWeight:400,marginLeft:6,color:"var(--warn)"}}>— quasi-épuisé</span>}
                   </div>
@@ -2323,8 +2323,8 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
           )}
           {remainingBalance!==null&&net>0&&!isCollectRotation&&(
             <div style={{fontSize:11,padding:"4px 10px",marginTop:-4,color:effectiveTotalForLimit>remainingBalance?"var(--err)":remainingBalance<=(client.creditLimit*0.1)?"var(--warn)":"var(--muted)"}}>
-              Solde restant : <strong>{fmt(remainingBalance)} DA</strong>
-              {effectiveTotalForLimit>remainingBalance&&<span style={{color:"var(--err)",marginLeft:6}}>— montant requis {fmt(effectiveTotalForLimit)} DA dépasse le solde</span>}
+              Solde restant : <strong>{fmt(remainingBalance)}</strong>
+              {effectiveTotalForLimit>remainingBalance&&<span style={{color:"var(--err)",marginLeft:6}}>— montant requis {fmt(effectiveTotalForLimit)} dépasse le solde</span>}
             </div>
           )}
 
@@ -2480,7 +2480,7 @@ status:(wouldExceed && !(isPrepaid && (client.consumed + finalTotal) <= client.c
                   : wouldExceedRotations
                   ? "Le quota de rotations de ce client est atteint. Contactez l'administrateur."
                   : (wouldExceedCredit||wouldExceedPrepaid)&&remainingBalance!==null
-                  ? `Solde insuffisant — il reste ${fmt(remainingBalance)} DA, mais ce décharge requiert ${fmt(effectiveTotalForLimit)} DA.`
+                  ? `Solde insuffisant — il reste ${fmt(remainingBalance)}, mais ce décharge requiert ${fmt(effectiveTotalForLimit)}.`
                   : remainingWeight!==null
                   ? `Quota dépassé — il reste ${fmtN(remainingWeight)} t, mais le poids net actuel est ${fmtN(net)} t.`
                   : "La limite de ce client est atteinte. Contactez l'administrateur."}
@@ -3495,13 +3495,13 @@ function PageClients({clients,discharges,updateClient,addClient,deleteClient,isA
                       {isCritical&&(
                         <div className="alrt ae mb3" style={{padding:"10px 14px"}}>
                           <span style={{fontSize:16}}>🔴</span>
-                          <div><strong>{t("Solde critique !","رصيد حرج!")}</strong> {t("Il reste seulement","تبقى فقط")} <strong>{fmt(remaining)} DA</strong> ({100-pp}% {t("du dépôt","من الرصيد")}). {t("Contacter le client pour un rechargement urgent.","تواصل مع العميل لإعادة الشحن عاجلاً.")}</div>
+                          <div><strong>{t("Solde critique !","رصيد حرج!")}</strong> {t("Il reste seulement","تبقى فقط")} <strong>{fmt(remaining)}</strong> ({100-pp}% {t("du dépôt","من الرصيد")}). {t("Contacter le client pour un rechargement urgent.","تواصل مع العميل لإعادة الشحن عاجلاً.")}</div>
                         </div>
                       )}
                       {isLow&&(
                         <div className="alrt aw mb3" style={{padding:"10px 14px"}}>
                           <span style={{fontSize:16}}>🟠</span>
-                          <div><strong>{t("Solde bas :","رصيد منخفض:")}</strong> {t("Il reste","تبقى")} <strong>{fmt(remaining)} DA</strong> ({100-pp}% {t("du dépôt initial","من الرصيد الأولي")}). {t("Pensez à prévenir le client pour un rechargement.","تذكّر إخطار العميل بضرورة إعادة الشحن.")}</div>
+                          <div><strong>{t("Solde bas :","رصيد منخفض:")}</strong> {t("Il reste","تبقى")} <strong>{fmt(remaining)}</strong> ({100-pp}% {t("du dépôt initial","من الرصيد الأولي")}). {t("Pensez à prévenir le client pour un rechargement.","تذكّر إخطار العميل بضرورة إعادة الشحن.")}</div>
                         </div>
                       )}
                       <div className="fg fg3 mb3">
@@ -5364,7 +5364,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       const data = await res.json();
       if (data.error) { alert(`⚠️ ${data.error}`); return; }
       if (data.unappliedAmount > 0.005) {
-        alert(`⚠️ Le montant saisi dépasse le reste dû.\nNon affecté : ${fmt(data.unappliedAmount)} DA.\nCorrigez le montant avant de continuer.`);
+        alert(`⚠️ Le montant saisi dépasse le reste dû.\nNon affecté : ${fmt(data.unappliedAmount)}.\nCorrigez le montant avant de continuer.`);
         return;
       }
       setBillPayPreview(data);
@@ -5412,7 +5412,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       });
       const data = await res.json();
       if (data.error) { alert(`⚠️ ${data.error}`); return; }
-      alert(`✅ Paiement enregistré.\nMontant appliqué : ${fmt(data.appliedAmount)} DA\nStatut : ${data.billStatus === 'paid' ? 'Facture soldée ✅' : 'Paiement partiel ⏳'}`);
+      alert(`✅ Paiement enregistré.\nMontant appliqué : ${fmt(data.appliedAmount)}\nStatut : ${data.billStatus === 'paid' ? 'Facture soldée ✅' : 'Paiement partiel ⏳'}`);
       setBillPayModal(null);
       // Sync invoices state so Debt page updates immediately
       if (refreshInvoices) await refreshInvoices();
@@ -6009,8 +6009,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
             return (
               <div style={{padding:"0 20px 16px"}}>
                 {isDepleted&&<div className="alrt ae mb3" style={{padding:"10px 14px"}}><span style={{fontSize:15}}>🔴</span><div><strong>Solde épuisé !</strong> La totalité du dépôt prépayé a été consommée. Aucune nouvelle décharge n'est possible.</div></div>}
-                {isCritical&&<div className="alrt ae mb3" style={{padding:"10px 14px"}}><span style={{fontSize:15}}>🔴</span><div><strong>Solde critique !</strong> Reste <strong>{fmt(remaining)} DA</strong> ({100-pp}% du dépôt). Prévoir un rechargement urgent.</div></div>}
-                {isLow&&<div className="alrt aw mb3" style={{padding:"10px 14px"}}><span style={{fontSize:15}}>🟠</span><div><strong>Solde bas :</strong> Reste <strong>{fmt(remaining)} DA</strong> ({100-pp}% du dépôt initial). Penser à prévenir le client.</div></div>}
+                {isCritical&&<div className="alrt ae mb3" style={{padding:"10px 14px"}}><span style={{fontSize:15}}>🔴</span><div><strong>Solde critique !</strong> Reste <strong>{fmt(remaining)}</strong> ({100-pp}% du dépôt). Prévoir un rechargement urgent.</div></div>}
+                {isLow&&<div className="alrt aw mb3" style={{padding:"10px 14px"}}><span style={{fontSize:15}}>🟠</span><div><strong>Solde bas :</strong> Reste <strong>{fmt(remaining)}</strong> ({100-pp}% du dépôt initial). Penser à prévenir le client.</div></div>}
                 <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
                   {[
                     ["Dépôt initial",   fmt(c.creditLimit), "var(--muted)"],
@@ -6211,7 +6211,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                                        <span style={{color:"var(--muted)",fontFamily:"var(--mono)",minWidth:68}}>
                                          {p.createdAt ? new Date(p.createdAt).toLocaleDateString("fr-DZ") : "—"}
                                        </span>
-                                       <span style={{color:"var(--g)",fontWeight:800,fontFamily:"var(--mono)"}}>+{fmt(p.appliedTTC)} DA</span>
+                                       <span style={{color:"var(--g)",fontWeight:800,fontFamily:"var(--mono)"}}>+{fmt(p.appliedTTC)}</span>
                                        <span style={{color:"var(--muted)",fontSize:9,fontFamily:"var(--mono)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:140}}
                                          title={`Pmt: ${p.paymentId} · Fact: ${p.billId||'—'}`}>
                                          {p.paymentId}
@@ -6221,12 +6221,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                                    <div style={{display:"flex",justifyContent:"space-between",marginTop:4,paddingTop:3,
                                      borderTop:"1px solid var(--bdr)",fontSize:10,fontWeight:700}}>
                                      <span style={{color:"var(--indigo)"}}>Total réglé</span>
-                                     <span style={{fontFamily:"var(--mono)",color:"var(--g)"}}>{fmt(wp.paidTTC)} DA</span>
+                                     <span style={{fontFamily:"var(--mono)",color:"var(--g)"}}>{fmt(wp.paidTTC)}</span>
                                    </div>
                                    {remItem > 0.005 && (
                                      <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:700,marginTop:2}}>
                                        <span style={{color:"var(--warn)"}}>Reste dû</span>
-                                       <span style={{fontFamily:"var(--mono)",color:"var(--warn)"}}>{fmt(remItem)} DA</span>
+                                       <span style={{fontFamily:"var(--mono)",color:"var(--warn)"}}>{fmt(remItem)}</span>
                                      </div>
                                    )}
                                  </div>
@@ -6306,13 +6306,13 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                           <span key={j} style={{fontSize:10,background:"rgba(46,201,92,.1)",
                             border:"1px solid rgba(46,201,92,.2)",borderRadius:4,padding:"1px 6px",
                             color:"var(--g)",fontFamily:"var(--mono)"}}>
-                            {l.label}: {fmt(l.appliedTTC)} DA
+                            {l.label}: {fmt(l.appliedTTC)}
                           </span>
                         ))}
                       </div>
                     </div>
                     <div style={{fontFamily:"var(--head)",fontSize:14,fontWeight:800,color:"var(--g)",minWidth:80,textAlign:"right"}}>
-                      {fmt(txn.totalApplied)} DA
+                      {fmt(txn.totalApplied)}
                     </div>
                   </div>
                 ))}
@@ -6632,10 +6632,10 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                   <div className="field mb3" style={{marginBottom:14}}>
                     <label>Montant versé (DA TTC)</label>
                     <input className="fi" type="number" min="0.01" step="0.01"
-                      value={billPayAmt} placeholder={`Max ${fmt(billRemaining)} DA`}
+                      value={billPayAmt} placeholder={`Max ${fmt(billRemaining)}`}
                       onChange={e=>{setBillPayAmt(e.target.value); setBillPayPreview(null); setBillPayPrinted(false);}}/>
                     {parseFloat(billPayAmt)>billRemaining+0.01&&(
-                      <div style={{fontSize:10,color:"var(--err)",marginTop:3}}>⚠ Dépasse le reste dû ({fmt(billRemaining)} DA)</div>
+                      <div style={{fontSize:10,color:"var(--err)",marginTop:3}}>⚠ Dépasse le reste dû ({fmt(billRemaining)})</div>
                     )}
                   </div>
                 )}
@@ -6644,7 +6644,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 {billPayStrategy==="integral"&&(
                   <div style={{background:"rgba(46,201,92,.06)",border:"1px solid rgba(46,201,92,.2)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
                     <div style={{fontWeight:700,fontSize:12,color:"var(--g)",marginBottom:4}}>✅ Paiement intégral</div>
-                    <div style={{fontSize:12}}>Montant à régler : <strong className="mn">{fmt(billRemaining)} DA</strong> — solde complet de cette facture</div>
+                    <div style={{fontSize:12}}>Montant à régler : <strong className="mn">{fmt(billRemaining)}</strong> — solde complet de cette facture</div>
                   </div>
                 )}
 
@@ -6671,11 +6671,11 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                                   <div className="fw7">{fmtTs(d.ts)} — {wasteTypes.find(w=>w.id===d.waste_type)?.label||d.waste_type}</div>
                                   <div style={{color:"var(--muted)",fontSize:11}}>
                                     {d.pay_method==="rotation"?"🔄 Rotation":"⚖️ Net: "+fmtN(d.net)+" t"}
-                                    {" · "}{fmt(d.unit_price)} DA/{d.pay_method==="rotation"?"rot.":"t"}
+                                    {" · "}{fmt(d.unit_price)}/{d.pay_method==="rotation"?"rot.":"t"}
                                   </div>
                                 </div>
                                 <div style={{fontSize:12,fontFamily:"var(--mono)",color:"var(--err)",fontWeight:700}}>
-                                  {fmt(rem)} DA
+                                  {fmt(rem)}
                                 </div>
                               </label>
                             );
@@ -6705,16 +6705,16 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                           {r.billingMode==="rotation"
                             ? ` — ${r.qty} rot.`
                             : ` — ${r.qty.toLocaleString("fr-FR",{maximumFractionDigits:3})} t`}
-                          {" @ "}{fmt(r.unitPrice)} DA
+                          {" @ "}{fmt(r.unitPrice)}
                           {r.note&&<span style={{fontSize:10,color:"var(--warn)"}}> ({r.note})</span>}
                         </span>
-                        <span className="mn fw7">{fmt(r.montantTTC)} DA</span>
+                        <span className="mn fw7">{fmt(r.montantTTC)}</span>
                       </div>
                     ))}
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:13,fontWeight:800,
                       borderTop:"1px solid rgba(99,102,241,.2)",paddingTop:6,marginTop:4}}>
                       <span>Total appliqué</span>
-                      <span className="mn" style={{color:"var(--indigo)"}}>{fmt(billPayPreview.totalApplied)} DA</span>
+                      <span className="mn" style={{color:"var(--indigo)"}}>{fmt(billPayPreview.totalApplied)}</span>
                     </div>
                   </div>
                 )}
