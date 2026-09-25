@@ -728,7 +728,7 @@ app.put('/api/invoices/:id', requireAdmin, async (req, res) => {
         `UPDATE discharges SET status='paid'
          WHERE client_id=$1
            AND status NOT IN ('paid','cancelled')
-           AND LEFT(ts::text, $2) = $3`,
+           AND LEFT((ts + INTERVAL '1 hour')::text, $2) = $3`,
         [inv.clientId, pfxLen, inv.month]
       );
     }
@@ -1377,17 +1377,27 @@ app.post('/api/bills/:billId/payments', requireAdmin, async (req, res) => {
     `, [req.params.billId, bill.client_id]);
     if (syncRows.length > 0 && syncRows[0].earliest_ts) {
       const payFreq  = syncRows[0].pay_frequency || 'monthly';
-      const earliest = new Date(syncRows[0].earliest_ts);
+      // The frontend groups discharges into invoice periods using the BROWSER's local
+      // calendar date (Africa/Algiers, UTC+1, no DST) — see tsMatchesPfx in
+      // landfill-tracker.jsx. This server process runs in UTC, so a discharge made
+      // between 00:00-00:59 Algeria time (23:00-23:59 UTC the day before) would land
+      // in a different month here than on the frontend, right at a month boundary.
+      // Shift by the fixed +1h Algeria offset before reading year/month so this stays
+      // in sync with how the invoice was actually generated.
+      const ALGERIA_OFFSET_MS = 60 * 60 * 1000;
+      const earliest = new Date(new Date(syncRows[0].earliest_ts).getTime() + ALGERIA_OFFSET_MS);
       const period   = payFreq === 'annual'
         ? String(earliest.getUTCFullYear())
         : `${earliest.getUTCFullYear()}-${String(earliest.getUTCMonth()+1).padStart(2,'0')}`;
-      // Sum every cent allocated to discharges of this client+period
+      // Sum every cent allocated to discharges of this client+period.
+      // Same +1h Algeria shift as above, so a discharge just after local midnight is
+      // bucketed into the same month here as it was on the frontend.
       const { rows: paidRows } = await dbClient.query(`
         SELECT COALESCE(SUM(dp.applied_amount_ttc), 0) AS total_paid
         FROM discharge_payments dp
         JOIN discharges d ON d.id = dp.discharge_id
         WHERE d.client_id = $1
-          AND LEFT(d.ts::text, $2) = $3
+          AND LEFT((d.ts + INTERVAL '1 hour')::text, $2) = $3
       `, [bill.client_id, period.length, period]);
       const totalPaidTTC = parseFloat(paidRows[0].total_paid);
       // Find the matching invoice row; never downgrade a fully-paid invoice
@@ -1412,7 +1422,7 @@ app.post('/api/bills/:billId/payments', requireAdmin, async (req, res) => {
           await dbClient.query(
             `UPDATE discharges SET status='paid'
              WHERE client_id=$1 AND status NOT IN ('paid','cancelled')
-               AND LEFT(ts::text, $2) = $3`,
+               AND LEFT((ts + INTERVAL '1 hour')::text, $2) = $3`,
             [bill.client_id, period.length, period]
           );
         }
