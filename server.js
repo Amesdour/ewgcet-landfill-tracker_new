@@ -742,7 +742,102 @@ app.put('/api/invoices/:id', requireAdmin, async (req, res) => {
   }
 });
 
-/* ─── AUTH ────────────────────────────────────────────────────────────────── */
+/* ─── MONTHLY AUTO-CLOSE (Phase 6.1) ─────────────────────────────────────────
+   At the start of each month, automatically generate/refresh the invoices row
+   for every convention/rotation/prepaid client for each of their past
+   completed months (monthly billing clients only — annual clients keep
+   accumulating and are still generated on demand from the Relevé Client tab).
+   Idempotent: safe to run repeatedly (on every server start, and periodically
+   as a safety net for Render free-tier sleep/restart), and never regresses an
+   invoice's status or paid_amount — same guarantees as PUT /api/invoices/:id.
+   A manual "🔄 Régénérer" action from the Archives tab (or the endpoint below)
+   recomputes a single invoice's total_amount from the current discharges at
+   any time, e.g. after a late correction. */
+async function closeCompletedMonths() {
+  const dbClient = await pool.connect();
+  try {
+    // Discharges are matched to invoice periods the same way the frontend does
+    // (Africa/Algiers local calendar month, UTC+1, no DST) — see tsMatchesPfx
+    // in landfill-tracker.jsx and the payment-sync fix above.
+    const ALGERIA_OFFSET_MS = 60 * 60 * 1000;
+    const nowAlgeria = new Date(Date.now() + ALGERIA_OFFSET_MS);
+    const currentPeriod = `${nowAlgeria.getUTCFullYear()}-${String(nowAlgeria.getUTCMonth() + 1).padStart(2, '0')}`;
+
+    const { rows: clients } = await dbClient.query(
+      `SELECT * FROM clients
+       WHERE status = 'approved'
+         AND type IN ('convention', 'rotation', 'prepaid')
+         AND COALESCE(pay_frequency, 'monthly') != 'annual'`
+    );
+
+    let closedCount = 0;
+    for (const cl of clients) {
+      const { rows: periodRows } = await dbClient.query(
+        `SELECT DISTINCT LEFT((ts + INTERVAL '1 hour')::text, 7) AS period
+         FROM discharges
+         WHERE client_id = $1 AND status != 'cancelled'`,
+        [cl.id]
+      );
+
+      for (const { period } of periodRows) {
+        if (!period || period >= currentPeriod) continue; // current/open month — leave alone
+
+        const { rows: discs } = await dbClient.query(
+          `SELECT total FROM discharges
+           WHERE client_id = $1 AND status != 'cancelled'
+             AND LEFT((ts + INTERVAL '1 hour')::text, 7) = $2`,
+          [cl.id, period]
+        );
+        if (discs.length === 0) continue;
+
+        const totalHT  = discs.reduce((s, d) => s + parseFloat(d.total || 0), 0);
+        const totalTTC = toTTC(totalHT, cl.vat_subject);
+        const id = `FAC-${period.replace('-', '')}-${cl.id}`;
+
+        if (cl.type === 'prepaid') {
+          await dbClient.query(
+            `INSERT INTO invoices(id, client_id, month, total_amount, paid_amount, status, paid_at, note)
+             VALUES ($1, $2, $3, $4, $4, 'paid', NOW(), '')
+             ON CONFLICT (id) DO UPDATE SET
+               total_amount = EXCLUDED.total_amount,
+               paid_amount  = GREATEST(invoices.paid_amount, EXCLUDED.total_amount)`,
+            [id, cl.id, period, totalTTC]
+          );
+        } else {
+          await dbClient.query(
+            `INSERT INTO invoices(id, client_id, month, total_amount, paid_amount, status)
+             VALUES ($1, $2, $3, $4, 0, 'pending')
+             ON CONFLICT (id) DO UPDATE SET
+               total_amount = EXCLUDED.total_amount,
+               status = CASE
+                 WHEN invoices.status = 'paid' THEN 'paid'
+                 WHEN invoices.paid_amount >= EXCLUDED.total_amount - 0.005 THEN 'paid'
+                 WHEN invoices.paid_amount > 0 THEN 'partial'
+                 ELSE invoices.status
+               END`,
+            [id, cl.id, period, totalTTC]
+          );
+        }
+        closedCount++;
+      }
+    }
+    console.log(`[closeCompletedMonths] checked ${clients.length} client(s), ${closedCount} invoice(s) up to date`);
+  } catch (e) {
+    console.error('[closeCompletedMonths] error:', e.message);
+  } finally {
+    dbClient.release();
+  }
+}
+
+// Manual trigger — same job the "🔄 Régénérer" button and the startup/interval
+// timer below call; exposed so admin can force a re-check on demand.
+app.post('/api/invoices/close-month', requireAdmin, async (req, res) => {
+  try {
+    await closeCompletedMonths();
+    ok(res, { ok: true });
+  } catch (e) { er(res, e); }
+});
+
 app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
   const { email, password } = req.body;
   const ip = getIP(req);
@@ -1518,4 +1613,8 @@ if (IS_PROD) {
 app.listen(PORT, () => {
   console.log(`API server running on port ${PORT}`);
   runMigrations().catch(e => console.error('Migration failed:', e.message));
+  closeCompletedMonths().catch(e => console.error('[closeCompletedMonths] startup run failed:', e.message));
+  setInterval(() => {
+    closeCompletedMonths().catch(e => console.error('[closeCompletedMonths] periodic run failed:', e.message));
+  }, 6 * 60 * 60 * 1000); // every 6h — Render free tier can sleep past midnight, so don't rely on a single midnight cron
 });

@@ -5246,11 +5246,13 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       .finally(() => setJournalLoading(false));
   }, [view]);
 
-  // Generate/update invoice for a client+month (totalAmount stored as TTC)
-  const generateInvoice = async (cl, costHT) => {
+  // Generate/update invoice for a client+month (totalAmount stored as TTC).
+  // periodOverride lets the Archives tab regenerate a specific past month's
+  // invoice without depending on the currently-selected `month` state.
+  const generateInvoice = async (cl, costHT, periodOverride) => {
     const ttc = toTTC(costHT, cl.vatSubject);
     // Annual clients get a year-level invoice (e.g. "2026"); monthly clients get "2026-06"
-    const period = clientPeriod(cl);
+    const period = periodOverride || clientPeriod(cl);
     const id = `FAC-${period.replace("-","")}-${cl.id}`;
     const existing = invoices.find(i=>i.id===id) || invoices.find(i=>i.clientId===cl.id&&i.month===period);
     // Prepaid clients have already deposited their balance — invoice is always fully paid
@@ -5295,6 +5297,70 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       if (row.entries.length > 0 && !(row.inv && (row.inv.status === "paid" || row.inv.status === "partial"))) {
         await generateInvoice(row.cl, row.cost);
       }
+    }
+  };
+
+  // ── Archives tab: every generated invoice (past + current), downloadable any time ──
+  const [archivesClosing, setArchivesClosing] = useState(false);
+  const [archivesRegenId, setArchivesRegenId] = useState(null);
+
+  const entriesForInvoice = (inv) =>
+    discharges.filter(d => d.clientId === inv.clientId && tsMatchesPfx(d.ts, inv.month) && d.status !== "cancelled");
+
+  const downloadArchivePDF = (inv) => {
+    const cl = clients.find(x => x.id === inv.clientId);
+    const ent = entriesForInvoice(inv);
+    if (!cl || ent.length === 0) return;
+    const html = generateOfficialBillHTML(cl, ent, company, inv.month, inv.id, wasteTypes);
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 600);
+  };
+
+  const downloadArchiveWord = (inv) => {
+    const cl = clients.find(x => x.id === inv.clientId);
+    const ent = entriesForInvoice(inv);
+    if (!cl || ent.length === 0) return;
+    const html = generateOfficialBillHTML(cl, ent, company, inv.month, inv.id, wasteTypes);
+    const blob = new Blob(['\ufeff', html], {type: 'application/msword'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${inv.id}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Recompute a single past invoice's total from the current discharges — e.g.
+  // after a late correction to a discharge in a month that's already closed.
+  // Never touches paidAmount/status beyond what generateInvoice already protects.
+  const regenerateArchiveInvoice = async (inv) => {
+    const cl = clients.find(x => x.id === inv.clientId);
+    if (!cl) return;
+    setArchivesRegenId(inv.id);
+    try {
+      const ent = entriesForInvoice(inv);
+      const costHT = ent.reduce((s, d) => s + (d.total || 0), 0);
+      await generateInvoice(cl, costHT, inv.month);
+    } finally {
+      setArchivesRegenId(null);
+    }
+  };
+
+  // Ask the server to (re)close every completed month for every billed client,
+  // then refresh the invoices list. Same job that runs automatically on the
+  // server at startup and every 6h — this just lets admin force it on demand.
+  const closeMonthNow = async () => {
+    setArchivesClosing(true);
+    try {
+      await apiFetch('/api/invoices/close-month', {method:'POST'});
+      if (refreshInvoices) await refreshInvoices();
+    } finally {
+      setArchivesClosing(false);
     }
   };
 
@@ -5535,12 +5601,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       {/* View tabs + month picker */}
       <div className="fx aic jsb mb4" style={{flexWrap:"wrap",gap:12}}>
         <div className="seg" style={{width:"fit-content"}}>
-          {[["global","🗓 Vue Mensuelle"],["client","📋 Relevé Client"],["debts",`🔴 Dettes${debtInvoices.length>0?` (${debtInvoices.length})`:""}`],["journal","📒 Journal"]].map(([v,l])=>(
+          {[["global","🗓 Vue Mensuelle"],["client","📋 Relevé Client"],["debts",`🔴 Dettes${debtInvoices.length>0?` (${debtInvoices.length})`:""}`],["archives","📚 Archives"],["journal","📒 Journal"]].map(([v,l])=>(
             <button key={v} className={`seg-btn${view===v?" active":""}`} onClick={()=>setView(v)}>{l}</button>
           ))}
         </div>
         <div className="fx aic g2">
-          {view!=="debts"&&view!=="journal"&&(
+          {view!=="debts"&&view!=="journal"&&view!=="archives"&&(
             <div className="field" style={{margin:0}}>
               <input className="fi" type="month" value={month} onChange={e=>setMonth(e.target.value)} style={{width:160}}/>
             </div>
@@ -5834,6 +5900,63 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                 </tbody>
               </table>
             </div>
+          </div>
+        </>
+      )}
+
+      {/* ── ARCHIVES: every generated invoice, past + current, downloadable any time ── */}
+      {view==="archives"&&(
+        <>
+          <div className="panel" style={{marginBottom:12}}>
+            <div className="fx aic jsb" style={{flexWrap:"wrap",gap:8}}>
+              <div className="tmu" style={{fontSize:12}}>
+                Factures mensuelles auto-générées à la clôture de chaque mois pour les clients convention/rotation/prépayé.
+                Une facture peut être re-générée si des corrections ont été apportées après clôture.
+              </div>
+              <button className="btn bg bsm" onClick={closeMonthNow} disabled={archivesClosing}>
+                {archivesClosing ? "⏳ Clôture…" : "🔄 Forcer la clôture des mois"}
+              </button>
+            </div>
+          </div>
+          <div className="panel" style={{padding:0}}>
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Référence</th><th>Client</th><th>Mois</th><th>Total</th><th>Payé</th><th>Reste dû</th><th>Statut</th><th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...invoices].sort((a,b)=>(b.month||"").localeCompare(a.month||"")||a.clientId.localeCompare(b.clientId)).map(inv=>{
+                  const cl = clients.find(x=>x.id===inv.clientId);
+                  const mLbl = /^\d{4}$/.test(inv.month) ? inv.month : new Date(inv.month+"-02").toLocaleString("fr-FR",{month:"long",year:"numeric"});
+                  const rem = Math.max(0, (inv.totalAmount||0) - (inv.paidAmount||0));
+                  return (
+                    <tr key={inv.id}>
+                      <td><span className="mn tmu">{inv.id}</span></td>
+                      <td style={{fontWeight:700}}>{cl?.name || inv.clientId}</td>
+                      <td><span className="mn">{mLbl}</span></td>
+                      <td><span className="mn fw7">{fmt(inv.totalAmount)}</span></td>
+                      <td><span className="mn" style={{color:inv.paidAmount>0?"var(--g)":"var(--muted)"}}>{inv.paidAmount>0?fmt(inv.paidAmount):"—"}</span></td>
+                      <td><span className="mn" style={{color:rem>0?"var(--err)":"var(--muted)"}}>{rem>0?fmt(rem):"—"}</span></td>
+                      <td><InvoiceStatusBadge s={inv.status}/></td>
+                      <td>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <button className="btn bg bsm" title="PDF" onClick={()=>downloadArchivePDF(inv)}>📥</button>
+                          <button className="btn bg bsm" title="Word" onClick={()=>downloadArchiveWord(inv)}>📄</button>
+                          <button className="btn bg bsm" title="Régénérer depuis les décharges actuelles"
+                            onClick={()=>regenerateArchiveInvoice(inv)} disabled={archivesRegenId===inv.id}>
+                            {archivesRegenId===inv.id?"⏳":"🔄"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {invoices.length===0&&(
+                  <tr><td colSpan={8} style={{textAlign:"center",padding:40,color:"var(--muted)"}}>Aucune facture générée pour le moment.</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </>
       )}
