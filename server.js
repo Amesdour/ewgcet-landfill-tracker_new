@@ -742,6 +742,55 @@ app.put('/api/invoices/:id', requireAdmin, async (req, res) => {
   }
 });
 
+/* ─── BACKFILL: sync invoices.paid_amount from the real payment ledger ──────
+   The pre-fix version of POST /api/bills/:billId/payments computed the sync
+   period using UTC instead of Algeria local time (fixed in a prior commit).
+   Any payment made before that fix may have updated discharge_payments and
+   the bill correctly, but silently failed to update the matching invoices
+   row — exactly what happened to APC EL MILIA's Feb 2026 invoice: the
+   payment is real and visible in the Relevé Client ledger, but the invoice
+   still shows paid_amount=0.
+   This recomputes paid_amount for EVERY invoice directly from
+   discharge_payments (the actual source of truth), for both monthly and
+   annual invoices. It only ever raises paid_amount (GREATEST), never lowers
+   it, and never regresses a 'paid' status — same guarantees as everywhere
+   else invoices are touched. Safe and cheap to run on every startup. */
+async function backfillInvoicePayments() {
+  const dbClient = await pool.connect();
+  try {
+    const ALGERIA_OFFSET = `INTERVAL '1 hour'`;
+    for (const periodLen of [7, 4]) { // 7 = "YYYY-MM" monthly invoices, 4 = "YYYY" annual invoices
+      const { rowCount } = await dbClient.query(`
+        UPDATE invoices inv
+        SET paid_amount = GREATEST(inv.paid_amount, sub.total_paid),
+            status = CASE
+              WHEN inv.status = 'paid' THEN 'paid'
+              WHEN GREATEST(inv.paid_amount, sub.total_paid) >= inv.total_amount - 0.005 THEN 'paid'
+              WHEN GREATEST(inv.paid_amount, sub.total_paid) > 0 THEN 'partial'
+              ELSE inv.status
+            END
+        FROM (
+          SELECT d.client_id AS client_id,
+                 LEFT((d.ts + ${ALGERIA_OFFSET})::text, $1) AS period,
+                 SUM(dp.applied_amount_ttc) AS total_paid
+          FROM discharge_payments dp
+          JOIN discharges d ON d.id = dp.discharge_id
+          GROUP BY d.client_id, LEFT((d.ts + ${ALGERIA_OFFSET})::text, $1)
+        ) sub
+        WHERE inv.client_id = sub.client_id
+          AND inv.month = sub.period
+          AND LENGTH(inv.month) = $1
+          AND sub.total_paid > inv.paid_amount + 0.005
+      `, [periodLen]);
+      if (rowCount > 0) console.log(`[backfillInvoicePayments] corrected ${rowCount} invoice(s) with period length ${periodLen}`);
+    }
+  } catch (e) {
+    console.error('[backfillInvoicePayments] error:', e.message);
+  } finally {
+    dbClient.release();
+  }
+}
+
 /* ─── MONTHLY AUTO-CLOSE (Phase 6.1) ─────────────────────────────────────────
    At the start of each month, automatically generate/refresh the invoices row
    for every convention/rotation/prepaid client for each of their past
@@ -843,6 +892,7 @@ async function closeCompletedMonths() {
 // timer below call; exposed so admin can force a re-check on demand.
 app.post('/api/invoices/close-month', requireAdmin, async (req, res) => {
   try {
+    await backfillInvoicePayments();
     await closeCompletedMonths();
     ok(res, { ok: true });
   } catch (e) { er(res, e); }
@@ -1623,9 +1673,12 @@ if (IS_PROD) {
 app.listen(PORT, () => {
   console.log(`API server running on port ${PORT}`);
   runMigrations()
+    .then(() => backfillInvoicePayments())
     .then(() => closeCompletedMonths())
     .catch(e => console.error('Startup sequence failed:', e.message));
   setInterval(() => {
-    closeCompletedMonths().catch(e => console.error('[closeCompletedMonths] periodic run failed:', e.message));
+    backfillInvoicePayments()
+      .then(() => closeCompletedMonths())
+      .catch(e => console.error('[closeCompletedMonths] periodic run failed:', e.message));
   }, 6 * 60 * 60 * 1000); // every 6h — Render free tier can sleep past midnight, so don't rely on a single midnight cron
 });
