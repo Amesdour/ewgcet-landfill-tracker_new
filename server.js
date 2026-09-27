@@ -770,6 +770,16 @@ async function closeCompletedMonths() {
          AND COALESCE(pay_frequency, 'monthly') != 'annual'`
     );
 
+    if (clients.length === 0) {
+      // Diagnostic breakdown so a "0 clients" run is debuggable from the log
+      // alone, without needing direct DB access.
+      const { rows: diag } = await dbClient.query(
+        `SELECT status, type, pay_frequency, COUNT(*) FROM clients GROUP BY status, type, pay_frequency ORDER BY 1,2,3`
+      );
+      console.log('[closeCompletedMonths] 0 clients matched the filter. Actual client status/type/pay_frequency combinations in DB:',
+        JSON.stringify(diag));
+    }
+
     let closedCount = 0;
     for (const cl of clients) {
       const { rows: periodRows } = await dbClient.query(
@@ -1612,8 +1622,9 @@ if (IS_PROD) {
 
 app.listen(PORT, () => {
   console.log(`API server running on port ${PORT}`);
-  runMigrations().catch(e => console.error('Migration failed:', e.message));
-  closeCompletedMonths().catch(e => console.error('[closeCompletedMonths] startup run failed:', e.message));
+  runMigrations()
+    .then(() => closeCompletedMonths())
+    .catch(e => console.error('Startup sequence failed:', e.message));
   setInterval(() => {
     closeCompletedMonths().catch(e => console.error('[closeCompletedMonths] periodic run failed:', e.message));
   }, 6 * 60 * 60 * 1000); // every 6h — Render free tier can sleep past midnight, so don't rely on a single midnight cron
