@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext } from "react";
+import React, { useState, useEffect, createContext, useContext } from "react";
 import OfflineBanner from "./src/components/OfflineBanner";
 import ConflictReview from "./src/components/ConflictReview";
 import { queueDischarge, makeOfflineId } from "./src/lib/offlineDischargeQueue";
