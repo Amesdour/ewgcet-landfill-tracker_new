@@ -1265,7 +1265,8 @@ export default function App() {
   const addUser      = async u  => {
     const res = await apiFetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(u)});
     const data = await res.json();
-    setUsers(p=>[...p,{...u, verificationCode: data.verificationCode||null, emailVerified:false}]);
+    if (!res.ok) { alert(data.error || "Erreur lors de la création du compte."); return null; }
+    setUsers(p=>[...p,{...u, email:u.email.toLowerCase().trim(), verificationCode: data.verificationCode||null, emailVerified:false}]);
     return data;
   };
   const updateUser   = async u  => {
@@ -4408,6 +4409,7 @@ function PageOperators({users,sites,addUser,updateUser,deleteUser,authUser}) {
       siteId:form.siteId, createdAt:new Date().toISOString().slice(0,10),
     };
     const data = await addUser(u);
+    if (!data) return;
     if (data?.verificationCode) setCodes(c=>({...c,[u.id]:data.verificationCode}));
     setModal(false);
     setForm({name:"",email:"",password:"",phone:"",matricule:"",siteId:"CET-JIJ"});

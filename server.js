@@ -539,6 +539,16 @@ app.get('/api/users', requireAdmin, async (req, res) => {
 
 app.post('/api/users', async (req, res) => {
   const u = req.body;
+  u.email = String(u.email || '').toLowerCase().trim();
+  // Route is public (self-registration), so only a valid admin token may choose role/status.
+  // Anonymous callers can only create a pending operator.
+  let callerIsAdmin = false;
+  const _hdr = req.headers['authorization'] || '';
+  if (_hdr.startsWith('Bearer ')) {
+    try { callerIsAdmin = jwt.verify(_hdr.slice(7), _JWT_SECRET).role === 'admin'; } catch {}
+  }
+  if (!callerIsAdmin) { u.role = 'operator'; u.status = 'pending'; }
+  if (!u.email) return res.status(400).json({ error: 'Email requis.' });
   // Password is required — 'changeme' default is never allowed
   if (!u.password) return res.status(400).json({ error: 'Mot de passe requis.' });
   const pwError = validatePasswordStrength(u.password);
@@ -597,6 +607,7 @@ app.post('/api/users/:id/regenerate-code', requireAdmin, async (req, res) => {
 
 app.put('/api/users/:id', requireSelfOrAdmin, async (req, res) => {
   const u = req.body;
+  u.email = String(u.email || '').toLowerCase().trim();
   try {
     if (u.password && u.password.trim() && !u.password.startsWith('$2')) {
       const hashed = await bcrypt.hash(u.password, 10);
@@ -912,7 +923,7 @@ app.post('/api/auth/login', rateLimitLogin, async (req, res) => {
 
   try {
     const { rows } = await q(
-      'SELECT * FROM users WHERE email=$1 AND status=$2',
+      'SELECT * FROM users WHERE LOWER(TRIM(email))=$1 AND status=$2',
       [email.toLowerCase().trim(), 'active']
     );
     if (rows.length === 0) {
