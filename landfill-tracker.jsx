@@ -5376,6 +5376,11 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
   const [billPayStrategy, setBillPayStrategy] = useState("libre"); // "libre"|"specifique"|"integral"
   const [billPayAmt,      setBillPayAmt]      = useState("");
   const [billPaySelDiscs, setBillPaySelDiscs] = useState([]);   // for "specifique"
+  const [billPayMonth,    setBillPayMonth]    = useState("");   // for "mensuel" (YYYY-MM)
+  // "mensuel": ids of every unpaid discharge of the chosen month (reuses the by-discharge backend path)
+  const monthDischargeIds = (bill, month) => (bill?.discharges||[])
+    .filter(d => parseFloat(d.remaining_ttc) > 0.005 && localDateStr(d.ts).slice(0,7) === month)
+    .map(d => d.id);
   const [billPayPreview,  setBillPayPreview]  = useState(null); // result from preview endpoint
   const [billPayPrinted,  setBillPayPrinted]  = useState(false);
   const [billPayLoading,  setBillPayLoading]  = useState(false);
@@ -5409,6 +5414,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       setBillPayStrategy("libre");
       setBillPayAmt("");
       setBillPaySelDiscs([]);
+      setBillPayMonth("");
       setBillPayPreview(null);
       setBillPayPrinted(false);
     } catch(e) { alert("Erreur lors du chargement de la facture."); }
@@ -5423,6 +5429,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     try {
       const body = billPayStrategy === "specifique"
         ? { dischargeIds: billPaySelDiscs }
+        : billPayStrategy === "mensuel"
+        ? { dischargeIds: monthDischargeIds(billPayModal.bill, billPayMonth) }
         : { amountTTC: parseFloat(billPayStrategy === "integral"
               ? billPayModal.bill.remainingTotal
               : billPayAmt) };
@@ -5472,6 +5480,8 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     try {
       const body = billPayStrategy === "specifique"
         ? { dischargeIds: billPaySelDiscs, method: billPayStrategy }
+        : billPayStrategy === "mensuel"
+        ? { dischargeIds: monthDischargeIds(billPayModal.bill, billPayMonth), method: "mensuel" }
         : { amountTTC: parseFloat(billPayStrategy === "integral"
               ? billPayModal.bill.remainingTotal
               : billPayAmt), method: billPayStrategy };
@@ -5996,6 +6006,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                       const modeLabel = p.method==="specifique"  ? "Par décharge"
                                       : p.method==="integral"    ? "Intégral"
                                       : p.method==="libre"       ? "Montant libre"
+                                      : p.method==="mensuel"     ? "Par mois"
                                       : p.method==="convention"  ? "Convention"
                                       : p.method || "—";
                       const modeColor = p.method==="integral" ? "var(--g)"
@@ -6708,8 +6719,14 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
         const enteredAmt = billPayStrategy === "integral"
           ? billRemaining
           : (parseFloat(billPayAmt) || 0);
+        const monthList = [...new Set(discs.map(d => localDateStr(d.ts).slice(0,7)))].sort();
+        const monthDiscs = billPayMonth ? discs.filter(d => localDateStr(d.ts).slice(0,7) === billPayMonth) : [];
+        const monthTotal = monthDiscs.reduce((sum,d)=>sum+Math.max(0,parseFloat(d.remaining_ttc)),0);
+        const monthLabel = m => new Date(m+"-01T12:00:00").toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
         const canPreview = billPayStrategy === "specifique"
           ? billPaySelDiscs.length > 0
+          : billPayStrategy === "mensuel"
+          ? monthDiscs.length > 0
           : enteredAmt > 0 && enteredAmt <= billRemaining + 0.01;
         return (
           <div className="ov">
@@ -6737,6 +6754,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                       {id:"libre",     label:"💵 Montant libre"},
                       {id:"specifique",label:"☑️ Par décharge"},
                       {id:"integral",  label:"✅ Intégral"},
+                      {id:"mensuel",   label:"📅 Par mois"},
                     ].map(s=>(
                       <button key={s.id}
                         className={`seg-btn${billPayStrategy===s.id?" active":""}`}
@@ -6745,6 +6763,7 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                           setBillPayPreview(null);
                           setBillPayPrinted(false);
                           if(s.id==="specifique") setBillPaySelDiscs([]);
+                          if(s.id==="mensuel") setBillPayMonth("");
                         }}>
                         {s.label}
                       </button>
@@ -6770,6 +6789,27 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
                   <div style={{background:"rgba(46,201,92,.06)",border:"1px solid rgba(46,201,92,.2)",borderRadius:10,padding:"12px 14px",marginBottom:14}}>
                     <div style={{fontWeight:700,fontSize:12,color:"var(--g)",marginBottom:4}}>✅ Paiement intégral</div>
                     <div style={{fontSize:12}}>Montant à régler : <strong className="mn">{fmt(billRemaining)}</strong> — solde complet de cette facture</div>
+                  </div>
+                )}
+
+                {/* Par mois — settle the actual total of one month */}
+                {billPayStrategy==="mensuel"&&(
+                  <div style={{marginBottom:14}}>
+                    <div className="field mb3">
+                      <label>Mois à régler</label>
+                      <select className="fi" value={billPayMonth}
+                        onChange={e=>{setBillPayMonth(e.target.value); setBillPayPreview(null); setBillPayPrinted(false);}}>
+                        <option value="">— Choisir un mois —</option>
+                        {monthList.map(m=>(<option key={m} value={m}>{monthLabel(m)}</option>))}
+                      </select>
+                    </div>
+                    {monthDiscs.length>0&&(
+                      <div style={{background:"rgba(99,102,241,.06)",border:"1px solid rgba(99,102,241,.25)",borderRadius:10,padding:"12px 14px"}}>
+                        <div style={{fontWeight:700,fontSize:12,color:"var(--indigo)",marginBottom:4}}>📅 {monthLabel(billPayMonth)}</div>
+                        <div style={{fontSize:12}}>{monthDiscs.length} dépôt(s) — total réel du mois à régler : <strong className="mn">{fmt(monthTotal)}</strong></div>
+                      </div>
+                    )}
+                    {monthList.length===0&&(<div style={{textAlign:"center",padding:20,color:"var(--muted)",fontSize:12}}>Aucun dépôt à régler dans cette facture.</div>)}
                   </div>
                 )}
 
