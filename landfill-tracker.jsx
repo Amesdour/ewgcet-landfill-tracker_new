@@ -5467,9 +5467,11 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
     }));
     const html = generateOfficialBillHTML(cl, [], company, '', billNum, wasteTypes, {
       precomputedRows,
-      ...(billPayStrategy === 'mensuel' && billPayMonth
-        ? { periodLabel: new Date(billPayMonth+'-01T12:00:00').toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).toUpperCase() }
-        : {}),
+      periodLabel: [...new Set((billPayPreview.lines||[])
+        .map(l => (bill.discharges||[]).find(d => d.id === l.dischargeId)?.ts)
+        .filter(Boolean).map(ts => localDateStr(ts).slice(0,7)))].sort()
+        .map(m => new Date(m+'-01T12:00:00').toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).toUpperCase())
+        .join(' / '),
     });
     const win  = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
