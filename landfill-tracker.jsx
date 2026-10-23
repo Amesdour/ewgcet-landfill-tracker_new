@@ -4696,6 +4696,9 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
   const fB = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
   const fQ = n => new Intl.NumberFormat('fr-FR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n);
   const TVA = c.vatSubject ? 19 : 0;
+  // Month title shown in bold next to the bill number: explicit opts.periodLabel, else derived from a YYYY-MM `month`
+  const periodLabel = opts.periodLabel || (/^\d{4}-\d{2}$/.test(month||'')
+    ? new Date(month+'-01T12:00:00').toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).toUpperCase() : '');
   // Group by opType + wasteType + billingMode so Traitement and Collecte et Traitement appear as separate lines
   const groups = {};
   entries.forEach(d => {
@@ -4813,7 +4816,7 @@ function generateOfficialBillHTML(c, entries, company, month, invNum, wasteTypes
 
 <!-- ── INVOICE REFERENCE LINE ── -->
 <div style="display:flex;justify-content:space-between;padding:6px 2px;font-weight:bold;font-size:13.5px">
-  <span>${opts.isDebt ? 'AVIS DE DÉBIT — SOLDE RESTANT DÛ' : 'FACTURE CLIENT'} : ${invNum}</span>
+  <span>${opts.isDebt ? 'AVIS DE DÉBIT — SOLDE RESTANT DÛ' : 'FACTURE CLIENT'} : ${invNum}${periodLabel ? ` — <strong>${periodLabel}</strong>` : ''}</span>
   <span>JIJEL, LE : ${date}</span>
 </div>
 ${opts.isDebt ? '<div style="margin:4px 2px 0;font-size:11px;color:#c00;font-weight:bold;letter-spacing:.03em">⚠ Ce document concerne uniquement les prestations non encore réglées.</div>' : ''}
@@ -5462,7 +5465,12 @@ function PageInvoice({clients,discharges,sites,wasteTypes,invoices,addInvoice,up
       tva:        cl.vatSubject ? 19 : 0,
       ht:         r.montantHT,
     }));
-    const html = generateOfficialBillHTML(cl, [], company, '', billNum, wasteTypes, { precomputedRows });
+    const html = generateOfficialBillHTML(cl, [], company, '', billNum, wasteTypes, {
+      precomputedRows,
+      ...(billPayStrategy === 'mensuel' && billPayMonth
+        ? { periodLabel: new Date(billPayMonth+'-01T12:00:00').toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).toUpperCase() }
+        : {}),
+    });
     const win  = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 600); }
     const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
